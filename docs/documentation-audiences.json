@@ -445,6 +445,10 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "docs/verification/backpass-lane.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/verification/dispatch-auth.md",
       "audience": "maintainer-verification"
     },
