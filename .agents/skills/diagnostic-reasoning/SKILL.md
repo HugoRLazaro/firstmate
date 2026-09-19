@@ -1,8 +1,8 @@
 ---
 name: diagnostic-reasoning
 description: >-
-  Agent-only procedure for diagnosing reported bugs.
-  Use before scoping a reported bug and before acting on a diagnostic report.
+  Agent-only procedure for diagnosing reported bugs, malfunctions, and suspected stuck, hung, or misbehaving behavior (a session, agent, watcher, or process the captain suspects is broken, hung, or wedged).
+  Use before scoping any such reported problem and before acting on a diagnostic report.
   Owns end-user-aligned reproduction, causal separation, divergent-path and history inspection, counterfactual testing, and disconfirming evidence.
 user-invocable: false
 metadata:
@@ -11,7 +11,7 @@ metadata:
 
 # diagnostic-reasoning
 
-Use this procedure before scoping a reported bug and before acting on a diagnostic report.
+Use this procedure before scoping a reported bug, malfunction, or suspected stuck or misbehaving session, agent, or process, and before acting on a diagnostic report.
 This skill is the single owner of Firstmate's bug-diagnosis reasoning procedure.
 Firstmate applies it when briefing delegated investigation and evaluating the resulting evidence, without taking over project-specific investigation itself.
 
