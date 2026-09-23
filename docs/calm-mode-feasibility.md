@@ -181,7 +181,7 @@ Compaction and retry loaders remain stock because Pi exposes no supported replac
 
 ## Central visibility and input policy
 
-`.pi/extensions/lib/fm-calm-visibility.ts` owns only the allowlist-style transcript presentation policy.
+`.pi/extensions/lib/fm-calm-visibility.ts` owns the allowlist-style transcript presentation policy and the shared Calm preference path and read helper the Calm extension and the supervision branch both use.
 `bin/fm-operational-input.sh` owns current cross-language operational-input construction and parsing, while the thin Pi adapter lives at `.pi/extensions/lib/fm-operational-input.ts`.
 Only `genuine-user-prompt`, `genuine-agent-response`, and `working-status` are policy-visible.
 Every other audited class is policy-hidden when Pi exposes a supported presentation boundary, but semantic input is never transformed to enforce that preference.
