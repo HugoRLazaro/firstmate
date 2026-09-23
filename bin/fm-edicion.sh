@@ -24,7 +24,10 @@
 #   presented with its original context and left pending a decision. A mark
 #   without a citable texto_bloque is held back the same way. A pending mark is
 #   resolved by delivering it explicitly or by discarding it with
-#   `cerrar --descartar <id>`, and the delivery never closes until then.
+#   `cerrar --descartar <id>`, and the delivery never closes until then. An
+#   applied delivery stays bound to the task it first became: `--marca`
+#   resolves only a mark it still owes, and its `--tarea` must name that same
+#   task.
 #
 # Surface contract consumed here: the project clone provides
 # tools/edicion/serve.mjs, launched from the clone root with FM_EDICION_SALIDA
