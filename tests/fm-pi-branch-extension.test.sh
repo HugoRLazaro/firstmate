@@ -5276,22 +5276,28 @@ EOF
 }
 
 # Calm's transcript preference hides the branch's routine sailboat notes from
-# the live transcript only: the note stays an ordinary model message and a
-# durable store row, while captain outcomes and branch-health notes stay
-# rendered. The preference is read from the shared Calm path at every
-# session_start and followed live through the Calm presentation event.
+# the live transcript through the fm-branch-merge paint engine only: the note
+# keeps display: true so Pi's HTML /export and /share retain it, stays an
+# ordinary model message and a durable store row, and returns to the screen
+# with Calm off, while captain outcomes and branch-health notes stay rendered.
+# The preference is read from the shared Calm path at every session_start and
+# followed live through the Calm presentation event.
 test_calm_preference_hides_routine_notes_only() {
-  local repo home out status
+  local repo home out status package_dir
   repo="$TMP_ROOT/calm-routine-root"
   home="$TMP_ROOT/calm-routine-home"
+  package_dir=${FM_PI_PACKAGE_DIR:-"$(npm root -g 2>/dev/null)/@earendil-works/pi-coding-agent"}
   mkdir -p "$home/state" "$home/config"
   install_pi_branch_extension_fixture "$repo"
   PLUGIN="$repo/.pi/extensions/fm-branch-supervision.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
-    DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
+    PI_PACKAGE_DIR="$package_dir" DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
 const prelude = process.env.DRIVER_PRELUDE;
-await eval(`(async () => { ${prelude}; globalThis.__t = { pi, fire, dispatch, settle, sentToMain, mainEntries, mainTools, defaultSessionCtx, home }; })()`);
-const { pi, fire, dispatch, settle, sentToMain, mainEntries, mainTools, defaultSessionCtx, home } = globalThis.__t;
-import { readFileSync, writeFileSync } from "node:fs";
+await eval(`(async () => { ${prelude}; globalThis.__t = { pi, fire, dispatch, settle, sentToMain, mainEntries, mainTools, renderers, defaultSessionCtx, home }; })()`);
+const { pi, fire, dispatch, settle, sentToMain, mainEntries, mainTools, renderers, defaultSessionCtx, home } = globalThis.__t;
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // The preference appears after the extension loaded and before its
 // session_start, so the first routine note proves the session_start re-read
@@ -5320,13 +5326,87 @@ const routine = await report.execute(
 );
 if (routine.isError) throw new Error(`routine report failed: ${JSON.stringify(routine)}`);
 const hidden = sentToMain.at(-1);
-if (hidden.message.display !== false) {
-  throw new Error(`a routine note stayed rendered while Calm was on: ${JSON.stringify(hidden)}`);
+if (hidden.message.display !== true) {
+  throw new Error(`a routine note lost its export-visible display flag: ${JSON.stringify(hidden)}`);
+}
+if (hidden.message.details?.routine !== true) {
+  throw new Error(`a routine note lacks its routine discriminator: ${JSON.stringify(hidden)}`);
 }
 if (hidden.message.content !== "⛵ branch-driver: routine note hidden by Calm") {
   throw new Error(`hiding changed the routine note content: ${hidden.message.content}`);
 }
 if (hidden.options.triggerTurn) throw new Error("hiding a routine note opened a main turn");
+
+// The fm-branch-merge paint engine is what hides the note live.
+const noteRenderer = renderers.get("fm-branch-merge");
+if (!noteRenderer) throw new Error("merge-note renderer missing");
+const calmPainted = noteRenderer(hidden.message, { expanded: false }, { fg: (_color, text) => text });
+if (typeof calmPainted.render !== "function" || calmPainted.render(120).join("\n").includes("routine note hidden by Calm")) {
+  throw new Error("Calm painted the routine note");
+}
+
+// Pi's own transcript component and HTML exporter are the real consumers of
+// the delivered message: the note paints nothing live under Calm while the
+// exporter keeps it because its display flag stays true.
+if (process.env.PI_PACKAGE_DIR && existsSync(`${process.env.PI_PACKAGE_DIR}/package.json`)) {
+  const packageRoot = process.env.PI_PACKAGE_DIR;
+  const [{ CustomMessageComponent }, { SessionManager }, { exportSessionToHtml }, { initTheme }] = await Promise.all([
+    import(pathToFileURL(`${packageRoot}/dist/modes/interactive/components/custom-message.js`).href),
+    import(pathToFileURL(`${packageRoot}/dist/core/session-manager.js`).href),
+    import(pathToFileURL(`${packageRoot}/dist/core/export-html/index.js`).href),
+    import(pathToFileURL(`${packageRoot}/dist/modes/interactive/theme/theme.js`).href),
+  ]);
+  initTheme("dark");
+  // The live transcript paints nothing under Calm, and Pi's /calm handler
+  // round-trips setToolsExpanded, which rebuilds this row: the note returns
+  // when Calm is off and hides again when it is on.
+  const liveComponent = new CustomMessageComponent(hidden.message, noteRenderer, undefined, 1);
+  const liveRows = liveComponent.render(120).join("\n");
+  if (liveRows.includes("routine note hidden by Calm")) {
+    throw new Error(`Pi's live transcript painted the Calm-hidden routine note: ${liveRows}`);
+  }
+  pi.events.emit("firstmate:calm-presentation", { active: false, stockExportRendering: false });
+  liveComponent.setExpanded(true);
+  if (!String(liveComponent.customComponent?.text).includes("routine note hidden by Calm")) {
+    throw new Error("turning Calm off did not repaint the routine note");
+  }
+  pi.events.emit("firstmate:calm-presentation", { active: true, stockExportRendering: false });
+  liveComponent.setExpanded(false);
+  if (liveComponent.render(120).join("\n").includes("routine note hidden by Calm")) {
+    throw new Error("turning Calm on did not hide the routine note again");
+  }
+  const exportDirectory = mkdtempSync(join(tmpdir(), "fm-routine-export-"));
+  try {
+    const sessionManager = SessionManager.create(exportDirectory, exportDirectory);
+    sessionManager.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "supervision" }],
+      stopReason: "stop",
+    });
+    sessionManager.appendCustomMessageEntry(
+      hidden.message.customType,
+      hidden.message.content,
+      hidden.message.display,
+      hidden.message.details,
+    );
+    const exportPath = await exportSessionToHtml(sessionManager, undefined, {
+      outputPath: join(exportDirectory, "export.html"),
+    });
+    const exportHtml = readFileSync(exportPath, "utf8");
+    const match = exportHtml.match(/<script id="session-data" type="application\/json">([^<]+)<\/script>/);
+    if (!match) throw new Error("the HTML export did not embed its session data");
+    const exported = JSON.parse(Buffer.from(match[1], "base64").toString("utf8"));
+    const entries = exported.session?.entries ?? exported.entries ?? [];
+    // Pi's export template renders a custom message only while display is
+    // true, which is the gate this entry has to keep.
+    const exportedNote = entries.find((entry) => entry.type === "custom_message" && entry.customType === "fm-branch-merge");
+    if (!exportedNote || exportedNote.content !== hidden.message.content || exportedNote.display !== true) {
+      throw new Error(`the routine note did not survive Pi's HTML export: ${JSON.stringify(exportedNote)}`);
+    }
+  } finally {
+    rmSync(exportDirectory, { recursive: true, force: true });
+  }
+}
 
 // ...while staying a durable, recoverable store row.
 const stored = readFileSync(`${home}/state/branch-outcomes.jsonl`, "utf8")
@@ -5389,6 +5469,10 @@ const pause = sentToMain.find((sent) => sent.message.content.includes("Supervisi
 if (pause.message.display !== true) {
   throw new Error(`Calm hid the branch-health note: ${JSON.stringify(pause)}`);
 }
+const pausePainted = noteRenderer(pause.message, { expanded: false }, { fg: (_color, text) => text });
+if (!String(pausePainted.text).includes("paused after repeated provider errors")) {
+  throw new Error(`Calm hid the branch-health note in the paint engine: ${JSON.stringify(pausePainted)}`);
+}
 
 // 4. Turning Calm off through its presentation event restores rendering
 // without a restart.
@@ -5405,12 +5489,16 @@ const shown = sentToMain.at(-1);
 if (shown.message.display !== true) {
   throw new Error(`a routine note stayed hidden after Calm was turned off: ${JSON.stringify(shown)}`);
 }
+const shownPainted = noteRenderer(shown.message, { expanded: false }, { fg: (_color, text) => text });
+if (!String(shownPainted.text).includes("routine note visible with Calm off")) {
+  throw new Error(`the routine note did not return to the paint engine with Calm off: ${JSON.stringify(shownPainted)}`);
+}
 process.exit(0);
 EOF
   status=$?
   out=$(cat "$TMP_ROOT/node-output")
   expect_code 0 "$status" "Calm must hide only routine branch notes while keeping them durable and recoverable: $out"
-  pass "Calm hides routine supervision notes from the transcript while the store, captain outcome, and branch-health note stay intact"
+  pass "Calm hides routine supervision notes from the live transcript while the store, HTML export, captain outcome, and branch-health note stay intact"
 }
 
 test_outcomes_tool_uses_stock_execution_and_export_consumers

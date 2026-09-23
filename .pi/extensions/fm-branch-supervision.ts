@@ -215,6 +215,10 @@ type OutcomeRow = {
   silent: boolean;
 };
 type VisibleOutcomeRecord = OutcomeRow & { version: 1 };
+// Identifies a routine sailboat note to the fm-branch-merge renderer, which
+// hides it while Calm is on. The note itself stays display: true so Pi's HTML
+// /export and /share keep it, and branch-health notes carry no discriminator.
+type RoutineMergeNoteDetails = { routine?: boolean };
 type ProviderRecovery = {
   cooldownMs: number;
   retryNotBefore: number;
@@ -999,12 +1003,12 @@ export default function (pi: ExtensionAPI) {
     const message = {
       customType: "fm-branch-merge",
       content: `${MERGE_NOTE_BOAT} ${row.task}: ${row.summary}`,
-      // Calm's transcript policy treats custom messages as hidden, so with the
-      // captain's Calm preference on a routine note keeps its exact content,
-      // order, and durable store row and changes only its presentation. Captain
-      // outcomes, branch-health notes, and watcher alarms never pass through
-      // here, so they stay rendered either way.
-      display: !(row.task === "fleet" && row.silent) && !calmHides("custom-message"),
+      // Pi's HTML /export and /share include a custom message only while its
+      // display flag is true, so a routine note keeps that flag and Calm hides
+      // it live through the fm-branch-merge renderer instead. An explicitly
+      // silent fleet heartbeat is the one routine row with nothing to keep.
+      display: !(row.task === "fleet" && row.silent),
+      details: { routine: true },
     };
     if (mainStreaming) pi.sendMessage(message, { deliverAs: "nextTurn" });
     else pi.sendMessage(message, {});
@@ -2331,8 +2335,11 @@ ${context.command}
   });
 
   // Pi only calls this renderer for a message with display: true, which every
-  // routine note uses except an explicitly silent fleet heartbeat.
-  pi.registerMessageRenderer?.("fm-branch-merge", (message, _options, theme) => {
+  // routine note uses except an explicitly silent fleet heartbeat. A routine
+  // note hidden by Calm paints nothing here while staying display: true for
+  // /export, and every other fm-branch-merge note stays rendered.
+  pi.registerMessageRenderer?.<RoutineMergeNoteDetails>("fm-branch-merge", (message, _options, theme) => {
+    if (calmHides("custom-message") && message.details?.routine === true) return new Container();
     const note = textOfContent(message.content);
     const hasGlyph = note.startsWith(MERGE_NOTE_BOAT);
     const rest = hasGlyph ? note.slice(MERGE_NOTE_BOAT.length) : note;

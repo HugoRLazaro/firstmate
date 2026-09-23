@@ -231,7 +231,7 @@ The test fixture enumerates every class below through the centralized policy, an
 | `tool-image` | Image children appended outside tool renderer slots | Unsupported boundary; remains visible. |
 | `user-bash` | `BashExecutionComponent` for `!` and `!!` | Unsupported boundary; remains visible. |
 | `skill-invocation` | `SkillInvocationMessageComponent` plus parsed user text | Unsupported boundary; remains visible. |
-| `custom-message` | `CustomMessageComponent` when `display` is true | The session-start nudge and legacy Calm context messages use `display: false`; arbitrary extension messages remain an unsupported boundary. |
+| `custom-message` | `CustomMessageComponent` when `display` is true | The session-start nudge and legacy Calm context messages use `display: false`; the supervision branch's routine sailboat notes keep `display: true` so `/export` and `/share` retain them and hide themselves through their own `fm-branch-merge` renderer; arbitrary extension messages remain an unsupported boundary. |
 | `custom-entry` | `CustomEntryComponent` with a registered renderer | Legacy Calm presentation entries rebuild to zero children without a residual spacer and restore through ordinary expansion redraw when mounted; arbitrary extension entries remain an unsupported boundary. |
 | `compaction-summary` | `CompactionSummaryMessageComponent` | Unsupported boundary; remains visible. |
 | `branch-summary` | `BranchSummaryMessageComponent` | Unsupported boundary; remains visible. |
