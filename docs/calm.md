@@ -26,6 +26,7 @@ The narration is hidden only from the live transcript presentation, and remains 
 The operational inputs Calm classifies remain ordinary user-role messages, while Pi's transcript layout renders their complete rows at zero height.
 The session-start nudge remains on its existing non-displayed custom-message path.
 A routine sailboat note the supervision branch merges into the transcript is hidden live by its own `fm-branch-merge` renderer rather than by clearing its display flag, so its exact content, ordering, model context, session storage, durable outcome record, and `/export` and `/share` transcript content are unchanged; toggling Calm repaints routine notes, so they leave the screen while Calm is on and return when it is off.
+A routine note delivered before this change carries no routine discriminator and is never rewritten, so it can still appear when Pi reloads the session from disk; those older notes age out on their own.
 
 Outside Pi's same-name built-in override collision described below, Calm changes presentation only.
 Calm's built-in wrappers preserve Pi's execution behavior, and input delivery, ordering, model context, session storage, diagnostics, and `/export` and `/share` operation remain unchanged.
