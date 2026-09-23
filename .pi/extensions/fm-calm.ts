@@ -21,13 +21,12 @@
 import { randomUUID } from "node:crypto";
 import {
   mkdirSync,
-  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
   ExtensionAPI,
@@ -55,9 +54,11 @@ import {
   createCalmWorkingShipWidget,
 } from "./lib/fm-calm-working-ship.ts";
 import {
+  calmPreferencePathFor,
   calmPresentationHides,
   calmPresentationIsActive,
   FIRSTMATE_CALM_PRESENTATION_EVENT,
+  loadCalmPreference,
   registerFirstmateSyntheticPresentation,
   setCalmPresentation,
   setCalmStockExportRendering,
@@ -90,8 +91,6 @@ type StandardShellState = {
 };
 
 const extensionFile = fileURLToPath(import.meta.url);
-const extensionDir = dirname(extensionFile);
-const root = resolve(extensionDir, "../..");
 
 // Resolves symlinks before comparing tool-ownership identity below: sourceInfo.path
 // values come from independent path-resolution code paths (this module's own
@@ -156,21 +155,8 @@ export default function (pi: ExtensionAPI) {
     }
   };
 
-  const fmHome = process.env.FM_HOME || process.env.FM_ROOT_OVERRIDE || root;
-  const configDirectory = process.env.FM_CONFIG_OVERRIDE || resolve(fmHome, "config");
-  const calmPreferencePath = resolve(configDirectory, "calm");
-  // "max" is the legacy value written by the removed third presentation level, whose
-  // behavior is now ordinary Calm; a home upgraded from it restores as on rather than
-  // dropping to off. docs/configuration.md owns the persisted value schema.
-  const loadCalmPreference = (): boolean => {
-    let stored: string;
-    try {
-      stored = readFileSync(calmPreferencePath, "utf8").trim();
-    } catch {
-      return false;
-    }
-    return stored === "on" || stored === "max";
-  };
+  const calmPreferencePath = calmPreferencePathFor(extensionFile);
+  const loadPreference = (): boolean => loadCalmPreference(calmPreferencePath);
   const persistCalmPreference = (active: boolean): void => {
     mkdirSync(dirname(calmPreferencePath), { recursive: true });
     const temporaryPath = `${calmPreferencePath}.${process.pid}.${randomUUID()}.tmp`;
@@ -335,7 +321,7 @@ export default function (pi: ExtensionAPI) {
   // unconditional here (see file header): a foreign-claim check is not reachable at
   // this point, while deferral would make restored rows capture the wrong definition.
   // A Calm-off session or reload registers nothing and creates no collision exposure.
-  if (loadCalmPreference()) {
+  if (loadPreference()) {
     for (const tool of wrappedBuiltIns) pi.registerTool(tool);
     builtInsRegistered = true;
   }
@@ -412,7 +398,7 @@ export default function (pi: ExtensionAPI) {
     reportBuiltInLosses();
     calmToolRowRepaints.clear();
     exportRendering = false;
-    setCalmPresentation(loadCalmPreference());
+    setCalmPresentation(loadPreference());
     setCalmStockExportRendering(false);
     publishPresentationState();
     agentRunActive = false;

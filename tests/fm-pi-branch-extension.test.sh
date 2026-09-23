@@ -2403,6 +2403,9 @@ const pauseNotes = sentToMain.filter((sent) => sent.message.content.includes("Su
 if (pauseNotes.length !== 1 || pauseNotes[0].message.content.includes("\n")) {
   throw new Error(`the first latch must surface exactly one one-line note: ${JSON.stringify(pauseNotes)}`);
 }
+if (pauseNotes[0].message.display !== true) {
+  throw new Error(`the pause note must stay rendered: ${JSON.stringify(pauseNotes[0])}`);
+}
 
 // No provider attempt occurs inside the first five-minute cooldown. Exactly
 // one probe is accepted when it elapses, and all other wakes remain on main
@@ -2448,6 +2451,9 @@ if (mainUserMessages.length !== 0) throw new Error("a successful recovery probe 
 const recoveryNotes = sentToMain.filter((sent) => sent.message.content.includes("Supervision branch recovered after a successful cooldown probe"));
 if (recoveryNotes.length !== 1 || recoveryNotes[0].message.content.includes("\n")) {
   throw new Error(`recovery must surface exactly one one-line note: ${JSON.stringify(recoveryNotes)}`);
+}
+if (recoveryNotes[0].message.display !== true) {
+  throw new Error(`the recovery note must stay rendered: ${JSON.stringify(recoveryNotes[0])}`);
 }
 
 // The durable report cleared both the latch and the old streak: one new
@@ -5269,6 +5275,144 @@ EOF
   pass "an extension-registered provider resolves in the isolated branch runtime"
 }
 
+# Calm's transcript preference hides the branch's routine sailboat notes from
+# the live transcript only: the note stays an ordinary model message and a
+# durable store row, while captain outcomes and branch-health notes stay
+# rendered. The preference is read from the shared Calm path at every
+# session_start and followed live through the Calm presentation event.
+test_calm_preference_hides_routine_notes_only() {
+  local repo home out status
+  repo="$TMP_ROOT/calm-routine-root"
+  home="$TMP_ROOT/calm-routine-home"
+  mkdir -p "$home/state" "$home/config"
+  install_pi_branch_extension_fixture "$repo"
+  PLUGIN="$repo/.pi/extensions/fm-branch-supervision.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+    DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
+const prelude = process.env.DRIVER_PRELUDE;
+await eval(`(async () => { ${prelude}; globalThis.__t = { pi, fire, dispatch, settle, sentToMain, mainEntries, mainTools, defaultSessionCtx, home }; })()`);
+const { pi, fire, dispatch, settle, sentToMain, mainEntries, mainTools, defaultSessionCtx, home } = globalThis.__t;
+import { readFileSync, writeFileSync } from "node:fs";
+
+// The preference appears after the extension loaded and before its
+// session_start, so the first routine note proves the session_start re-read
+// rather than a load-time snapshot.
+writeFileSync(`${home}/config/calm`, "on\n");
+writeFileSync(`${home}/state/.lock`, `${process.ppid}\n`);
+await fire("session_start", {}, defaultSessionCtx);
+
+// Build the branch session through one held-open wake, exactly as a real
+// branch turn does, so its fm_branch_report tool is available.
+let finishWakePrompt;
+globalThis.__fmOnBranchPrompt = () => new Promise((resolve) => { finishWakePrompt = resolve; });
+const offer = dispatch("signal: task-9 working");
+if (!offer.accepted) throw new Error("branch did not accept the wake offer");
+await settle(() => (globalThis.__fmPrompts ?? []).length === 1, "branch wake prompt");
+const report = globalThis.__fmSessions[0].options.customTools.find((tool) => tool.name === "fm_branch_report");
+if (!report) throw new Error("branch report tool missing");
+
+// 1. Calm on: a routine outcome is not painted...
+const routine = await report.execute(
+  "calm-on-routine",
+  { task: "branch-driver", verdict: "routine", summary: "routine note hidden by Calm" },
+  undefined,
+  undefined,
+  {},
+);
+if (routine.isError) throw new Error(`routine report failed: ${JSON.stringify(routine)}`);
+const hidden = sentToMain.at(-1);
+if (hidden.message.display !== false) {
+  throw new Error(`a routine note stayed rendered while Calm was on: ${JSON.stringify(hidden)}`);
+}
+if (hidden.message.content !== "⛵ branch-driver: routine note hidden by Calm") {
+  throw new Error(`hiding changed the routine note content: ${hidden.message.content}`);
+}
+if (hidden.options.triggerTurn) throw new Error("hiding a routine note opened a main turn");
+
+// ...while staying a durable, recoverable store row.
+const stored = readFileSync(`${home}/state/branch-outcomes.jsonl`, "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line))
+  .find((row) => row.summary === "routine note hidden by Calm");
+if (!stored || stored.verdict !== "routine" || stored.task !== "branch-driver") {
+  throw new Error(`the hidden routine note was not stored durably: ${JSON.stringify(stored)}`);
+}
+const outcomes = mainTools.find((tool) => tool.name === "fm_branch_outcomes");
+if (!outcomes) throw new Error("fm_branch_outcomes was not registered on main");
+const recovered = await outcomes.execute("read-hidden-routine", { recent: 5 }, undefined, undefined, {});
+if (recovered.isError || !recovered.content[0].text.includes("routine note hidden by Calm")) {
+  throw new Error(`the hidden routine note is not recoverable: ${JSON.stringify(recovered)}`);
+}
+
+// 2. A captain outcome keeps its visible entry and its processing turn.
+await report.execute(
+  "calm-on-captain",
+  { task: "branch-driver", verdict: "captain", summary: "captain outcome stays visible" },
+  undefined,
+  undefined,
+  {},
+);
+if (!mainEntries.some((entry) =>
+  entry.customType === "fm-branch-visible-outcome" && entry.data.summary === "captain outcome stays visible"
+)) {
+  throw new Error("Calm hid the captain outcome entry");
+}
+const captainRequest = sentToMain.filter((sent) => sent.message.customType === "fm-branch-process").at(-1);
+if (!captainRequest || captainRequest.options.triggerTurn !== true) {
+  throw new Error(`Calm suppressed the captain processing turn: ${JSON.stringify(captainRequest)}`);
+}
+
+finishWakePrompt();
+await offer.settlement;
+
+// 3. A branch-health note stays rendered under Calm: two consecutive provider
+// errors latch the branch and surface the pause note.
+globalThis.__fmOnBranchPrompt = async ({ session }) => {
+  session.messages.push({
+    role: "assistant",
+    content: [],
+    stopReason: "error",
+    errorMessage: "429: provider unavailable",
+  });
+};
+const firstError = dispatch("signal: first provider error");
+if (!firstError.accepted) throw new Error("first provider-error wake was not accepted");
+await firstError.settlement.then(() => null, () => null);
+const secondError = dispatch("signal: second provider error");
+if (!secondError.accepted) throw new Error("second provider-error wake was not accepted");
+await secondError.settlement.then(() => null, () => null);
+await settle(
+  () => sentToMain.some((sent) => sent.message.content.includes("Supervision branch paused after repeated provider errors")),
+  "branch-health pause note",
+);
+const pause = sentToMain.find((sent) => sent.message.content.includes("Supervision branch paused after repeated provider errors"));
+if (pause.message.display !== true) {
+  throw new Error(`Calm hid the branch-health note: ${JSON.stringify(pause)}`);
+}
+
+// 4. Turning Calm off through its presentation event restores rendering
+// without a restart.
+pi.events.emit("firstmate:calm-presentation", { active: false, stockExportRendering: false });
+const visible = await report.execute(
+  "calm-off-routine",
+  { task: "task-9", verdict: "routine", summary: "routine note visible with Calm off" },
+  undefined,
+  undefined,
+  {},
+);
+if (visible.isError) throw new Error(`routine report failed: ${JSON.stringify(visible)}`);
+const shown = sentToMain.at(-1);
+if (shown.message.display !== true) {
+  throw new Error(`a routine note stayed hidden after Calm was turned off: ${JSON.stringify(shown)}`);
+}
+process.exit(0);
+EOF
+  status=$?
+  out=$(cat "$TMP_ROOT/node-output")
+  expect_code 0 "$status" "Calm must hide only routine branch notes while keeping them durable and recoverable: $out"
+  pass "Calm hides routine supervision notes from the transcript while the store, captain outcome, and branch-health note stay intact"
+}
+
 test_outcomes_tool_uses_stock_execution_and_export_consumers
 test_real_pi_picker_primitives_stay_bounded_and_searchable
 test_branch_dispatch_two_stage_filter_and_prefix_contract
@@ -5313,3 +5457,4 @@ test_delivery_keeps_the_event_loop_live_and_ordered
 test_session_replacement_during_delivery_neither_loses_nor_duplicates
 test_store_failure_during_delivery_neither_loses_nor_duplicates
 test_mark_read_failure_keeps_routine_redelivery_and_captain_deduplication
+test_calm_preference_hides_routine_notes_only

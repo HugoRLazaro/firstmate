@@ -3,6 +3,8 @@ import {
   type ExtensionAPI,
   UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 export const CALM_TRANSCRIPT_CLASSES = [
   "genuine-user-prompt",
   "genuine-agent-response",
@@ -84,6 +86,31 @@ export function calmPresentationIsActive(): boolean {
 
 export function calmPresentationHides(itemClass: CalmTranscriptClass): boolean {
   return calm && !stockExportRendering && !calmTranscriptClassIsVisible(itemClass);
+}
+
+// docs/configuration.md "Calm preference (config/calm)" owns the persisted
+// value schema and resolution order this shared reader implements. Every
+// extension that honors Calm presentation resolves the same file from its own
+// extension path, so each one lands on the same effective home and reads the
+// same values.
+export function calmPreferencePathFor(extensionFile: string): string {
+  const codeRoot = resolve(dirname(extensionFile), "../..");
+  const fmHome = process.env.FM_HOME || process.env.FM_ROOT_OVERRIDE || codeRoot;
+  const configDirectory = process.env.FM_CONFIG_OVERRIDE || resolve(fmHome, "config");
+  return resolve(configDirectory, "calm");
+}
+
+export function loadCalmPreference(preferencePath: string): boolean {
+  let stored: string;
+  try {
+    stored = readFileSync(preferencePath, "utf8").trim();
+  } catch {
+    return false;
+  }
+  // "max" is the legacy value written by the removed third presentation level,
+  // whose behavior is now ordinary Calm; a home upgraded from it restores as on
+  // rather than dropping to off.
+  return stored === "on" || stored === "max";
 }
 
 export function registerFirstmateSyntheticPresentation(pi: ExtensionAPI): void {

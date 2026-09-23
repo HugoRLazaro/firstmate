@@ -186,7 +186,7 @@ test_home_resolution() {
     OVERRIDE_HOME="$fixture/override" \
     EXTENSION_HOME="$fixture/project" \
     node --input-type=module 2>&1 <<'JS'
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const extension = await import(`${pathToFileURL(process.env.EXT).href}?home=${Date.now()}`);
@@ -256,6 +256,20 @@ if (readFileSync(`${process.env.EXTENSION_HOME}/config/calm`, "utf8") !== "on\n"
 }
 if (existsSync(`${process.cwd()}/config/calm`)) {
   throw new Error("Calm wrote its preference under Pi's launch directory");
+}
+
+// FM_CONFIG_OVERRIDE names the config directory outright, ahead of both the
+// FM_HOME and extension-path candidates. Pre-seeding it on and toggling to off
+// proves both the read and the write land there.
+process.env.FM_HOME = `${process.env.EXTENSION_HOME}/home-that-must-lose`;
+process.env.FM_CONFIG_OVERRIDE = `${process.env.OVERRIDE_HOME}/config-override`;
+mkdirSync(process.env.FM_CONFIG_OVERRIDE, { recursive: true });
+writeFileSync(`${process.env.FM_CONFIG_OVERRIDE}/calm`, "on\n");
+calm = registerCalm();
+calm.sessionStart({ reason: "startup" }, context);
+await calm.calmCommand.handler("", context);
+if (readFileSync(`${process.env.FM_CONFIG_OVERRIDE}/calm`, "utf8") !== "off\n") {
+  throw new Error("Calm did not read and write its preference under FM_CONFIG_OVERRIDE");
 }
 JS
 )

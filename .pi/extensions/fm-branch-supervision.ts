@@ -105,8 +105,10 @@ import { registerFirstmateTool } from "./lib/fm-native-contract.ts";
 import { runCommandAsync } from "./lib/fm-async-exec.ts";
 import {
   type CalmPresentationState,
+  calmPreferencePathFor,
   calmTranscriptClassIsVisible,
   FIRSTMATE_CALM_PRESENTATION_EVENT,
+  loadCalmPreference,
 } from "./lib/fm-calm-visibility.ts";
 import {
   activateEligibleRowsOwner,
@@ -997,7 +999,12 @@ export default function (pi: ExtensionAPI) {
     const message = {
       customType: "fm-branch-merge",
       content: `${MERGE_NOTE_BOAT} ${row.task}: ${row.summary}`,
-      display: !(row.task === "fleet" && row.silent),
+      // Calm's transcript policy treats custom messages as hidden, so with the
+      // captain's Calm preference on a routine note keeps its exact content,
+      // order, and durable store row and changes only its presentation. Captain
+      // outcomes, branch-health notes, and watcher alarms never pass through
+      // here, so they stay rendered either way.
+      display: !(row.task === "fleet" && row.silent) && !calmHides("custom-message"),
     };
     if (mainStreaming) pi.sendMessage(message, { deliverAs: "nextTurn" });
     else pi.sendMessage(message, {});
@@ -1745,6 +1752,10 @@ ${context.command}
   // session's start.
   pi.on?.("session_start", async (_event, ctx) => {
     rememberMainModel(ctx);
+    calmPresentation = {
+      active: loadCalmPreference(calmPreferencePath),
+      stockExportRendering: false,
+    };
     currentMainSession = ctx?.sessionManager ?? null;
     // Every field this new generation depends on is set before the first
     // await, so anything already queued for the previous generation is
@@ -2059,8 +2070,14 @@ ${context.command}
     return applied === pin ? `Effort: ${pin}.` : `Effort: ${pin}, which this model runs at ${applied}.`;
   }
 
+  const calmPreferencePath = calmPreferencePathFor(extensionFile);
+  // The Calm preference is read once at load and re-read at every session_start
+  // below, exactly as the Calm extension does. A session_start reconciliation
+  // can deliver a routine note before the Calm extension publishes its
+  // presentation event, so this extension never depends on that event ordering
+  // for the captain's current choice.
   let calmPresentation: CalmPresentationState = {
-    active: false,
+    active: loadCalmPreference(calmPreferencePath),
     stockExportRendering: false,
   };
   pi.events?.on?.(FIRSTMATE_CALM_PRESENTATION_EVENT, (data) => {
