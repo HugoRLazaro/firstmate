@@ -296,6 +296,33 @@ test_marcas_refuses_malformed_delivery() {
   pass "marcas: an unreadable delivery refuses instead of dying inside jq"
 }
 
+test_marcas_and_aplicar_refuse_non_scalar_fields() {
+  local dir err rc
+  dir=$(make_world escalares)
+  err="$dir/err"
+  write_delivery "$dir" resumen 20260923-192000 \
+    "$(marca_json m-001 b-1 'Resumen de la empresa' cambio 'anade una linea' estable)"
+  write_delivery "$dir" redactar 20260923-193000 \
+    '{"id":"m-001","bloque":"b-1","ruta":"html > body","texto_bloque":"Programa de los cursos","tipo":["cambio"],"texto":"cambia esto","creado_en":"2026-09-23T18:41:03Z","ancla":"estable"}'
+
+  run_edicion "$dir" "$err" -- marcas >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "marcas should refuse a delivery whose mark fields are not scalars"
+  assert_contains "$(cat "$err")" "entrega mal formada" \
+    "the refusal should name the malformed delivery"
+
+  run_edicion "$dir" "$err" -- aplicar >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "aplicar should refuse a sweep containing a non-scalar delivery"
+  assert_contains "$(cat "$err")" "entrega mal formada" \
+    "aplicar should name the malformed delivery"
+  assert_equals "" "$(cat "$dir/tasks.log")" \
+    "a sweep with a malformed delivery must not create a task"
+  [ ! -e "$(sidecar_of "$dir" redactar 20260923-193000)" ] ||
+    fail "a malformed delivery must not get a sidecar"
+  pass "marcas/aplicar: a delivery with non-scalar mark fields refuses loudly"
+}
+
 # --- aplicar ----------------------------------------------------------------
 
 test_aplicar_creates_task_and_quotes_blocks() {
@@ -342,6 +369,8 @@ test_aplicar_creates_task_and_quotes_blocks() {
   assert_contains "$out" "ahora el plazo es de 20 dias" \
     "the open question should present what that mark asked for"
   assert_contains "$out" "Pregunta abierta" "the open question should actually ask"
+  assert_contains "$out" "--tarea edicion-tarea-1 --marca m-003" \
+    "the open question for a task-backed delivery should name its task"
 
   side=$(sidecar_of "$dir" redactar 20260923-184012)
   assert_present "$side" "aplicar should leave the delivery as a durable record"
@@ -620,12 +649,41 @@ test_cerrar_discards_held_back_marks() {
   pass "cerrar: a held-back mark can be delivered or discarded, and the close records both"
 }
 
+test_aplicar_all_held_back_offers_taskless_resolution() {
+  local dir err out rc
+  dir=$(make_world solo-revisar)
+  err="$dir/err"
+  write_delivery "$dir" redactar 20260923-194000 \
+    "$(marca_json m-003 b-9c0d 'Plazos de entrega' cambio 'ahora el plazo es de 20 dias' perdida)"
+
+  out=$(run_edicion "$dir" "$err" -- aplicar)
+  rc=$?
+  expect_code 3 "$rc" "a delivery with only held-back marks should report the open question"
+  assert_contains "$out" "nada que crear todavia" \
+    "the all-held-back delivery should say no task was created"
+  assert_contains "$out" "aplicar --fichero <entrega> --marca m-003" \
+    "the open question should print the task-less resolution form"
+  assert_contains "$out" "crea la tarea" \
+    "the task-less form should say it creates the task"
+  assert_equals "" "$(cat "$dir/tasks.log")" \
+    "the all-held-back delivery must not create a task yet"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-194000.json --marca m-003 >/dev/null ||
+    fail "the printed task-less resolution should work: $(cat "$err")"
+  assert_equals "1" "$(grep -c '^ARGS add' "$dir/tasks.log" || true)" \
+    "the task-less resolution should create the task"
+  assert_equals "" "$(jq -r '.pendientes | join(" ")' "$(sidecar_of "$dir" redactar 20260923-194000)")" \
+    "the resolution should clear the held-back mark"
+  pass "aplicar: an all-held-back delivery offers a resolution that creates its task"
+}
+
 # --- run --------------------------------------------------------------------
 
 test_abrir_starts_and_reuses_surface
 test_abrir_refuses_without_surface_or_screen
 test_marcas_lists_without_applying
 test_marcas_refuses_malformed_delivery
+test_marcas_and_aplicar_refuse_non_scalar_fields
 test_aplicar_creates_task_and_quotes_blocks
 test_aplicar_groups_deliveries_into_one_task
 test_aplicar_refuses_malformed_and_reapplied
@@ -635,3 +693,4 @@ test_marcas_and_aplicar_accept_hyphenated_screen
 test_aplicar_refuses_delivery_outside_marks_dir
 test_aplicar_keeps_unnamed_applicable_marks_owed
 test_cerrar_discards_held_back_marks
+test_aplicar_all_held_back_offers_taskless_resolution

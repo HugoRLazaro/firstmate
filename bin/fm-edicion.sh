@@ -221,9 +221,11 @@ fm_edicion_validar() {  # <delivery>: refuses a malformed delivery
     and ((.pantalla // "") | (type == "string" and length > 0))
     and ((.marcas // null) | (type == "array" and length > 0))
     and ([.marcas[] | ((.id // "") | (type == "string" and length > 0))
-                   and ((.texto // "") | (type == "string" and length > 0))] | all)
+                   and ((.texto // "") | (type == "string" and length > 0))
+                   and ([.tipo, .texto_bloque, .ruta, .ancla]
+                        | all(. == null or type == "string"))] | all)
   ' "$f" >/dev/null 2>&1 ||
-    fail "entrega mal formada: $f (hacen falta version 1, pantalla, y cada marca con id y texto)"
+    fail "entrega mal formada: $f (hacen falta version 1, pantalla, y cada marca con id y texto, y los demas campos de texto)"
 }
 
 # NUL-separated records, fields joined by 0x1f: id, tipo, bloque, ruta, texto,
@@ -666,8 +668,9 @@ EOF
 # --- aplicar ----------------------------------------------------------------
 
 # The open question for every held-back mark, with its original context.
-fm_edicion_presentar_revisar() {  # <record>...: records already filtered to held-back marks
-  local rec num=0
+fm_edicion_presentar_revisar() {  # [<tarea>] <record>...: records already filtered to held-back marks
+  local tarea=${1:-} rec num=0
+  shift || true
   printf 'DECISION ABIERTA: %s marca(s) con el ancla perdida.\n' "$#"
   printf 'No se aplican a ciegas: el bloque ya no esta donde la marca lo dejo. Contexto original:\n\n'
   for rec in "$@"; do
@@ -682,10 +685,18 @@ fm_edicion_presentar_revisar() {  # <record>...: records already filtered to hel
     printf '\n'
   done
   printf 'Pregunta abierta: donde esta ahora ese bloque, o se descarta la marca?\n'
-  printf 'Con la respuesta, entrega la marca a la tarea viva con:\n'
-  for rec in "$@"; do
-    printf '  fm-edicion.sh aplicar --fichero <entrega> --tarea <tarea> --marca %s\n' "$(fm_edicion_campo "$rec" 1)"
-  done
+  if [ -n "$tarea" ]; then
+    printf 'Con la respuesta, entrega la marca a la tarea %s con:\n' "$tarea"
+    for rec in "$@"; do
+      printf '  fm-edicion.sh aplicar --fichero <entrega> --tarea %s --marca %s\n' "$tarea" "$(fm_edicion_campo "$rec" 1)"
+    done
+  else
+    printf 'Con la respuesta, entrega la marca con:\n'
+    for rec in "$@"; do
+      printf '  fm-edicion.sh aplicar --fichero <entrega> --marca %s\n' "$(fm_edicion_campo "$rec" 1)"
+    done
+    printf '  (crea la tarea; usa --tarea <tarea> solo para mandar la marca a una tarea que ya existe)\n'
+  fi
   printf 'si la respuesta es descartarla, anotala con: fm-edicion.sh cerrar <entrega> --descartar <id>\n'
   printf 'y despues cierra la entrega con: fm-edicion.sh cerrar <entrega>\n'
 }
@@ -812,7 +823,7 @@ cmd_aplicar() {
 
   if [ "$num" -eq 0 ]; then
     if [ "${#retenidas[@]}" -gt 0 ]; then
-      fm_edicion_presentar_revisar "${retenidas[@]}"
+      fm_edicion_presentar_revisar '' "${retenidas[@]}"
       printf '\nNo hay ninguna marca aplicable en esta entrega; nada que crear todavia.\n'
       return 3
     fi
@@ -975,7 +986,7 @@ EOF
 
   if [ "${#retenidas[@]}" -gt 0 ]; then
     printf '\n'
-    fm_edicion_presentar_revisar "${retenidas[@]}"
+    fm_edicion_presentar_revisar "$id_final" "${retenidas[@]}"
     return 3
   fi
   printf 'siguiente: cierra las entregas con fm-edicion.sh cerrar <entrega>\n'

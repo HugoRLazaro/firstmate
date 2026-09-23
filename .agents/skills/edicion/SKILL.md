@@ -38,7 +38,7 @@ This skill is the only owner of the `/edicion` trigger and of the route's shape.
 
 A mark is applied only when `ancla` is `estable` and it carries the marked block's text.
 Anything else - `perdida`, an unknown value, or no citable block - is held back: it is presented with its original context (block text, original route, what was asked) and left pending an answer, because the block is no longer where the mark left it.
-Take that question to the captain with his own nouns; once he answers, deliver the mark to the task with `aplicar --fichero <entrega> --tarea <id> --marca <id>`, or, if he decides against it, record the discard with `cerrar <entrega> --descartar <id>`. Only then can the delivery close.
+Take that question to the captain with his own nouns; once he answers, deliver the mark with `aplicar --fichero <entrega> --marca <id>` when the delivery has no task yet (that creates the task) or with `--tarea <id>` to send it to a task that already exists, or, if he decides against it, record the discard with `cerrar <entrega> --descartar <id>`. Only then can the delivery close.
 
 ## Hard rules
 
