@@ -114,6 +114,25 @@
 # Why Treehouse's own state cannot answer this for crewmate slots, and why the
 # claim file sits on top of it, is owned by bin/fm-wake-lib.sh's slot-owner
 # claim comment.
+# A record whose worktree identity is a released-slot marker
+# (`worktree_released=<path>` and no `worktree=`) is the other half of that
+# reassignment: the slot was handed on, so the record names no live tree and
+# there is nothing to return. Teardown skips every slot step for it - no
+# exclusivity scan, no process kill under the path, no branch or hook removal,
+# no Treehouse return, never the claim now in that slot - so its cleanup is
+# limited to the task's own endpoint, state records, and backlog row. A record
+# naming neither identity still refuses through the ordinary endpoint
+# validation. Because no tree is
+# left to inspect for dirty or unlanded work, this path's landed-work proof runs
+# against the project clone instead: the task branch `fm/<id>` must exist there
+# and be an ancestor of the clone's default branch. A missing branch, a branch
+# that is not contained, or a clone that cannot be read refuses, and --force
+# does not lift that proof because a released record has no work left for
+# --force to authorize discarding. The clone is read only: nothing is fetched,
+# checked out, or written. Scout tasks keep their existing carve-out (their
+# worktree is declared scratch and the report plus the captain-call gate is the
+# proof), and the released marker is a Treehouse pool shape, so an Orca record
+# on this path refuses rather than guessing at an Orca worktree to remove.
 # The recorded endpoint's exact task identity and the record's spawn incarnation
 # are validated separately
 # before cleanup. Its current working directory is only incidental process
@@ -442,6 +461,24 @@ TEARDOWN_LEGACY_RETAINED_STAMP=
 TEARDOWN_LEGACY_PRESTAMP_SIZE=0
 TEARDOWN_BACKLOG_APPLIES=0
 TEARDOWN_BACKLOG_SKIP_REASON=
+# The released-worktree record shape (see the header): the pool slot was handed
+# on, so `worktree=` was rewritten as `worktree_released=` and the record names
+# no live tree. Exactly one non-empty marker and no `worktree=` line is that
+# shape; anything else - both lines, a duplicated or empty marker, or control
+# characters in the value - stays on the ordinary path, where `worktree=` is
+# authoritative.
+TEARDOWN_WORKTREE_RELEASED=0
+TEARDOWN_RELEASED_WORKTREE=
+TEARDOWN_BACKEND_COUNT=$(LC_ALL=C grep -c '^backend=' "$META" 2>/dev/null || true)
+TEARDOWN_WORKTREE_COUNT=$(LC_ALL=C grep -c '^worktree=' "$META" 2>/dev/null || true)
+TEARDOWN_RELEASED_COUNT=$(LC_ALL=C grep -c '^worktree_released=' "$META" 2>/dev/null || true)
+if [ "$TEARDOWN_WORKTREE_COUNT" = 0 ] && [ "$TEARDOWN_RELEASED_COUNT" = 1 ]; then
+  TEARDOWN_RELEASED_WORKTREE=$(fm_meta_get "$META" worktree_released)
+  case "$TEARDOWN_RELEASED_WORKTREE" in
+    ''|*$'\n'*|*$'\r'*|*$'\t'*) TEARDOWN_RELEASED_WORKTREE= ;;
+    *) TEARDOWN_WORKTREE_RELEASED=1 ;;
+  esac
+fi
 if [ "$TEARDOWN_CLEANUP_RECOVERY" != orca ]; then
   if fm_backlog_transition_applies "$CONFIG" "$DATA" "$TEARDOWN_META_KIND"; then
     TEARDOWN_BACKLOG_APPLIES=1
@@ -968,9 +1005,31 @@ fi
 # This is the first cleanup authorization check. It is metadata-only and must
 # complete before fm-guard, a backend command, file removal, branch deletion,
 # worktree return, registry change, or process termination can run.
-fm_backend_validate_task_endpoint "$META" "$ID" || exit 1
-BACKEND=$FM_BACKEND_VALIDATED_BACKEND
-T=$FM_BACKEND_VALIDATED_TARGET
+# A released-worktree record names no live tree, so it cannot satisfy the shared
+# validator's worktree requirement; teardown reads the recorded endpoint from the
+# same metadata fields the validator reads, with no second copy of its rules, and
+# refuses an unknown or ambiguous backend or an Orca record, whose released
+# marker names no Orca worktree that could be proved this task's.
+if [ "$TEARDOWN_WORKTREE_RELEASED" = 1 ]; then
+  case "$TEARDOWN_BACKEND_COUNT" in
+    0) BACKEND=tmux ;;
+    1) BACKEND=$(fm_meta_get "$META" backend) ;;
+    *) BACKEND= ;;
+  esac
+  if ! fm_backend_is_known "$BACKEND"; then
+    echo "REFUSED: task $ID's released-worktree record has a missing, ambiguous, or unknown backend identity; preserving task state." >&2
+    exit 1
+  fi
+  if [ "$BACKEND" = orca ]; then
+    echo "REFUSED: task $ID's released-worktree record names backend orca; a released slot marker is a Treehouse pool shape and no Orca worktree can be proved this task's, so nothing was changed - reconcile the record by hand instead." >&2
+    exit 1
+  fi
+  T=$(fm_backend_target_of_meta "$META")
+else
+  fm_backend_validate_task_endpoint "$META" "$ID" || exit 1
+  BACKEND=$FM_BACKEND_VALIDATED_BACKEND
+  T=$FM_BACKEND_VALIDATED_TARGET
+fi
 WT=$(fm_meta_get "$META" worktree)
 PROJ=$(fm_meta_get "$META" project)
 T_ORCA=
@@ -1775,6 +1834,52 @@ validate_worktree_teardown_safety() {
       return 1
     fi
   fi
+}
+
+# The released-worktree path's landed-work proof (see the script header). A
+# record whose worktree identity is a released-slot marker has no live tree left
+# to inspect for dirty or unpushed work, so the only possible evidence that its
+# committed work LANDED is the task branch's containment in the project clone's
+# default branch. The clone is read only - nothing is fetched, checked out, or
+# written - and a branch that does not exist, is not contained, or a clone that
+# cannot be read refuses, exactly as the live-tree proof refuses an unlanded
+# worktree. --force does not lift this proof: it authorizes discarding THIS
+# task's unlanded work, and a released record has no work left to discard.
+# The kind scope mirrors validate_worktree_teardown_safety's own carve-outs: a
+# scout's declared-scratch worktree means its report plus the captain-call gate
+# above is its proof, and a secondmate has no task branch at all.
+validate_released_worktree_landed() {
+  local branch default ref
+  case "$KIND" in
+    secondmate|scout) return 0 ;;
+  esac
+  branch="fm/$ID"
+  [ -n "$PROJ" ] && [ -d "$PROJ" ] || {
+    echo "REFUSED: task $ID's released worktree has no readable project clone at ${PROJ:-<missing>}, so its branch $branch cannot be proved landed." >&2
+    return 1
+  }
+  if ! git -C "$PROJ" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "REFUSED: task $ID's project clone $PROJ is not a readable git repository, so its branch $branch cannot be proved landed." >&2
+    return 1
+  fi
+  if ! git -C "$PROJ" rev-parse --verify --quiet "refs/heads/$branch^{commit}" >/dev/null 2>&1; then
+    echo "REFUSED: task $ID's released worktree has no task branch $branch in its project clone $PROJ, so its work cannot be proved landed." >&2
+    return 1
+  fi
+  default=$(default_branch) || {
+    echo "REFUSED: cannot determine the default branch of task $ID's project clone $PROJ, so its branch $branch cannot be proved landed." >&2
+    return 1
+  }
+  for ref in "refs/heads/$default" "refs/remotes/origin/$default"; do
+    git -C "$PROJ" rev-parse --verify --quiet "$ref^{commit}" >/dev/null 2>&1 || continue
+    if git -C "$PROJ" merge-base --is-ancestor "refs/heads/$branch" "$ref" 2>/dev/null; then
+      return 0
+    fi
+  done
+  echo "REFUSED: task $ID's released worktree branch $branch is not contained in its project clone's $default branch, so its work is not proved landed." >&2
+  echo "Nothing was changed, and --force does not discard it: the released slot left no work to discard." >&2
+  echo "If the merge simply has not reached the clone yet, refresh it (bin/fm-fleet-sync.sh $PROJ) and retry." >&2
+  return 1
 }
 
 # Fix 1 (see script header): does the active-or-most-recent no-mistakes run in
@@ -3286,6 +3391,10 @@ if teardown_owns_worktree && [ -d "$WT" ] && [ "$FORCE" != "--force" ]; then
       exit 1
     fi
   fi
+elif [ "$TEARDOWN_WORKTREE_RELEASED" = 1 ]; then
+  # No live tree is left to inspect, so the clone is the only evidence that
+  # this record's work landed. Deliberately outside the --force skip above.
+  validate_released_worktree_landed || exit 1
 fi
 
 # A Herdr close may reposition shared workspace order, so the whole
@@ -3619,10 +3728,15 @@ fi
 if [ -d "$STATE" ]; then
   "$SCRIPT_DIR/fm-home-summary-refresh.sh" --best-effort || true
 fi
+if [ "$TEARDOWN_WORKTREE_RELEASED" = 1 ]; then
+  TEARDOWN_WORKTREE_LABEL="released worktree $TEARDOWN_RELEASED_WORKTREE"
+else
+  TEARDOWN_WORKTREE_LABEL="worktree $WT"
+fi
 if [ "$TEARDOWN_LEGACY_ACCEPTED" = 1 ]; then
-  echo "teardown $ID complete (window $T, worktree $WT, legacy record accepted without spawn_gen: endpoint $TEARDOWN_LEGACY_ENDPOINT, incarnation $TEARDOWN_META_SPAWN_GEN)"
+  echo "teardown $ID complete (window $T, $TEARDOWN_WORKTREE_LABEL, legacy record accepted without spawn_gen: endpoint $TEARDOWN_LEGACY_ENDPOINT, incarnation $TEARDOWN_META_SPAWN_GEN)"
 elif teardown_owns_worktree; then
-  echo "teardown $ID complete (window $T, worktree $WT)"
+  echo "teardown $ID complete (window $T, $TEARDOWN_WORKTREE_LABEL)"
 else
   echo "teardown $ID complete (window $T; pool slot $WT left to task $TEARDOWN_SLOT_REASSIGNED_TO${TEARDOWN_SLOT_REASSIGNED_HOME:+ (home $TEARDOWN_SLOT_REASSIGNED_HOME)}, which it was reassigned to)"
 fi

@@ -1247,6 +1247,194 @@ test_legacy_record_without_the_flag_refuses() {
   pass "a record predating spawn_gen refuses teardown until --legacy-record is passed"
 }
 
+# The released-worktree record shape firstmate leaves when a reused Treehouse
+# pool slot is reconciled: the slot was handed on, so its live tree is gone and
+# the record's `worktree=` line was rewritten as `worktree_released=`. The task
+# branch itself stays in the shared repository, which is what the released
+# path's landed proof reads. Args: case_dir
+release_task_worktree_record() {
+  local case_dir=$1
+  rm -rf "$case_dir/wt"
+  git -C "$case_dir/project" worktree prune
+  sed -i.bak 's/^worktree=/worktree_released=/' "$case_dir/state/task-x1.meta"
+  rm -f "$case_dir/state/task-x1.meta.bak"
+  grep -q '^worktree_released=' "$case_dir/state/task-x1.meta" \
+    || fail "release_task_worktree_record: the record did not take the released marker"
+}
+
+# Land the task branch in the project clone's default branch, the way a
+# completed merge into main leaves it. Args: case_dir
+land_task_branch_in_clone() {
+  local case_dir=$1
+  git -C "$case_dir/project" merge --ff-only -q fm/task-x1
+}
+
+test_released_worktree_record_with_landed_branch_tears_down() {
+  local case_dir out
+  case_dir=$(make_case released-landed)
+  write_meta "$case_dir" no-mistakes ship
+  seed_backlog_in_flight "$case_dir"
+  : > "$case_dir/state/task-x1.turn-ended"
+  : > "$case_dir/state/task-x1.progress"
+  wt_commit_file "$case_dir" feature.txt released-landed-content "landed released work"
+  land_task_branch_in_clone "$case_dir"
+  release_task_worktree_record "$case_dir"
+
+  out=$(run_teardown "$case_dir") \
+    || fail "released-landed: teardown refused a released-worktree record whose branch is in the clone's main"
+  printf '%s\n' "$out" | grep -Fq "released worktree $case_dir/wt" \
+    || fail "released-landed: the teardown line did not report the released worktree: $out"
+  [ "$(backlog_row_state "$case_dir")" = "done" ] \
+    || fail "released-landed: teardown returned success with its backlog item still open"
+  assert_absent "$case_dir/state/task-x1.backlog-close" \
+    "released-landed: the close left its pending-close record behind"
+  assert_absent "$case_dir/state/task-x1.turn-ended" \
+    "released-landed: teardown left the task's turn-end marker behind"
+  assert_absent "$case_dir/state/task-x1.progress" \
+    "released-landed: teardown left the task's progress marker behind"
+  assert_absent "$case_dir/state/task-x1.meta" \
+    "released-landed: teardown left the released record behind"
+  pass "a released-worktree record whose branch is in the project clone's main tears down"
+}
+
+test_released_worktree_record_with_unlanded_branch_refuses() {
+  local case_dir rc before
+  case_dir=$(make_case released-unlanded)
+  write_meta "$case_dir" no-mistakes ship
+  seed_backlog_in_flight "$case_dir"
+  wt_commit_file "$case_dir" feature.txt released-unlanded-content "unlanded released work"
+  release_task_worktree_record "$case_dir"
+  before=$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "released-unlanded: teardown must refuse a released-worktree record whose branch is not in the clone's main"
+  grep -Fq 'fm/task-x1' "$case_dir/stderr" \
+    || fail "released-unlanded: the refusal did not name the task branch: $(cat "$case_dir/stderr")"
+  grep -Fq 'not contained' "$case_dir/stderr" \
+    || fail "released-unlanded: the refusal did not report the branch outside the clone's main: $(cat "$case_dir/stderr")"
+  [ "$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')" = "$before" ] \
+    || fail "released-unlanded: the refusal modified the released record"
+  [ "$(backlog_row_state "$case_dir")" = in_flight ] \
+    || fail "released-unlanded: the refusal closed the backlog item anyway"
+
+  # --force authorizes discarding this task's unlanded WORK, and the released
+  # slot left none; the branch proof is the only remaining evidence, so --force
+  # must not lift it.
+  set +e
+  run_teardown "$case_dir" --force > "$case_dir/stdout-force" 2> "$case_dir/stderr-force"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "released-unlanded: --force must not lift the released-worktree landed proof"
+  assert_present "$case_dir/state/task-x1.meta" \
+    "released-unlanded: the forced refusal removed the released record"
+  pass "a released-worktree record whose branch is not in the clone's main refuses, and --force does not lift it"
+}
+
+test_released_worktree_record_without_a_task_branch_refuses() {
+  local case_dir rc before
+  case_dir=$(make_case released-no-branch)
+  write_meta "$case_dir" no-mistakes ship
+  seed_backlog_in_flight "$case_dir"
+  wt_commit_file "$case_dir" feature.txt released-no-branch-content "work with no surviving branch"
+  release_task_worktree_record "$case_dir"
+  git -C "$case_dir/project" branch -D fm/task-x1 >/dev/null
+  before=$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "released-no-branch: teardown must refuse a released-worktree record whose task branch is gone"
+  grep -Fq 'no task branch fm/task-x1' "$case_dir/stderr" \
+    || fail "released-no-branch: the refusal did not report the missing branch: $(cat "$case_dir/stderr")"
+  [ "$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')" = "$before" ] \
+    || fail "released-no-branch: the refusal modified the released record"
+  [ "$(backlog_row_state "$case_dir")" = in_flight ] \
+    || fail "released-no-branch: the refusal closed the backlog item anyway"
+  pass "a released-worktree record with no task branch in the clone refuses"
+}
+
+test_record_with_no_worktree_identity_still_refuses() {
+  local case_dir rc before
+  case_dir=$(make_case released-no-identity)
+  fm_write_meta "$case_dir/state/task-x1.meta" \
+    "window=firstmate:fm-task-x1" \
+    "endpoint_task_id=task-x1" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=no-mistakes" \
+    "spawn_gen=teardown-test-task-x1"
+  seed_backlog_in_flight "$case_dir"
+  before=$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "released-no-identity: a record naming neither worktree nor worktree_released must refuse"
+  grep -Fq 'missing, empty, or ambiguous worktree identity' "$case_dir/stderr" \
+    || fail "released-no-identity: the refusal was not the worktree-identity one: $(cat "$case_dir/stderr")"
+  [ "$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')" = "$before" ] \
+    || fail "released-no-identity: the refusal modified the record"
+  [ "$(backlog_row_state "$case_dir")" = in_flight ] \
+    || fail "released-no-identity: the refusal closed the backlog item anyway"
+  pass "a record naming neither worktree nor worktree_released still refuses through the ordinary identity validation"
+}
+
+test_record_with_worktree_keeps_the_live_worktree_landed_check() {
+  local case_dir rc before
+  case_dir=$(make_case released-with-worktree)
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' "worktree_released=$case_dir/wt" >> "$case_dir/state/task-x1.meta"
+  seed_backlog_in_flight "$case_dir"
+  wt_commit_file "$case_dir" feature.txt live-unlanded-content "unlanded live work"
+  # The clone's main now contains the branch, so the released path's proof would
+  # allow this record. The live worktree= identity is authoritative, so the
+  # worktree-based landed check must still refuse the unpushed commit.
+  land_task_branch_in_clone "$case_dir"
+  before=$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "released-with-worktree: a live worktree with unpushed work must still refuse"
+  grep -Fq 'has work not on any remote and not landed' "$case_dir/stderr" \
+    || fail "released-with-worktree: the refusal was not the live-worktree landed one: $(cat "$case_dir/stderr")"
+  [ "$(cksum "$case_dir/state/task-x1.meta" | awk '{print $1, $2}')" = "$before" ] \
+    || fail "released-with-worktree: the refusal modified the record"
+  assert_refusal_retained_task_state "$case_dir" released-with-worktree \
+    "$(git -C "$case_dir/wt" rev-parse HEAD)"
+  pass "a record with worktree= keeps the live-worktree landed check even when worktree_released= is also present"
+}
+
+test_released_scout_record_keeps_its_report_gate() {
+  local case_dir out
+  case_dir=$(make_case released-scout)
+  write_meta "$case_dir" no-mistakes scout
+  printf '%s\n' 'decisions_reviewed=1' >> "$case_dir/state/task-x1.meta"
+  mkdir -p "$case_dir/data/task-x1"
+  printf '%s\n' 'scout report' > "$case_dir/data/task-x1/report.md"
+  seed_backlog_in_flight "$case_dir" scout
+  # A scout's declared-scratch worktree is not the work product, so its branch
+  # is not required to be in main; the report and the captain-call gate above
+  # are its proof.
+  wt_commit_file "$case_dir" scratch.txt scout-scratch "scratch scout work"
+  release_task_worktree_record "$case_dir"
+
+  out=$(run_teardown "$case_dir") \
+    || fail "released-scout: teardown refused a released scout record with its report and a completed captain-call inventory"
+  printf '%s\n' "$out" | grep -Fq "released worktree $case_dir/wt" \
+    || fail "released-scout: the teardown line did not report the released worktree: $out"
+  [ "$(backlog_row_state "$case_dir")" = "done" ] \
+    || fail "released-scout: teardown returned success with its backlog item still open"
+  assert_absent "$case_dir/state/task-x1.meta" \
+    "released-scout: teardown left the released record behind"
+  pass "a released scout record keeps its report gate and tears down without a branch in main"
+}
 test_legacy_record_teardown_completes_when_landed_and_endpoint_dead() {
   local case_dir out
   case_dir=$(make_case legacy-allow)
@@ -3704,6 +3892,12 @@ test_content_fallback_refreshes_stale_origin_ref
 test_dirty_worktree_refuses
 test_gh_error_and_content_absent_refuses
 test_legacy_record_without_the_flag_refuses
+test_released_worktree_record_with_landed_branch_tears_down
+test_released_worktree_record_with_unlanded_branch_refuses
+test_released_worktree_record_without_a_task_branch_refuses
+test_record_with_no_worktree_identity_still_refuses
+test_record_with_worktree_keeps_the_live_worktree_landed_check
+test_released_scout_record_keeps_its_report_gate
 test_legacy_record_teardown_completes_when_landed_and_endpoint_dead
 test_legacy_record_teardown_refuses_unlanded_work
 test_legacy_record_teardown_refuses_an_ambiguous_endpoint
