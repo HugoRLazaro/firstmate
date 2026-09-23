@@ -486,7 +486,9 @@ test_cerrar_holds_until_lost_mark_is_delivered() {
     "$(marca_json m-001 b-1 'Programa de los cursos de creacion' cambio 'lo que se pide, literal' estable)" \
     "$(marca_json m-003 b-9c0d 'Plazos de entrega' cambio 'ahora el plazo es de 20 dias' perdida)"
 
-  run_edicion "$dir" "$err" -- aplicar >/dev/null || true
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-184012.json --tarea t1 >/dev/null
+  rc=$?
+  expect_code 3 "$rc" "the held-back mark should keep the delivery open"
   side=$(sidecar_of "$dir" redactar 20260923-184012)
   assert_present "$side" "the delivery should be applied before closing it"
 
@@ -504,7 +506,7 @@ test_cerrar_holds_until_lost_mark_is_delivered() {
   expect_code 0 "$rc" "delivering the held-back mark to a live task should succeed"
   assert_contains "$out" "marcas entregadas a la tarea t1" \
     "the resolution should report the live task it reached"
-  rec="$dir/home/state/t1.inbox/001.msg"
+  rec="$dir/home/state/t1.inbox/002.msg"
   assert_present "$rec" "the resolution should land as a durable steer record"
   body=$(record_body _ "$rec")
   assert_contains "$body" "Plazos de entrega" "the steer should quote the marked block"
@@ -518,13 +520,13 @@ test_cerrar_holds_until_lost_mark_is_delivered() {
   out=$(run_edicion "$dir" "$err" -- cerrar redactar-20260923-184012.json)
   rc=$?
   expect_code 0 "$rc" "the delivery should close once nothing is held back"
-  assert_contains "$out" "resultado: tarea edicion-tarea-1" \
+  assert_contains "$out" "resultado: tarea t1" \
     "the close should record which task the delivery became"
   assert_present "$dir/home/data/edicion/aplicadas/redactar-20260923-184012.json" \
     "the closed delivery should move under aplicadas/"
   assert_present "$dir/home/data/edicion/aplicadas/redactar-20260923-184012.aplicado.json" \
     "the sidecar should move with its delivery"
-  assert_contains "$(cat "$dir/home/data/edicion/aplicadas/registro.md")" "edicion-tarea-1" \
+  assert_contains "$(cat "$dir/home/data/edicion/aplicadas/registro.md")" "tarea t1" \
     "the ledger should record the result"
 
   run_edicion "$dir" "$err" -- cerrar redactar-20260923-184012.json >/dev/null
@@ -714,8 +716,8 @@ test_cerrar_recomputes_owed_marks_from_delivery() {
   write_delivery "$dir" redactar 20260923-196000 \
     "$(marca_json m-001 b-1 'Programa de los cursos de creacion' cambio 'cambia este titulo' estable)"
 
-  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-196000.json >/dev/null ||
-    fail "the first mark should apply: $(cat "$err")"
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-196000.json --tarea t1 >/dev/null ||
+    fail "the first mark should reach the live task: $(cat "$err")"
   side=$(sidecar_of "$dir" redactar 20260923-196000)
   assert_equals "m-001" "$(jq -r '.entregadas | join(" ")' "$side")" \
     "the first mark should be delivered"
@@ -778,6 +780,68 @@ test_edicion_flags_require_values() {
   pass "flags: a missing option value refuses loudly instead of dying under set -e"
 }
 
+test_aplicar_marca_refuses_resolved_marks() {
+  local dir err rc
+  dir=$(make_world resueltas)
+  err="$dir/err"
+  add_live_task "$dir" t1
+  write_delivery "$dir" redactar 20260923-197000 \
+    "$(marca_json m-003 b-3 'Plazos de entrega' cambio 'plazo de 20 dias' perdida)" \
+    "$(marca_json m-004 b-4 'Datos de contacto' cambio 'quita el telefono' perdida)" \
+    "$(marca_json m-005 b-5 'Sede de la empresa' cambio 'cambia la sede' perdida)"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-197000.json --tarea t1 --marca m-003 >/dev/null
+  rc=$?
+  expect_code 3 "$rc" "the other held-back marks should stay an open question"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-197000.json --tarea t1 --marca m-003 >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "naming an already delivered mark should be refused"
+  assert_contains "$(cat "$err")" "ya no esta pendiente" \
+    "the refusal should say the delivered mark is no longer owed"
+  [ ! -e "$dir/home/state/t1.inbox/002.msg" ] ||
+    fail "a refused re-delivery must not steer the task again"
+
+  run_edicion "$dir" "$err" -- cerrar redactar-20260923-197000.json --descartar m-004 >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "the delivery should still owe the remaining mark"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-197000.json --tarea t1 --marca m-004 >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "naming a discarded mark should be refused"
+  assert_contains "$(cat "$err")" "ya no esta pendiente" \
+    "the refusal should say the discarded mark is no longer owed"
+  [ ! -e "$dir/home/state/t1.inbox/002.msg" ] ||
+    fail "a refused discarded mark must not steer the task"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-197000.json --tarea t1 --marca m-005 >/dev/null ||
+    fail "the still-owed mark should be deliverable: $(cat "$err")"
+  pass "aplicar: --marca only accepts the marks the delivery still owes"
+}
+
+test_aplicar_marca_refuses_foreign_task() {
+  local dir err rc
+  dir=$(make_world tarea-ajena)
+  err="$dir/err"
+  add_live_task "$dir" t1
+  write_delivery "$dir" redactar 20260923-198000 \
+    "$(marca_json m-003 b-3 'Plazos de entrega' cambio 'plazo de 20 dias' perdida)" \
+    "$(marca_json m-004 b-4 'Datos de contacto' cambio 'quita el telefono' perdida)"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-198000.json --tarea t1 --marca m-003 >/dev/null
+  rc=$?
+  expect_code 3 "$rc" "the other held-back mark should stay an open question"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-198000.json --tarea otra-tarea --marca m-004 >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "a --tarea different from the bound task should be refused"
+  assert_contains "$(cat "$err")" "ligada a la tarea t1" \
+    "the refusal should name the task the delivery is bound to"
+  [ ! -e "$dir/home/state/t1.inbox/002.msg" ] ||
+    fail "a refused foreign task must not steer the bound task"
+  pass "aplicar: --marca cannot steer a task other than the one the delivery is bound to"
+}
+
 # --- run --------------------------------------------------------------------
 
 test_abrir_starts_and_reuses_surface
@@ -797,4 +861,6 @@ test_cerrar_discards_held_back_marks
 test_aplicar_all_held_back_offers_taskless_resolution
 test_aplicar_all_held_back_honors_tarea_flag
 test_cerrar_recomputes_owed_marks_from_delivery
+test_aplicar_marca_refuses_resolved_marks
+test_aplicar_marca_refuses_foreign_task
 test_edicion_flags_require_values

@@ -819,7 +819,7 @@ cmd_aplicar() {
   # An already-applied delivery only takes the explicit mark-resolution path:
   # named deliveries refuse without --marca, while the apply-everything sweep
   # simply leaves them to cerrar.
-  local pendientes_aplicar=() explicito=0
+  local pendientes_aplicar=() explicito=0 adeudadas=''
   [ "${#ficheros[@]}" -gt 0 ] && explicito=1
   for p in "${entregas[@]}"; do
     base=$(basename "$p")
@@ -833,6 +833,14 @@ cmd_aplicar() {
       if [ -z "$tarea" ]; then
         fail "la entrega $base ya tiene tarea ($SIDECAR_TAREA); --marca necesita --tarea <id> para entregar la marca a esa tarea viva"
       fi
+      if [ "$tarea" != "$SIDECAR_TAREA" ]; then
+        fail "la entrega $base esta ligada a la tarea $SIDECAR_TAREA; --tarea debe ser $SIDECAR_TAREA (recibido '$tarea')"
+      fi
+      adeudadas=$(fm_edicion_adeudadas "$p")
+      for marca in "${marcas[@]}"; do
+        printf '%s\n' "$adeudadas" | grep -qxF -- "$marca" ||
+          fail "la marca '$marca' ya no esta pendiente en $base: ya se entrego o se descarto"
+      done
     fi
     pendientes_aplicar+=("$p")
   done
