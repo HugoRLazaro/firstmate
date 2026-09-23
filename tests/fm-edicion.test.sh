@@ -677,6 +677,107 @@ test_aplicar_all_held_back_offers_taskless_resolution() {
   pass "aplicar: an all-held-back delivery offers a resolution that creates its task"
 }
 
+test_aplicar_all_held_back_honors_tarea_flag() {
+  local dir err out rc side
+  dir=$(make_world solo-revisar-tarea)
+  err="$dir/err"
+  add_live_task "$dir" t1
+  write_delivery "$dir" redactar 20260923-195000 \
+    "$(marca_json m-003 b-9c0d 'Plazos de entrega' cambio 'ahora el plazo es de 20 dias' perdida)"
+
+  out=$(run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-195000.json --tarea t1)
+  rc=$?
+  expect_code 3 "$rc" "the all-held-back delivery should report the open question"
+  assert_contains "$out" "--tarea t1 --marca m-003" \
+    "the open question must honor the live task the caller named"
+  assert_contains "$out" "a la tarea t1" "the open question should name the live task"
+  assert_equals "" "$(cat "$dir/tasks.log")" \
+    "the all-held-back delivery must not create a task yet"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-195000.json --tarea t1 --marca m-003 >/dev/null ||
+    fail "the printed resolution should steer the named live task: $(cat "$err")"
+  side=$(sidecar_of "$dir" redactar 20260923-195000)
+  assert_equals "t1" "$(jq -r '.tarea' "$side")" \
+    "the resolution should bind the delivery to the named task"
+  assert_present "$dir/home/state/t1.inbox/001.msg" \
+    "the resolution should steer the live task"
+  assert_equals "" "$(cat "$dir/tasks.log")" \
+    "the resolution must not create a new task"
+  pass "aplicar: an all-held-back delivery honors the named live task"
+}
+
+test_cerrar_recomputes_owed_marks_from_delivery() {
+  local dir err out rc side
+  dir=$(make_world crecida)
+  err="$dir/err"
+  add_live_task "$dir" t1
+  write_delivery "$dir" redactar 20260923-196000 \
+    "$(marca_json m-001 b-1 'Programa de los cursos de creacion' cambio 'cambia este titulo' estable)"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-196000.json >/dev/null ||
+    fail "the first mark should apply: $(cat "$err")"
+  side=$(sidecar_of "$dir" redactar 20260923-196000)
+  assert_equals "m-001" "$(jq -r '.entregadas | join(" ")' "$side")" \
+    "the first mark should be delivered"
+
+  jq '.marcas += [{"id":"m-002","bloque":"b-2","ruta":"html > body","texto_bloque":"Bases de la convocatoria","tipo":"cambio","texto":"quita este parrafo","creado_en":"2026-09-23T18:41:03Z","ancla":"estable"}]' \
+    "$dir/home/data/edicion/redactar-20260923-196000.json" >"$dir/crecida.json"
+  mv "$dir/crecida.json" "$dir/home/data/edicion/redactar-20260923-196000.json"
+
+  out=$(run_edicion "$dir" "$err" -- marcas)
+  assert_contains "$out" "1 marcas pendientes, sin cerrar" \
+    "marcas should report the appended mark as still owed"
+
+  run_edicion "$dir" "$err" -- cerrar redactar-20260923-196000.json >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "cerrar should refuse while an appended mark is owed"
+  assert_contains "$(cat "$err")" "--marca m-002" \
+    "the refusal should print the command for the appended mark"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-196000.json --tarea t1 --marca m-002 >/dev/null ||
+    fail "delivering the appended mark should succeed: $(cat "$err")"
+  assert_equals "m-001 m-002" "$(jq -r '.entregadas | join(" ")' "$side")" \
+    "the sidecar should record both delivered marks"
+
+  out=$(run_edicion "$dir" "$err" -- cerrar redactar-20260923-196000.json)
+  rc=$?
+  expect_code 0 "$rc" "the delivery should close once the appended mark is delivered: $(cat "$err")"
+  assert_contains "$(cat "$dir/home/data/edicion/aplicadas/registro.md")" "2 marcas" \
+    "the ledger should record both marks"
+  pass "cerrar: an appended mark cannot close silently and is delivered before the close"
+}
+
+test_edicion_flags_require_values() {
+  local dir err rc
+  dir=$(make_world banderas)
+  err="$dir/err"
+
+  run_edicion "$dir" "$err" -- abrir redactar --proyecto >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "abrir --proyecto without a value should be refused"
+  assert_contains "$(cat "$err")" "--proyecto necesita" \
+    "the refusal should name the flag missing its value"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "aplicar --fichero without a value should be refused"
+  assert_contains "$(cat "$err")" "--fichero necesita" \
+    "the refusal should name the flag missing its value"
+
+  run_edicion "$dir" "$err" -- aplicar --tarea >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "aplicar --tarea without a value should be refused"
+  assert_contains "$(cat "$err")" "--tarea necesita" \
+    "the refusal should name the flag missing its value"
+
+  run_edicion "$dir" "$err" -- cerrar redactar-20260923-184012.json --descartar >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "cerrar --descartar without a value should be refused"
+  assert_contains "$(cat "$err")" "--descartar necesita" \
+    "the refusal should name the flag missing its value"
+  pass "flags: a missing option value refuses loudly instead of dying under set -e"
+}
+
 # --- run --------------------------------------------------------------------
 
 test_abrir_starts_and_reuses_surface
@@ -694,3 +795,6 @@ test_aplicar_refuses_delivery_outside_marks_dir
 test_aplicar_keeps_unnamed_applicable_marks_owed
 test_cerrar_discards_held_back_marks
 test_aplicar_all_held_back_offers_taskless_resolution
+test_aplicar_all_held_back_honors_tarea_flag
+test_cerrar_recomputes_owed_marks_from_delivery
+test_edicion_flags_require_values
