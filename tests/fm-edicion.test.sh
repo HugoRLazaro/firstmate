@@ -504,6 +504,122 @@ test_cerrar_holds_until_lost_mark_is_delivered() {
   pass "cerrar: a held-back mark blocks the close, its delivery clears it, and the result is recorded"
 }
 
+test_marcas_and_aplicar_accept_hyphenated_screen() {
+  local dir err out rc side
+  dir=$(make_world guion)
+  err="$dir/err"
+  write_delivery "$dir" redactar-general 20260923-184012 \
+    "$(marca_json m-001 b-1 'Programa de los cursos de creacion' cambio 'cambia este titulo' estable)"
+
+  out=$(run_edicion "$dir" "$err" -- marcas)
+  rc=$?
+  expect_code 0 "$rc" "marcas should list a hyphenated screen delivery"
+  assert_contains "$out" "redactar-general-20260923-184012.json" \
+    "a hyphenated screen name must not hide its delivery"
+
+  out=$(run_edicion "$dir" "$err" -- aplicar --fichero redactar-general-20260923-184012.json)
+  rc=$?
+  expect_code 0 "$rc" "aplicar should apply a hyphenated screen delivery: $(cat "$err")"
+  assert_contains "$out" "tarea creada: edicion-tarea-1" \
+    "the hyphenated delivery should become a task"
+  side=$(sidecar_of "$dir" redactar-general 20260923-184012)
+  assert_present "$side" "the hyphenated delivery should get its sidecar"
+  pass "marcas/aplicar: a hyphenated screen name is a first-class delivery"
+}
+
+test_aplicar_refuses_delivery_outside_marks_dir() {
+  local dir err rc
+  dir=$(make_world fuera)
+  err="$dir/err"
+  mkdir -p "$dir/ajena"
+  printf '{"version":1,"pantalla":"redactar","marcas":[{"id":"m-001","texto_bloque":"Bloque","texto":"cambia esto","ancla":"estable"}]}\n' \
+    >"$dir/ajena/redactar-20260923-184012.json"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero "$dir/ajena/redactar-20260923-184012.json" >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "a delivery outside the marks directory should be refused"
+  assert_contains "$(cat "$err")" "$dir/home/data/edicion" \
+    "the refusal should name the marks directory"
+  assert_contains "$(cat "$err")" "fuera del directorio de marcas" \
+    "the refusal should say the route never writes outside the marks directory"
+  [ ! -e "$dir/ajena/redactar-20260923-184012.aplicado.json" ] ||
+    fail "the route must not write outside the marks directory"
+  pass "aplicar: a delivery path outside the marks directory is refused"
+}
+
+test_aplicar_keeps_unnamed_applicable_marks_owed() {
+  local dir err rc side
+  dir=$(make_world debidos)
+  err="$dir/err"
+  add_live_task "$dir" t1
+  write_delivery "$dir" redactar 20260923-184012 \
+    "$(marca_json m-001 b-1 'Programa de los cursos de creacion' cambio 'cambia este titulo' estable)" \
+    "$(marca_json m-002 b-2 'Bases de la convocatoria' cambio 'quita este parrafo' estable)" \
+    "$(marca_json m-003 b-3 'Plazos de entrega' cambio 'plazo de 20 dias' perdida)"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-184012.json --tarea t1 --marca m-003 >/dev/null ||
+    fail "delivering only the held-back mark should succeed: $(cat "$err")"
+  side=$(sidecar_of "$dir" redactar 20260923-184012)
+  assert_equals "m-001 m-002" "$(jq -r '.pendientes | join(" ")' "$side")" \
+    "applicable marks that were not named must stay pending"
+
+  run_edicion "$dir" "$err" -- cerrar redactar-20260923-184012.json >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "a delivery with unapplied applicable marks must not close"
+  assert_contains "$(cat "$err")" "--marca m-001" \
+    "the refusal should print the command for the unapplied applicable mark"
+  pass "aplicar: naming one mark leaves every other mark owed"
+}
+
+test_cerrar_discards_held_back_marks() {
+  local dir err out rc side ledger
+  dir=$(make_world descartar)
+  err="$dir/err"
+  add_live_task "$dir" t1
+  write_delivery "$dir" redactar 20260923-184012 \
+    "$(marca_json m-003 b-3 'Plazos de entrega' cambio 'plazo de 20 dias' perdida)" \
+    "$(marca_json m-004 b-4 'Datos de contacto' cambio 'quita el telefono' perdida)" \
+    "$(marca_json m-005 b-5 'Sede de la empresa' cambio 'cambia la sede' perdida)"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-184012.json --tarea t1 --marca m-003 >/dev/null
+  rc=$?
+  expect_code 3 "$rc" "the other held-back marks should stay an open question"
+  side=$(sidecar_of "$dir" redactar 20260923-184012)
+  assert_equals "m-004 m-005" "$(jq -r '.pendientes | join(" ")' "$side")" \
+    "the marks that were not delivered should stay pending"
+
+  run_edicion "$dir" "$err" -- cerrar redactar-20260923-184012.json --descartar m-999 >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "discarding a mark that is not pending should be refused"
+  assert_contains "$(cat "$err")" "no esta pendiente" \
+    "the refusal should say the mark is not pending"
+
+  run_edicion "$dir" "$err" -- cerrar redactar-20260923-184012.json --descartar m-004 >/dev/null
+  rc=$?
+  expect_code 2 "$rc" "a delivery with another mark still pending must not close"
+  assert_equals "m-004" "$(jq -r '.descartadas | join(" ")' "$side")" \
+    "the discard should be recorded even when the close is refused"
+  assert_equals "m-005" "$(jq -r '.pendientes | join(" ")' "$side")" \
+    "only the discarded mark should leave the pending list"
+
+  run_edicion "$dir" "$err" -- aplicar --fichero redactar-20260923-184012.json --tarea t1 --marca m-005 >/dev/null ||
+    fail "delivering the last held-back mark should succeed: $(cat "$err")"
+  assert_equals "m-004" "$(jq -r '.descartadas | join(" ")' "$side")" \
+    "a later delivery pass must preserve the discarded mark"
+
+  out=$(run_edicion "$dir" "$err" -- cerrar redactar-20260923-184012.json)
+  rc=$?
+  expect_code 0 "$rc" "the delivery should close once every mark is delivered or discarded: $(cat "$err")"
+  assert_contains "$out" "descartadas: m-004" "cerrar should print the discarded mark"
+  assert_contains "$out" "resultado: tarea t1" "the close should name the live task"
+  side="$dir/home/data/edicion/aplicadas/redactar-20260923-184012.aplicado.json"
+  assert_equals "m-004" "$(jq -r '.descartadas | join(" ")' "$side")" \
+    "the closed sidecar should keep the discarded mark"
+  ledger="$dir/home/data/edicion/aplicadas/registro.md"
+  assert_contains "$(cat "$ledger")" "m-004" "the ledger should name the discarded mark"
+  pass "cerrar: a held-back mark can be delivered or discarded, and the close records both"
+}
+
 # --- run --------------------------------------------------------------------
 
 test_abrir_starts_and_reuses_surface
@@ -515,3 +631,7 @@ test_aplicar_groups_deliveries_into_one_task
 test_aplicar_refuses_malformed_and_reapplied
 test_aplicar_steers_live_task_and_checks_input
 test_cerrar_holds_until_lost_mark_is_delivered
+test_marcas_and_aplicar_accept_hyphenated_screen
+test_aplicar_refuses_delivery_outside_marks_dir
+test_aplicar_keeps_unnamed_applicable_marks_owed
+test_cerrar_discards_held_back_marks

@@ -31,14 +31,14 @@ This skill is the only owner of the `/edicion` trigger and of the route's shape.
    A delivery already applied is left to `cerrar`, or takes `--marca` to resolve a held-back mark.
    The created task then rides the ordinary lifecycle: dispatch it like any other queued item.
 4. **Close.** `bin/fm-edicion.sh cerrar <entrega>` moves an applied delivery to `data/edicion/aplicadas/` and records the result in its ledger.
-   It refuses while any mark of that delivery is still held back, which is what keeps an open question from being forgotten.
+   It refuses while any mark of that delivery is neither delivered nor discarded; `--descartar <id>` (repeatable) records that a held-back mark is discarded, and the ledger names every discarded mark.
 5. **Acknowledge.** When a `bin/fm-inbox.sh` note announced the marks, close it with `bin/fm-inbox.sh drain --ack <id>` once handled.
 
 ## Anchoring rules
 
 A mark is applied only when `ancla` is `estable` and it carries the marked block's text.
 Anything else - `perdida`, an unknown value, or no citable block - is held back: it is presented with its original context (block text, original route, what was asked) and left pending an answer, because the block is no longer where the mark left it.
-Take that question to the captain with his own nouns, and once he answers, deliver the mark to the task with `aplicar --fichero <entrega> --tarea <id> --marca <id>` before `cerrar`.
+Take that question to the captain with his own nouns; once he answers, deliver the mark to the task with `aplicar --fichero <entrega> --tarea <id> --marca <id>`, or, if he decides against it, record the discard with `cerrar <entrega> --descartar <id>`. Only then can the delivery close.
 
 ## Hard rules
 

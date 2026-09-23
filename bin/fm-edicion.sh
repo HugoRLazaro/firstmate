@@ -13,7 +13,7 @@
 #   fm-edicion.sh aplicar [--fichero <json>]... [--tarea <id>] [--marca <id>]...
 #                         [--proyecto <nombre|ruta>]
 #                         [--modo <no-mistakes|direct-PR|local-only>]
-#   fm-edicion.sh cerrar <fichero>
+#   fm-edicion.sh cerrar <fichero> [--descartar <id>]...
 #
 # Delivery contract (frozen, version 1, shared with the surface):
 #   data/edicion/<pantalla>-<AAAAMMDD-HHMMSS>.json plus its readable .md:
@@ -22,13 +22,15 @@
 #   ancla=estable means the marked block is still where the mark left it.
 #   Any other value, "perdida" included, is never applied blindly: the mark is
 #   presented with its original context and left pending a decision. A mark
-#   without a citable texto_bloque is held back the same way.
+#   without a citable texto_bloque is held back the same way. A pending mark is
+#   resolved by delivering it explicitly or by discarding it with
+#   `cerrar --descartar <id>`, and the delivery never closes until then.
 #
 # Surface contract consumed here: the project clone provides
 # tools/edicion/serve.mjs, launched from the clone root with FM_EDICION_SALIDA
 # pointing at this home's marks directory, and it prints its own
 # http://127.0.0.1:<port> address. The screen registry lives in the clone as
-# tools/edicion/pantallas.json (screens.json is accepted too): a map or array of
+# tools/edicion/pantallas.json: a map or array of
 # screens, each entry a ruta (or url), so a screen name resolves to its replica.
 #
 # The route never writes under projects/. `aplicar` writes only data/edicion/
@@ -57,7 +59,6 @@ SALIDA="${FM_EDICION_SALIDA:-$DATA/edicion}"
 PROYECTOS="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
 SUPERFICIE_REL="tools/edicion/serve.mjs"
 REGISTRO_REL="tools/edicion/pantallas.json"
-REGISTRO_ALT_REL="tools/edicion/screens.json"
 ARRANQUE_SEGUNDOS="${FM_EDICION_ARRANQUE_SEGUNDOS:-20}"
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/fm-edicion.XXXXXX")"
@@ -94,25 +95,28 @@ fm_edicion_ahora() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # name is the ordering key, and the strict shape is what keeps sidecars and
 # unrelated files out of the listing.
 fm_edicion_es_entrega() {  # <basename>
-  case "$1" in
-    *-????????-??????.json) : ;;
+  local base=${1%.json}
+  [ "$base" != "$1" ] || return 1
+  case "$base" in
+    *-????????-??????) : ;;
     *) return 1 ;;
   esac
-  local stamp=${1%.json}
-  stamp=${stamp#*-}
+  local stamp=${base: -15}
   local dia=${stamp%%-*}
   local hora=${stamp#*-}
   case "$dia$hora" in
     *[!0-9]*) return 1 ;;
   esac
   [ "${#dia}" -eq 8 ] && [ "${#hora}" -eq 6 ] || return 1
-  [ -n "${1%-"$stamp".json}" ] || return 1
+  local pantalla=${base%-"$stamp"}
+  pantalla=${pantalla%-}
+  [ -n "$pantalla" ] || return 1
   return 0
 }
 
 fm_edicion_estampa() {  # <basename> -> AAAAMMDD-HHMMSS
-  local stamp=${1%.json}
-  printf '%s' "${stamp#*-}"
+  local base=${1%.json}
+  printf '%s' "${base: -15}"
 }
 
 # Deliveries in this home, oldest first. A delivery already applied but not yet
@@ -129,12 +133,16 @@ fm_edicion_entregas() {
   done | LC_ALL=C sort -k1,1 | cut -f2
 }
 
-fm_edicion_entrega_path() {  # <name-or-path> -> absolute delivery path
-  local arg=$1 cand
+fm_edicion_entrega_path() {  # <name-or-path> -> absolute delivery path; 1 absent, 2 outside the marks directory
+  local arg=$1 cand dir salida
   case "$arg" in
     */*)
+      fm_edicion_es_entrega "$(basename "$arg")" || return 1
       [ -f "$arg" ] || return 1
-      printf '%s/%s\n' "$(cd "$(dirname "$arg")" && pwd -P)" "$(basename "$arg")"
+      dir=$(cd "$(dirname "$arg")" 2>/dev/null && pwd -P) || return 1
+      salida=$(cd "$SALIDA" 2>/dev/null && pwd -P) || return 1
+      [ "$dir" = "$salida" ] || return 2
+      printf '%s/%s\n' "$dir" "$(basename "$arg")"
       ;;
     *)
       fm_edicion_es_entrega "$arg" || return 1
@@ -149,21 +157,23 @@ fm_edicion_sidecar() {  # <delivery-path> -> sidecar path
   printf '%s.aplicado.json\n' "${1%.json}"
 }
 
-fm_edicion_leer_sidecar() {  # <delivery-path>: sets SIDECAR_TAREA, SIDECAR_PENDIENTES, SIDECAR_ENTREGADAS
+fm_edicion_leer_sidecar() {  # <delivery-path>: sets SIDECAR_TAREA, SIDECAR_PENDIENTES, SIDECAR_ENTREGADAS, SIDECAR_DESCARTADAS
   local side
   side=$(fm_edicion_sidecar "$1")
   SIDECAR_TAREA=
   SIDECAR_PENDIENTES=
   SIDECAR_ENTREGADAS=
+  SIDECAR_DESCARTADAS=
   [ -f "$side" ] || return 1
   SIDECAR_TAREA=$(jq -r '.tarea // ""' "$side" 2>/dev/null || printf '')
   SIDECAR_ENTREGADAS=$(jq -r '(.entregadas // [])[]' "$side" 2>/dev/null || printf '')
   SIDECAR_PENDIENTES=$(jq -r '(.pendientes // [])[]' "$side" 2>/dev/null || printf '')
+  SIDECAR_DESCARTADAS=$(jq -r '(.descartadas // [])[]' "$side" 2>/dev/null || printf '')
   return 0
 }
 
-fm_edicion_escribir_sidecar() {  # <delivery> <tarea> <modo> <entregadas-file> <pendientes-file>
-  local entrega=$1 tarea=$2 modo=$3 entregadas=$4 pendientes=$5 side
+fm_edicion_escribir_sidecar() {  # <delivery> <tarea> <modo> <entregadas-file> <pendientes-file> <descartadas-file>
+  local entrega=$1 tarea=$2 modo=$3 entregadas=$4 pendientes=$5 descartadas=$6 side
   side=$(fm_edicion_sidecar "$entrega")
   if [ -f "$side" ]; then
     # A later mark-resolution pass updates only the mark lists: the delivery
@@ -171,8 +181,10 @@ fm_edicion_escribir_sidecar() {  # <delivery> <tarea> <modo> <entregadas-file> <
     jq --arg ahora "$(fm_edicion_ahora)" \
       --rawfile entregadas "$entregadas" \
       --rawfile pendientes "$pendientes" \
+      --rawfile descartadas "$descartadas" \
       '.entregadas = ($entregadas | split("\n") | map(select(length > 0)))
        | .pendientes = ($pendientes | split("\n") | map(select(length > 0)))
+       | .descartadas = ($descartadas | split("\n") | map(select(length > 0)))
        | .actualizado_en = $ahora' \
       "$side" >"$TMP/sidecar.json" || return 1
   else
@@ -184,6 +196,7 @@ fm_edicion_escribir_sidecar() {  # <delivery> <tarea> <modo> <entregadas-file> <
       --arg ahora "$(fm_edicion_ahora)" \
       --rawfile entregadas "$entregadas" \
       --rawfile pendientes "$pendientes" \
+      --rawfile descartadas "$descartadas" \
       '{
          version: 1,
          entrega: $entrega,
@@ -192,7 +205,8 @@ fm_edicion_escribir_sidecar() {  # <delivery> <tarea> <modo> <entregadas-file> <
          modo: $modo,
          aplicado_en: $ahora,
          entregadas: ($entregadas | split("\n") | map(select(length > 0))),
-         pendientes: ($pendientes | split("\n") | map(select(length > 0)))
+         pendientes: ($pendientes | split("\n") | map(select(length > 0))),
+         descartadas: ($descartadas | split("\n") | map(select(length > 0)))
        }' >"$TMP/sidecar.json" || return 1
   fi
   mv "$TMP/sidecar.json" "$side"
@@ -342,15 +356,8 @@ fm_edicion_diagnostico_proyecto() {  # <status>
 
 fm_edicion_registro() {  # <proyecto> -> registry path; 1 when absent
   local proj=$1
-  if [ -f "$proj/$REGISTRO_REL" ]; then
-    printf '%s\n' "$proj/$REGISTRO_REL"
-    return 0
-  fi
-  if [ -f "$proj/$REGISTRO_ALT_REL" ]; then
-    printf '%s\n' "$proj/$REGISTRO_ALT_REL"
-    return 0
-  fi
-  return 1
+  [ -f "$proj/$REGISTRO_REL" ] || return 1
+  printf '%s\n' "$proj/$REGISTRO_REL"
 }
 
 fm_edicion_pantalla_ruta() {  # <proyecto> <pantalla> -> ruta|url; 1 no registry, 2 unknown
@@ -631,7 +638,7 @@ cmd_marcas() {
       pendientes=$(fm_edicion_cuenta "$SIDECAR_PENDIENTES")
       printf '   estado: aplicada a la tarea %s' "$tarea"
       if [ "$pendientes" -gt 0 ]; then
-        printf ' (%s marcas en revision, sin cerrar)' "$pendientes"
+        printf ' (%s marcas pendientes, sin cerrar)' "$pendientes"
       else
         printf ' (lista para cerrar)'
       fi
@@ -679,11 +686,12 @@ fm_edicion_presentar_revisar() {  # <record>...: records already filtered to hel
   for rec in "$@"; do
     printf '  fm-edicion.sh aplicar --fichero <entrega> --tarea <tarea> --marca %s\n' "$(fm_edicion_campo "$rec" 1)"
   done
+  printf 'si la respuesta es descartarla, anotala con: fm-edicion.sh cerrar <entrega> --descartar <id>\n'
   printf 'y despues cierra la entrega con: fm-edicion.sh cerrar <entrega>\n'
 }
 
 cmd_aplicar() {
-  local ficheros=() tarea='' marcas=() proyecto_arg='' modo_arg=''
+  local ficheros=() tarea='' marcas=() proyecto_arg='' modo_arg='' rc=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --fichero) ficheros+=("${2:-}"); shift 2 ;;
@@ -706,8 +714,13 @@ cmd_aplicar() {
   local entregas=() p='' f='' base='' marca='' ids=''
   if [ "${#ficheros[@]}" -gt 0 ]; then
     for f in "${ficheros[@]}"; do
-      p=$(fm_edicion_entrega_path "$f") ||
+      p=$(fm_edicion_entrega_path "$f") || {
+        rc=$?
+        if [ "$rc" -eq 2 ]; then
+          fail "la entrega '$f' esta fuera de $SALIDA; la ruta nunca escribe fuera del directorio de marcas"
+        fi
         fail "no encuentro la entrega '$f' en $SALIDA"
+      }
       entregas+=("$p")
     done
   else
@@ -743,7 +756,7 @@ cmd_aplicar() {
     if fm_edicion_leer_sidecar "$p"; then
       if [ "${#marcas[@]}" -eq 0 ]; then
         if [ "$explicito" = 1 ]; then
-          fail "la entrega $base ya se aplico a la tarea $SIDECAR_TAREA; usa --marca <id> para entregar una marca en revision, o cierra la entrega"
+          fail "la entrega $base ya se aplico a la tarea $SIDECAR_TAREA; usa --marca <id> para entregar una marca pendiente, o cierra la entrega"
         fi
         continue
       fi
@@ -765,8 +778,12 @@ cmd_aplicar() {
   # marks that are not carried are collected for the open question.
   local seleccion="$TMP/seleccion.txt"
   : >"$seleccion"
-  local num=0 rec='' id='' seleccionada='' retenidas=()
+  local num=0 rec='' id='' seleccionada='' retenidas=() ya_resueltas=''
   for p in "${entregas[@]}"; do
+    ya_resueltas=''
+    if fm_edicion_leer_sidecar "$p"; then
+      ya_resueltas=$(printf '%s\n%s\n' "$SIDECAR_ENTREGADAS" "$SIDECAR_DESCARTADAS")
+    fi
     while IFS= read -r -d '' rec; do
       id=$(fm_edicion_campo "$rec" 1)
       seleccionada=0
@@ -783,7 +800,11 @@ cmd_aplicar() {
           fm_edicion_listar_marca "$rec" "$num" ""
           printf '\n'
         } >>"$seleccion"
-      elif ! fm_edicion_es_aplicable "$rec"; then
+      elif fm_edicion_es_aplicable "$rec"; then
+        :
+      elif printf '%s\n' "$ya_resueltas" | grep -qxF -- "$id"; then
+        :
+      else
         retenidas+=("$rec")
       fi
     done < <(fm_edicion_records "$p" todas)
@@ -908,10 +929,11 @@ cmd_aplicar() {
   # Record the application per delivery: delivered marks and the ones still
   # held back, so cerrar can tell a finished delivery from one still owing an
   # answer.
-  local entregadas_file="$TMP/entregadas.txt" pendientes_file="$TMP/pendientes.txt" marca_id='' n_entregadas='' n_pendientes=''
+  local entregadas_file="$TMP/entregadas.txt" pendientes_file="$TMP/pendientes.txt" descartadas_file="$TMP/descartadas.txt" hechas_file="$TMP/hechas.txt" marca_id='' n_entregadas='' n_pendientes=''
   for p in "${entregas[@]}"; do
     : >"$entregadas_file"
     : >"$pendientes_file"
+    : >"$descartadas_file"
     while IFS= read -r -d '' rec; do
       marca_id=$(fm_edicion_campo "$rec" 1)
       if [ "${#marcas[@]}" -gt 0 ]; then
@@ -921,7 +943,7 @@ cmd_aplicar() {
       fi
       printf '%s\n' "$marca_id" >>"$entregadas_file"
     done < <(fm_edicion_records "$p" todas)
-    fm_edicion_marca_ids "$p" revisar >>"$pendientes_file"
+    fm_edicion_marca_ids "$p" todas >>"$pendientes_file"
     if fm_edicion_leer_sidecar "$p"; then
       while IFS= read -r marca_id; do
         [ -n "$marca_id" ] || continue
@@ -931,20 +953,23 @@ $SIDECAR_ENTREGADAS
 EOF
       while IFS= read -r marca_id; do
         [ -n "$marca_id" ] || continue
-        printf '%s\n' "$marca_id" >>"$pendientes_file"
+        printf '%s\n' "$marca_id" >>"$descartadas_file"
       done <<EOF
-$SIDECAR_PENDIENTES
+$SIDECAR_DESCARTADAS
 EOF
     fi
     LC_ALL=C sort -u "$entregadas_file" -o "$entregadas_file"
+    LC_ALL=C sort -u "$descartadas_file" -o "$descartadas_file"
     LC_ALL=C sort -u "$pendientes_file" -o "$pendientes_file"
-    comm -23 "$pendientes_file" "$entregadas_file" >"$TMP/pendientes-final.txt"
-    fm_edicion_escribir_sidecar "$p" "$id_final" "$modo" "$entregadas_file" "$TMP/pendientes-final.txt" ||
+    cat "$entregadas_file" "$descartadas_file" >"$hechas_file"
+    LC_ALL=C sort -u "$hechas_file" -o "$hechas_file"
+    comm -23 "$pendientes_file" "$hechas_file" >"$TMP/pendientes-final.txt"
+    fm_edicion_escribir_sidecar "$p" "$id_final" "$modo" "$entregadas_file" "$TMP/pendientes-final.txt" "$descartadas_file" ||
       die "no pude anotar la entrega $(basename "$p")"
     n_entregadas=$(grep -c . "$entregadas_file" || true)
     n_pendientes=$(grep -c . "$TMP/pendientes-final.txt" || true)
     printf 'entrega: %s -> %s marcas aplicadas' "$(basename "$p")" "$n_entregadas"
-    [ "$n_pendientes" -gt 0 ] && printf ', %s en revision' "$n_pendientes"
+    [ "$n_pendientes" -gt 0 ] && printf ', %s pendientes' "$n_pendientes"
     printf '\n'
   done
 
@@ -960,13 +985,38 @@ EOF
 # --- cerrar -----------------------------------------------------------------
 
 cmd_cerrar() {
-  local arg=${1:-}
-  [ -n "$arg" ] || fail "uso: fm-edicion.sh cerrar <fichero>"
-  [ "$#" -eq 1 ] || fail "cerrar toma una sola entrega"
+  local arg='' descartes=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --descartar)
+        [ -n "${2:-}" ] || fail "--descartar necesita <id>"
+        descartes+=("$2")
+        shift 2
+        ;;
+      --descartar=*)
+        [ -n "${1#--descartar=}" ] || fail "--descartar necesita <id>"
+        descartes+=("${1#--descartar=}")
+        shift
+        ;;
+      -*) fail "opcion desconocida: $1" ;;
+      *)
+        [ -z "$arg" ] || fail "cerrar toma una sola entrega"
+        arg=$1
+        shift
+        ;;
+    esac
+  done
+  [ -n "$arg" ] || fail "uso: fm-edicion.sh cerrar <fichero> [--descartar <id>]..."
   require_jq
-  local entrega='' base='' tarea='' modo='' pendientes='' side='' destino='' cuenta='' marca='' companion=''
-  entrega=$(fm_edicion_entrega_path "$arg") ||
+  local entrega='' rc=0 base='' tarea='' modo='' side='' destino='' cuenta='' marca='' companion=''
+  local n_descartadas='' descartadas_lista='' pendientes=''
+  entrega=$(fm_edicion_entrega_path "$arg") || {
+    rc=$?
+    if [ "$rc" -eq 2 ]; then
+      fail "la entrega '$arg' esta fuera de $SALIDA; la ruta nunca escribe fuera del directorio de marcas"
+    fi
     fail "no encuentro la entrega '$arg' en $SALIDA (o ya esta cerrada)"
+  }
   base=$(basename "$entrega")
   fm_edicion_validar "$entrega"
   if ! fm_edicion_leer_sidecar "$entrega"; then
@@ -974,9 +1024,42 @@ cmd_cerrar() {
   fi
   tarea=$SIDECAR_TAREA
   [ -n "$tarea" ] || fail "la entrega $base no tiene tarea anotada; repite 'aplicar --fichero $base'"
+  side=$(fm_edicion_sidecar "$entrega")
+
+  local entregadas_file="$TMP/cerrar-entregadas.txt" pendientes_file="$TMP/cerrar-pendientes.txt"
+  local descartadas_file="$TMP/cerrar-descartadas.txt" descartes_file="$TMP/cerrar-descartes.txt"
+  local restantes_file="$TMP/cerrar-restantes.txt" todas_file="$TMP/cerrar-todas.txt"
+  printf '%s\n' "$SIDECAR_ENTREGADAS" | grep . >"$entregadas_file" || true
+  printf '%s\n' "$SIDECAR_PENDIENTES" | grep . >"$pendientes_file" || true
+  printf '%s\n' "$SIDECAR_DESCARTADAS" | grep . >"$descartadas_file" || true
+  : >"$descartes_file"
+  local d=''
+  for d in ${descartes[@]+"${descartes[@]}"}; do
+    grep -qxF -- "$d" "$pendientes_file" ||
+      fail "la marca '$d' no esta pendiente en $base; solo se descarta una marca sin entregar"
+    printf '%s\n' "$d" >>"$descartes_file"
+  done
+  LC_ALL=C sort -u "$entregadas_file" -o "$entregadas_file"
+  LC_ALL=C sort -u "$pendientes_file" -o "$pendientes_file"
+  LC_ALL=C sort -u "$descartadas_file" -o "$descartadas_file"
+  LC_ALL=C sort -u "$descartes_file" -o "$descartes_file"
+  cat "$descartadas_file" "$descartes_file" | LC_ALL=C sort -u >"$todas_file"
+  comm -23 "$pendientes_file" "$descartes_file" >"$restantes_file"
+
+  if [ -s "$descartes_file" ]; then
+    modo=$(jq -r '.modo // ""' "$side")
+    fm_edicion_escribir_sidecar "$entrega" "$tarea" "$modo" "$entregadas_file" "$restantes_file" "$todas_file" ||
+      die "no pude anotar los descartes en $base"
+    fm_edicion_leer_sidecar "$entrega" || true
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      printf 'descartada: %s\n' "$d"
+    done <"$descartes_file"
+  fi
+
   pendientes=$(fm_edicion_cuenta "$SIDECAR_PENDIENTES")
   if [ "$pendientes" -gt 0 ]; then
-    printf 'fm-edicion: la entrega %s no se puede cerrar: %s marca(s) siguen en revision.\n' "$base" "$pendientes" >&2
+    printf 'fm-edicion: la entrega %s no se puede cerrar: %s marca(s) siguen pendientes.\n' "$base" "$pendientes" >&2
     printf 'Entrega cada una a la tarea %s con:\n' "$tarea" >&2
     while IFS= read -r marca; do
       [ -n "$marca" ] || continue
@@ -989,14 +1072,20 @@ EOF
 
   destino="$SALIDA/aplicadas"
   mkdir -p "$destino"
-  side=$(fm_edicion_sidecar "$entrega")
   modo=$(jq -r '.modo // ""' "$side")
   cuenta=$(jq -r '(.entregadas // []) | length' "$side")
+  n_descartadas=$(jq -r '(.descartadas // []) | length' "$side")
+  descartadas_lista=$(jq -r '(.descartadas // []) | join(", ")' "$side")
   if [ ! -f "$destino/registro.md" ]; then
     printf '# Entregas de marcas cerradas\n\n' >"$destino/registro.md"
   fi
-  printf -- '- %s - %s -> tarea %s (%s marcas, modo %s)\n' \
-    "$(fm_edicion_ahora)" "$base" "$tarea" "$cuenta" "${modo:-sin modo}" >>"$destino/registro.md"
+  if [ "$n_descartadas" -gt 0 ]; then
+    printf -- '- %s - %s -> tarea %s (%s marcas, %s descartadas: %s, modo %s)\n' \
+      "$(fm_edicion_ahora)" "$base" "$tarea" "$cuenta" "$n_descartadas" "$descartadas_lista" "${modo:-sin modo}" >>"$destino/registro.md"
+  else
+    printf -- '- %s - %s -> tarea %s (%s marcas, modo %s)\n' \
+      "$(fm_edicion_ahora)" "$base" "$tarea" "$cuenta" "${modo:-sin modo}" >>"$destino/registro.md"
+  fi
 
   companion="${entrega%.json}.md"
   mv "$entrega" "$destino/$base"
@@ -1005,7 +1094,13 @@ EOF
   fi
   mv "$side" "$destino/$(basename "$side")"
   printf 'cerrada: %s -> %s\n' "$base" "$destino"
-  printf 'resultado: tarea %s (%s marcas, modo %s)\n' "$tarea" "$cuenta" "${modo:-sin modo}"
+  if [ "$n_descartadas" -gt 0 ]; then
+    printf 'descartadas: %s\n' "$descartadas_lista"
+    printf 'resultado: tarea %s (%s marcas, %s descartadas: %s, modo %s)\n' \
+      "$tarea" "$cuenta" "$n_descartadas" "$descartadas_lista" "${modo:-sin modo}"
+  else
+    printf 'resultado: tarea %s (%s marcas, modo %s)\n' "$tarea" "$cuenta" "${modo:-sin modo}"
+  fi
   printf 'registro: %s/registro.md\n' "$destino"
   return 0
 }
