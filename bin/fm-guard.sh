@@ -16,9 +16,13 @@
 # Claude auto-arm generation explains the gap; only a stale beacon with no such
 # generation is a genuine lapse; under the Pi
 # extension model the extension tears the watcher down and respawns it on every
-# actionable wake, so a fresh beacon with a genuinely unheld lock is healthy
-# while that live Pi session provably owns continuity; any held but unhealthy
-# lock is down; under every
+# actionable wake, so a fresh beacon without an identity-matched watcher is
+# healthy while direct relay evidence proves the hand-off: a live session origin
+# plus a live ledger successor or a declared live arm child or pending retry; a
+# recorded successor=none with no declared attempt, a successor whose process is
+# gone, and a lost session origin all stay down, with the marker-ownership
+# hand-off proof left for a genuinely unheld lock with no usable lifecycle record
+# at all; under every
 # persistent-watcher harness a live identity-matched watcher with a fresh beacon
 # is required. The banner names the true failing condition (a missing live
 # watcher process vs a genuinely stale beacon). The full banner is emitted once

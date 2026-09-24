@@ -843,16 +843,19 @@ test_extension_relay_successor_none_without_retry_alarms() {
   pass "fm-guard stale banner: successor=none without a declared retry stays loud"
 }
 
-# A real 2026-09-24 relay row whose recorded successor process is gone is stale
-# evidence, not a relay: the chain is not running and the banner must fire.
+# A 2026-09-24 relay row whose recorded successor process is gone is stale
+# evidence, not a relay: the chain is not running and the banner must fire. The
+# fixture uses a pid guaranteed to have exited instead of the recorded one, so
+# the case cannot depend on an unrelated process not holding that pid.
 test_extension_relay_dead_successor_alarms() {
-  local dir home out pid
+  local dir home out pid dead
   dir=$(make_guard_case extension-relay-dead)
   home=$(case_home "$dir")
   sleep 60 &
   pid=$!
+  dead=$(bash -c 'printf "%s\n" "$$"')
   printf '%s\n' "$pid" > "$home/state/.lock"
-  write_cycle_row "$home" "$REAL_RELAY_ROW"
+  write_relay_row "$home" "$dead"
   touch "$home/state/.last-watcher-beat"
   out=$(run_guard_case_extension "$dir")
   kill "$pid" 2>/dev/null || true
@@ -926,7 +929,9 @@ test_extension_relay_declared_child_stays_silent() {
 }
 
 # successor=none with the extension's scheduled continuity retry pending is a
-# relay being restored, not a broken chain.
+# relay being restored, not a broken chain. The retry stays evidence after the
+# last arm child has exited, because the extension publishes child=<arm-pid>
+# retry=1 while restoration or the retry timer is still in flight.
 test_extension_relay_declared_retry_stays_silent() {
   local dir home out pid
   dir=$(make_guard_case extension-relay-declared-retry)
@@ -942,6 +947,28 @@ test_extension_relay_declared_retry_stays_silent() {
   wait "$pid" 2>/dev/null || true
   [ -z "$out" ] || fail "a declared pending retry must keep the relay silent, got: $out"
   pass "fm-guard stale banner: a declared pending retry keeps the relay silent"
+}
+
+# The pending retry remains relay evidence when the declaration also names an
+# already-exited arm child: the extension republishes retry=0 when restoration
+# settles, so a dead child with retry=1 is in-flight continuity work, not a
+# broken chain. Only a dead child with no retry is not evidence.
+test_extension_relay_declared_retry_with_dead_child_stays_silent() {
+  local dir home out pid dead
+  dir=$(make_guard_case extension-relay-declared-retry-dead-child)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  dead=$(bash -c 'printf "%s\n" "$$"')
+  record_pi_extension_session "$dir" "$pid" || fail "could not record the Pi extension session"
+  write_cycle_row "$home" "$REAL_NONE_ROW"
+  record_pi_arm_declaration "$dir" "$dead" 1 || fail "could not record the dead-child retry declaration"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ -z "$out" ] || fail "a pending retry with an exited arm child must keep the relay silent, got: $out"
+  pass "fm-guard stale banner: a pending retry with an exited arm child stays silent"
 }
 
 # Every declaration signal is load-bearing: a dead child with no retry, a
@@ -1128,6 +1155,7 @@ test_extension_relay_without_session_origin_alarms
 test_extension_relay_stale_identity_alarms
 test_extension_relay_declared_child_stays_silent
 test_extension_relay_declared_retry_stays_silent
+test_extension_relay_declared_retry_with_dead_child_stays_silent
 test_extension_relay_declaration_signals_are_load_bearing
 test_extension_handoff_keeps_queued_wake_warning
 test_branch_actor_is_not_told_to_drain_queued_wakes

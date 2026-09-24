@@ -216,8 +216,10 @@ esac
 # Reuse fm-guard.sh's model-aware alarm and FM_GUARD_GRACE instead of duplicating
 # its supervision verdict. Under Claude's between-turns auto-arm model, a normal
 # fire leaves a recent beacon well inside grace and stays silent mid-turn. Under
-# the Pi extension model, a fresh beacon also stays silent during a genuinely
-# unheld-lock hand-off only while the live session proves extension ownership.
+# the Pi extension model, a fresh beacon also stays silent during a hand-off
+# while direct relay evidence proves the chain: a live session origin plus a live
+# lifecycle-ledger successor or the extension's declared live arm child or
+# pending retry.
 # Persistent-watcher models still require the live identity-matched watcher.
 # Never let a guard hiccup change the drain's exit status.
 assert_watcher_liveness() {

@@ -193,9 +193,15 @@ fm_watcher_healthy() {
 #               (fm_autoarm_midturn_healthy).
 #   extension   Pi (and pi-signed): .pi/extensions/fm-primary-pi-watch.ts owns
 #               continuity. It tears the watcher down on every actionable wake and
-#               spawns the replacement itself, so a genuinely unheld singleton lock
-#               is healthy during that hand-off only with extension ownership and a
-#               fresh beacon. Any held but unhealthy lock remains down.
+#               spawns the replacement itself, so a fresh beacon without an
+#               identity-matched watcher is healthy during that hand-off only with
+#               direct relay evidence (fm_extension_relay_healthy): a live session
+#               origin plus a live lifecycle-ledger successor or a declared live
+#               arm child or pending retry. A recorded successor=none with no
+#               declared attempt, a recorded successor whose process is gone, and a
+#               lost session origin all stay down; the marker-ownership hand-off
+#               proof covers only a genuinely unheld lock when no usable lifecycle
+#               record exists at all.
 #   persistent  every other harness (codex foreground checkpoint, opencode/grok
 #               background arm, tmux, unknown): the watcher runs as a tracked live
 #               process, so a live identity-matched pid is the real liveness signal.
@@ -337,10 +343,10 @@ fm_pi_extension_arm_pending() {
         ''|*[!0-9]*) return 1 ;;
       esac
       case "$retry" in
-        0|1) ;;
+        0) fm_pid_alive "$child" ;;
+        1) return 0 ;;
         *) return 1 ;;
       esac
-      fm_pid_alive "$child"
       ;;
     *) return 1 ;;
   esac
