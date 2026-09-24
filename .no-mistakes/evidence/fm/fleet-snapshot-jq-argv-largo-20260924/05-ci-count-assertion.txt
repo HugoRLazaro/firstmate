@@ -1,0 +1,12 @@
+# CI macos-stock-bash count expectation (unified diff: 18 -> 19)
+
+The workflow step (invoked here with the same shell logic, minus the macOS runner):
+```
+$ snapshot_output=$(bash tests/fm-fleet-snapshot-view.test.sh)
+$ snapshot_count=$(printf "%s\n" "$snapshot_output" | grep -c "^ok - ")
+snapshot_count=19
+check: [ "$snapshot_count" -eq 19 ] -> passes
+```
+
+Note: this environment is Linux (bash 5.2.21); the stock macOS Bash 3.2.57
+runner is not available here, so only the count contract was exercised.
