@@ -289,7 +289,7 @@ test_bootstrap_reporting() {
     # FM_ROOT_OVERRIDE points the worktree-tangle check at the non-git home dir so
     # it stays inert: this suite pins tool detection, not the tangle guard, and the
     # ambient checkout (CI runs on a feature branch) must not leak a TANGLE line in.
-    out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    out=$(PATH="$fakebin:$BASE_PATH" HOME="$case_dir/home" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
       FM_FAKE_TREEHOUSE_LEASE_HELP="$lease" "$ROOT/bin/fm-bootstrap.sh")
     case "$mode" in
       empty)
@@ -460,6 +460,25 @@ tasks-axi at floor without archive-body reports an upgrade^0.2.4:noarchive^missi
 tasks-axi at floor without multi-id reports an upgrade^0.2.4:nomulti^missing
 ROWS
   pass "bootstrap enforces tasks-axi minimum version"
+}
+
+# The resolver in bin/fm-tasks-axi-lib.sh owns the backend binary, so bootstrap's
+# presence decision must follow it: a compatible tasks-axi installed off PATH
+# (the layout this backend preference exists for) is present, not missing.
+test_off_path_tasks_axi_is_reported_present() {
+  local case_dir fakebin usual out
+  case_dir="$TMP_ROOT/tasks-axi-off-path"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  rm -f "$fakebin/tasks-axi"
+  usual="$case_dir/home/.npm-global/bin"
+  mkdir -p "$usual"
+  add_tasks_axi "$usual" "0.2.6"
+  out=$(PATH="$fakebin:$BASE_PATH" HOME="$case_dir/home" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_not_contains "$out" "MISSING: tasks-axi" "bootstrap reported an installed off-PATH tasks-axi as missing"
+  pass "bootstrap follows the resolved backend binary for an off-PATH tasks-axi"
 }
 
 # These rows exercise the real bootstrap check with a fake quota-axi answering
@@ -1238,6 +1257,7 @@ test_no_mistakes_min_version
 test_gh_axi_min_version
 test_lavish_axi_min_version
 test_tasks_axi_min_version
+test_off_path_tasks_axi_is_reported_present
 test_quota_axi_min_version
 test_git_is_required_with_supported_install_instruction
 test_orca_backend_gates_orca_tool_only_when_selected

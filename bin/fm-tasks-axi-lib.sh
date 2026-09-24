@@ -49,9 +49,9 @@
 # backlog with a 10s bound per read, so the slow binary trips every bound, the
 # phase consumes minutes, and the session-start digest truncates. Precedence is
 # an executable TASKS_AXI_BIN, then the first native candidate (PATH entries
-# outside the Windows mount, then ~/.npm-global/bin, ~/.local/bin,
-# /usr/local/bin, and /usr/bin), then the first PATH entry including the Windows
-# mount - so a home with no native build keeps its previous behavior. The
+# outside the Windows mount, then ~/.npm-global/bin and ~/.local/bin), then the
+# first PATH entry including the Windows mount - so a home with no native build
+# keeps its previous behavior. The
 # resolver runs once at source time into FM_TASKS_AXI_BIN, which is empty when
 # no binary exists at all.
 
@@ -94,7 +94,7 @@ fm_tasks_axi_bin() {  # [<foreign-prefix>]
       return 0
     fi
   done
-  for entry in "${HOME:-}/.npm-global/bin" "${HOME:-}/.local/bin" /usr/local/bin /usr/bin; do
+  for entry in "${HOME:-}/.npm-global/bin" "${HOME:-}/.local/bin"; do
     case "$entry" in
       /.npm-global/bin|/.local/bin) continue ;;
     esac

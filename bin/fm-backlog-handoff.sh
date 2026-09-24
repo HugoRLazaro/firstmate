@@ -740,7 +740,7 @@ remove_interrupted_source_duplicates() { # <outbox> <keys...>
       backlog_key_section "$outbox" "$key" >/dev/null 2>&1 || continue
       if backlog_key_section "$MAIN_BACKLOG" "$key" >/dev/null 2>&1; then
         remaining=$((remaining + 1))
-        if tasks-axi rm "$key" --file "$MAIN_BACKLOG" >/dev/null 2>&1; then
+        if "${FM_TASKS_AXI_BIN:-tasks-axi}" rm "$key" --file "$MAIN_BACKLOG" >/dev/null 2>&1; then
           progress=$((progress + 1))
         fi
       fi
