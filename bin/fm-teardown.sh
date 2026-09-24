@@ -225,6 +225,20 @@
 # checks before any destructive return. Teardown output notes every wait, retry, and
 # removal so the operator can see what happened.
 #
+# Pool prune after an accepted return (teardown-pool-prune): once a task's copy
+# is genuinely back in its Treehouse pool, teardown runs `treehouse prune --yes`
+# in the project clone to reclaim the disk that returned copy still holds.
+# Treehouse itself is the only thing that decides what may be deleted: only
+# managed worktrees with no lease, no running process, no uncommitted changes,
+# and a HEAD already merged into the default branch are reclaimed, so a copy in
+# use, dirty, or unlanded beside it stays exactly as it was. Never delete a slot
+# by hand here and never bypass those safeguards. The step is deliberately
+# BEST EFFORT: the copy is already in the pool and every durable record is
+# intact, so a missing treehouse command, a refusing prune, or an unparsable
+# result warns and lets cleanup continue - it can never fail or half-finish the
+# close. The reclaimed count and size are reported on teardown's output and
+# folded into the final completion line, so the freed disk can be measured.
+#
 # Pre-teardown cleanup sequence (runs once every landed/discard-work safety
 # refusal above has already passed, and BEFORE any worktree return, branch
 # delete, or backend kill below - a still-active run or a leaked process may
@@ -360,6 +374,10 @@ META="$STATE/$ID.meta"
 TREEHOUSE_PROJECT_LOCK=
 TREEHOUSE_PROJECT_LOCK_HELD=0
 TREEHOUSE_SLOT_LOCK_REQUIRED=0
+# Pool-prune result for the final completion line, initialized before any exit
+# path so `set -u` never sees it unset when no worktree return ran (secondmate,
+# Orca, reassigned slot, or a windowless record).
+TEARDOWN_POOL_PRUNE_SUMMARY=
 if [ -f "$META" ] && [ ! -L "$META" ]; then
   TEARDOWN_LOCK_KIND=$(fm_meta_get "$META" kind)
   [ -n "$TEARDOWN_LOCK_KIND" ] || TEARDOWN_LOCK_KIND=ship
@@ -1768,6 +1786,62 @@ teardown_treehouse_return() {
 
   echo "teardown: $label return failed: git index.lock signature persisted across ${max_retries} retries (waiting ${TREEHOUSE_RETURN_LOCK_RETRY_WAIT_SECS}s each) even after the lock file disappeared" >&2
   return 1
+}
+
+# Reclaim the returned copy's disk by pruning the project's Treehouse pool.
+# Called only after a return that already succeeded (see the script header).
+# Best effort by contract: every failure path warns and returns 0, because the
+# copy is already in the pool and a prune failure must never fail the close.
+# Treehouse is the sole judge of what is safe to delete; this helper never
+# removes a slot itself and never passes anything but --yes.
+# Sets TEARDOWN_POOL_PRUNE_SUMMARY (display text, empty when nothing was
+# reclaimed or nothing could be measured) for the final completion line.
+teardown_treehouse_prune() {  # <project-dir> <label>
+  local proj=$1 label=$2 out rc count size noun
+  TEARDOWN_POOL_PRUNE_SUMMARY=
+  if ! command -v treehouse >/dev/null 2>&1; then
+    echo "teardown: treehouse command not found; the $label pool was not pruned and the returned copy stays in it" >&2
+    return 0
+  fi
+  if [ -z "$proj" ] || [ ! -d "$proj" ]; then
+    echo "teardown: the $label pool was not pruned: project directory ${proj:-<missing>} is unavailable" >&2
+    return 0
+  fi
+  # Run from the project clone, exactly like the return above: treehouse
+  # resolves the pool from the repository it is run in. Capture both streams and
+  # keep the failure inside an `if` condition so `set -e` cannot abort the close
+  # before the warning is printed and the teardown finishes.
+  if out=$( ( cd "$proj" && treehouse prune --yes ) 2>&1 ); then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [ "$rc" -ne 0 ]; then
+    echo "warning: treehouse prune failed for the $label pool (exit $rc); the returned copy stays in the pool and cleanup continues" >&2
+    return 0
+  fi
+  count=$(printf '%s\n' "$out" | sed -n 's/.*[Pp]runed \([0-9][0-9]*\) .*/\1/p' | tail -n 1)
+  size=$(printf '%s\n' "$out" | sed -n 's/.*and freed \(.*\)\.[[:space:]]*$/\1/p' | tail -n 1)
+  if [ -z "$count" ] || [ "$count" = 0 ]; then
+    case "$out" in
+      *"No stale worktrees"*)
+        echo "teardown: pool prune for the $label pool: no reclaimable copies" ;;
+      *)
+        echo "teardown: pool prune ran for the $label pool without a reported reclaimed amount" ;;
+    esac
+    return 0
+  fi
+  case "$count" in
+    1) noun=copy ;;
+    *) noun=copies ;;
+  esac
+  if [ -n "$size" ]; then
+    TEARDOWN_POOL_PRUNE_SUMMARY="freed $size ($count $noun)"
+  else
+    TEARDOWN_POOL_PRUNE_SUMMARY="reclaimed $count $noun"
+  fi
+  echo "teardown: pool prune for the $label pool $TEARDOWN_POOL_PRUNE_SUMMARY"
+  return 0
 }
 
 validate_worktree_teardown_safety() {
@@ -3560,6 +3634,10 @@ elif [ -d "$WT" ] && [ "$KIND" != secondmate ]; then
   # unclaimed until its next holder claims it, and leaves the claim in place
   # whenever the return did not actually happen.
   fm_treehouse_slot_owner_release "$WT" "$ID"
+  # The copy is unowned now; reclaim its disk from the pool. Best effort, and
+  # deliberately after the accepted return: teardown_treehouse_prune can never
+  # fail this close (see the script header).
+  teardown_treehouse_prune "$PROJ" "worktree"
 fi
 
 HERDR_PRESENTATION_JOURNAL="$STATE/$ID.herdr-presentation"
@@ -3734,9 +3812,9 @@ else
   TEARDOWN_WORKTREE_LABEL="worktree $WT"
 fi
 if [ "$TEARDOWN_LEGACY_ACCEPTED" = 1 ]; then
-  echo "teardown $ID complete (window $T, $TEARDOWN_WORKTREE_LABEL, legacy record accepted without spawn_gen: endpoint $TEARDOWN_LEGACY_ENDPOINT, incarnation $TEARDOWN_META_SPAWN_GEN)"
+  echo "teardown $ID complete (window $T, $TEARDOWN_WORKTREE_LABEL, legacy record accepted without spawn_gen: endpoint $TEARDOWN_LEGACY_ENDPOINT, incarnation $TEARDOWN_META_SPAWN_GEN${TEARDOWN_POOL_PRUNE_SUMMARY:+; pool prune $TEARDOWN_POOL_PRUNE_SUMMARY})"
 elif teardown_owns_worktree; then
-  echo "teardown $ID complete (window $T, $TEARDOWN_WORKTREE_LABEL)"
+  echo "teardown $ID complete (window $T, $TEARDOWN_WORKTREE_LABEL${TEARDOWN_POOL_PRUNE_SUMMARY:+; pool prune $TEARDOWN_POOL_PRUNE_SUMMARY})"
 else
   echo "teardown $ID complete (window $T; pool slot $WT left to task $TEARDOWN_SLOT_REASSIGNED_TO${TEARDOWN_SLOT_REASSIGNED_HOME:+ (home $TEARDOWN_SLOT_REASSIGNED_HOME)}, which it was reassigned to)"
 fi

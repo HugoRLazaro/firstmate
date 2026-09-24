@@ -3854,6 +3854,210 @@ EOF
   pass "the run abort and the leaked-process reap both complete before the destructive worktree return"
 }
 
+# --- Treehouse pool prune after an accepted return (teardown-pool-prune) ---
+#
+# bin/fm-teardown.sh prunes the project's Treehouse pool with `treehouse prune
+# --yes` only after a worktree return it already accepted. The mock cases pin
+# the teardown-side contract (the call, the report, and that every prune failure
+# is non-fatal); the real-treehouse case pins that a returned copy is reclaimed
+# while an in-use dirty copy beside it is left untouched.
+
+# A landed local-only case whose teardown reaches the Treehouse return.
+make_landed_case() {  # <name>
+  local case_dir
+  case_dir=$(make_case "$1")
+  write_meta "$case_dir" local-only ship
+  wt_commit "$case_dir" "landed work"
+  git -C "$case_dir/project" update-ref refs/heads/main "$(git -C "$case_dir/wt" rev-parse HEAD)"
+  printf '%s\n' "$case_dir"
+}
+
+# Override the case's treehouse: `return` succeeds, `prune` prints <line> and
+# exits <code>, and every prune invocation records its working directory and
+# arguments in <case>/prune-calls.
+add_prune_treehouse() {  # <case-dir> <exit-code> <line>
+  local case_dir=$1 code=$2 line=$3
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+case "\${1:-}" in
+  return) exit 0 ;;
+  prune)
+    printf 'cwd=%s args=%s\n' "\$PWD" "\$*" >> "$case_dir/prune-calls"
+    printf '%s\n' "$line"
+    exit $code
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$case_dir/fakebin/treehouse"
+}
+
+# Override the case's treehouse so an accepted return succeeds and the command
+# is then gone, proving the prune step does not require treehouse to exist.
+add_vanishing_treehouse() {  # <case-dir>
+  local case_dir=$1
+  cat > "$case_dir/fakebin/treehouse" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = return ]; then
+  rm -f -- "$0"
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$case_dir/fakebin/treehouse"
+}
+
+test_pool_prune_reclaims_and_reports() {
+  local case_dir rc
+  case_dir=$(make_landed_case pool-prune-reclaims)
+  add_prune_treehouse "$case_dir" 0 '🌳 Pruned 1 stale worktree and freed 4.1 GB.'
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "pool-prune: teardown should succeed"
+  assert_grep 'teardown: pool prune for the worktree pool freed 4.1 GB (1 copy)' "$case_dir/stdout" \
+    "pool-prune: the reclaimed size was not reported on stdout"
+  assert_grep 'pool prune freed 4.1 GB (1 copy)' "$case_dir/stdout" \
+    "pool-prune: the completion line did not carry the reclaimed size"
+  assert_equals "cwd=$case_dir/project args=prune --yes" "$(cat "$case_dir/prune-calls")" \
+    "pool-prune: prune was not run with --yes from the project clone"
+  pass "the accepted return's copy is pruned and the reclaimed size and count are reported"
+}
+
+test_pool_prune_skipped_when_the_return_fails() {
+  local case_dir rc
+  case_dir=$(make_landed_case pool-prune-after-refused-return)
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+case "\${1:-}" in
+  return)
+    echo 'treehouse: simulated return refusal' >&2
+    exit 1
+    ;;
+  prune)
+    printf '%s\n' prune >> "$case_dir/prune-calls"
+    exit 0
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$case_dir/fakebin/treehouse"
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "pool-prune-after-refused-return: a failed return should still abort teardown"
+  [ ! -e "$case_dir/prune-calls" ] \
+    || fail "pool-prune-after-refused-return: the pool was pruned after a return that never succeeded"
+  pass "the pool is pruned only after a return the pool accepted"
+}
+
+test_pool_prune_failure_does_not_fail_the_teardown() {
+  local case_dir rc
+  case_dir=$(make_landed_case pool-prune-fails)
+  add_prune_treehouse "$case_dir" 1 ''
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "pool-prune-fails: a failing prune must not fail the teardown"
+  assert_grep 'treehouse prune failed for the worktree pool' "$case_dir/stderr" \
+    "pool-prune-fails: the failing prune was not reported"
+  assert_grep "teardown task-x1 complete" "$case_dir/stdout" \
+    "pool-prune-fails: the teardown did not finish its completion line"
+  [ ! -e "$case_dir/state/task-x1.meta" ] \
+    || fail "pool-prune-fails: the task record survived a teardown whose prune failed"
+  pass "a failing pool prune warns and the teardown still completes"
+}
+
+test_pool_prune_absent_treehouse_does_not_fail_the_teardown() {
+  local case_dir rc run_path
+  case_dir=$(make_landed_case pool-prune-no-treehouse)
+  add_vanishing_treehouse "$case_dir"
+  # The fake deletes itself on the accepted return, and this curated PATH holds
+  # no other treehouse, so the prune step really sees the command missing.
+  run_path=$(make_path_without_lsof "$case_dir")
+
+  set +e
+  FM_TEARDOWN_TEST_PATH="$run_path" \
+    run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "pool-prune-no-treehouse: a missing treehouse must not fail the teardown"
+  assert_grep 'treehouse command not found' "$case_dir/stderr" \
+    "pool-prune-no-treehouse: the missing treehouse was not reported"
+  assert_grep "teardown task-x1 complete" "$case_dir/stdout" \
+    "pool-prune-no-treehouse: the teardown did not finish its completion line"
+  pass "a missing treehouse is reported and the teardown still completes"
+}
+
+test_pool_prune_real_treehouse_reclaims_only_the_returned_copy() {
+  command -v treehouse >/dev/null 2>&1 \
+    || { echo "skip: treehouse not found (required by the real pool-prune e2e)"; return 0; }
+  local case_dir rc pool wt dirty_wt out
+  case_dir=$(make_case real-pool-prune)
+  # The fixture's fake treehouse shadows the real command; remove it so the
+  # accepted return and the prune run against a real pool.
+  rm -f "$case_dir/fakebin/treehouse"
+  git -C "$case_dir/project" worktree remove --force "$case_dir/wt" >/dev/null 2>&1 \
+    || rm -rf "$case_dir/wt"
+  git -C "$case_dir/project" branch -D fm/task-x1 >/dev/null 2>&1 || true
+  pool="$case_dir/treehouse-root"
+  mkdir -p "$pool"
+  wt=$(cd "$case_dir/project" && TREEHOUSE_ROOT="$pool" treehouse get --lease --no-fetch 2>/dev/null) \
+    || fail "real-pool-prune: treehouse could not hand out a slot"
+  dirty_wt=$(cd "$case_dir/project" && TREEHOUSE_ROOT="$pool" treehouse get --lease --no-fetch 2>/dev/null) \
+    || fail "real-pool-prune: treehouse could not hand out a second slot"
+  # Land the task's own commit on the remote default branch so the returned
+  # copy is stale and treehouse may reclaim it.
+  ( cd "$wt" && git checkout -q -b fm/task-x1 \
+      && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m 'landed task work' \
+      && git push -q origin HEAD:main ) \
+    || fail "real-pool-prune: could not land the task commit"
+  git -C "$case_dir/project" fetch -q origin
+  # The copy beside it is leased and dirty: in use, so prune must skip it.
+  printf '%s\n' 'in use and dirty' > "$dirty_wt/scratch.txt"
+  fm_write_meta "$case_dir/state/task-x1.meta" \
+    "window=firstmate:fm-task-x1" \
+    "endpoint_task_id=task-x1" \
+    "worktree=$wt" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=local-only" \
+    "spawn_gen=teardown-test-task-x1"
+
+  set +e
+  FM_ROOT_OVERRIDE="$ROOT" \
+  FM_STATE_OVERRIDE="$case_dir/state" \
+  FM_DATA_OVERRIDE="$case_dir/data" \
+  FM_CONFIG_OVERRIDE="$case_dir/config" \
+  TREEHOUSE_ROOT="$pool" \
+  PATH="$case_dir/fakebin:$PATH" \
+    "$TEARDOWN" task-x1 > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "real-pool-prune: teardown should succeed"
+  [ ! -e "$wt" ] || fail "real-pool-prune: the returned copy was not reclaimed from the pool"
+  [ -e "$dirty_wt/scratch.txt" ] \
+    || fail "real-pool-prune: the dirty in-use copy beside it was destroyed"
+  out=$(cd "$case_dir/project" && TREEHOUSE_ROOT="$pool" treehouse status 2>/dev/null) \
+    || fail "real-pool-prune: treehouse status failed after the teardown"
+  case "$out" in *"$dirty_wt"*) ;; *) fail "real-pool-prune: the in-use copy vanished from the pool: $out" ;; esac
+  case "$out" in *"$wt"*) fail "real-pool-prune: the returned copy is still listed in the pool: $out" ;; esac
+  assert_grep 'pool prune freed' "$case_dir/stdout" \
+    "real-pool-prune: the reclaimed size was not reported"
+  pass "a real treehouse pool reclaims the returned copy and leaves the in-use dirty copy intact"
+}
+
 test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
 test_teardown_manual_backend_leaves_the_backlog_to_the_operator
@@ -3944,3 +4148,8 @@ test_process_spawned_during_grace_is_reaped_on_later_pass
 test_persistent_scan_refuses_after_bounded_retries
 test_process_exit_during_identity_lookup_does_not_refuse
 test_run_abort_precedes_process_reap_precedes_worktree_removal
+test_pool_prune_reclaims_and_reports
+test_pool_prune_skipped_when_the_return_fails
+test_pool_prune_failure_does_not_fail_the_teardown
+test_pool_prune_absent_treehouse_does_not_fail_the_teardown
+test_pool_prune_real_treehouse_reclaims_only_the_returned_copy
