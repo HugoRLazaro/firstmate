@@ -1,0 +1,86 @@
+############ S1a: Pi relay window, live recorded successor, watch lock unheld ############
+  HEAD                                                       -> SILENT
+  PREFIX                                                     -> SILENT
+  BASE                                                       -> SILENT
+
+############ S1b: Pi relay window, live recorded successor, watch lock still held by dead predecessor ############
+  HEAD                                                       -> SILENT
+  PREFIX                                                     -> SILENT
+  BASE                                                       -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+
+############ S2: Pi broken chain, successor=none and no declared attempt ############
+  HEAD                                                       -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+  PREFIX                                                     -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+  BASE                                                       -> SILENT
+
+############ S3: Pi arm declaration: live child retry=0 (the 'watcher: unchanged' state) ############
+  HEAD live declared child                                   -> SILENT
+  BASE live declared child (no declaration support)          -> SILENT
+
+############ S4: Pi declaration: dead arm child with retry=1 (round-1 fix) ############
+  HEAD dead child retry=1                                    -> SILENT
+  PREFIX dead child retry=1                                  -> SILENT
+  BASE dead child retry=1                                    -> SILENT
+
+############ S5: declaration signals are load-bearing (adversarial) ############
+  live child retry=0                                         -> SILENT
+  child=none retry=1                                         -> SILENT
+  dead child retry=0                                         -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+  drifted extension build                                    -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+  handoff-phase generation                                   -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+  declaration pid != live session lock pid                   -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+
+############ S6: omp restoration window over an unheld lock (round-2 fix) ############
+  omp HEAD live session + fresh beat + successor=none + unheld lock -> SILENT
+  omp PREFIX live session + fresh beat + successor=none + unheld lock -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+  omp BASE live session + fresh beat + successor=none + unheld lock -> SILENT
+  omp HEAD held unhealthy lock + successor=none (no unheld proof) -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+  omp HEAD same state but marker proof removed (watcher down) -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+
+############ S7: lost session origin / dead relay successor stay loud ############
+  Pi HEAD held unhealthy lock + successor=none               -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+  HEAD live successor but dead session origin                -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+  HEAD recorded successor process is gone                    -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+  HEAD recorded successor identity no longer matches         -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+
+############ S8: real Pi extension -> real guard ############
+  real extension declaration: sha256:da75d235db86946c1fbe954d0f1d84327b109ea1bfcd0cd9787b0aa991253d81|1109331|generation=1 phase=active|child=1109390 retry=0
+  fm_watch_arm_pi: watcher: started Pi extension arm child 1; future ordinary re-arms are automatic; call fm_watch_arm_pi again only after a later notification says the cycle is missing, failed, or unhealthy
+  fm_watch_arm_pi: watcher: unchanged - Pi extension already owns an arm child; no manual re-arm needed; call fm_watch_arm_pi again only after a later notification says the cycle is missing, failed, or unhealthy
+  guard against the real extension's live-child state        -> SILENT
+  real extension declaration: sha256:da75d235db86946c1fbe954d0f1d84327b109ea1bfcd0cd9787b0aa991253d81|1109547|generation=1 phase=active|child=none retry=1
+  guard against the real extension's pending-retry state     -> SILENT
+  real extension declaration: sha256:da75d235db86946c1fbe954d0f1d84327b109ea1bfcd0cd9787b0aa991253d81|1109816|generation=1 phase=active|child=1109959 retry=1|child-alive
+  guard inside the real restoration window (live child, retry=1) -> SILENT
+  BASE (pre-change code) inside that same window             -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+
+############ S10: the wake-drain turn (fm-wake-drain.sh) inherits the same verdict ############
+  drain in a Pi relay window                                 -> SILENT
+  drain on a broken chain (successor=none)                   -> ALARM
+        ●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+  drain in the omp restoration window                        -> SILENT
+
+############ S9: stale beacon keeps alarming even with relay evidence ############
+  HEAD live ledger successor but stale beacon                -> ALARM
+        ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: 212456124s ago, grace 999s).
+
+done
+
+real	0m31.225s
+user	0m17.268s
+sys	0m17.380s

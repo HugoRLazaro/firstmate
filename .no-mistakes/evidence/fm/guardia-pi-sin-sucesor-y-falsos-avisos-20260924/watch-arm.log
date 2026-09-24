@@ -1,0 +1,29 @@
+ok - watch-arm: an attached arm reports the wake its cycle delivered instead of a false failure
+ok - watch-arm: a delivered wake consumed by the handling turn still closes the attached arm cleanly
+watcher: lock held by live pid 630721 but heartbeat is stale for 843607347s (>300s); inspect or stop that watcher before re-arming.
+ok - watch-arm: the predecessor ledger record declares the successor before confirmation
+ok - watch-arm: an unusable launch confirm window refuses to arm by name
+ok - watch-arm: a cycle that delivered no wake of its own still fails loudly
+/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMFSK7B5JGSY2CT93WCC3Q/bin/fm-watch-arm.sh: line 575: 638289 Killed                  "$WATCH" > "$child_out"
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 638973.1790288558.xkoZjj
+ok - watch-arm: re-arm surfaces every queued wake and an open remote decision after downtime
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - watch-arm: marker publication failure retains stale-lock recovery evidence
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 647824.1790288568.DNwQR2
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 3 --recovery-generation 649878.1790288570.nlp0d5
+ok - watch-arm: a wake queued after handling drain is recovered once at successor arm
+ok - watch-arm: interrupted handling leaves its wake durable for successor re-drain
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 0 --recovery-generation 661038.1790288582.bAZHi9
+ok - watch-arm: malformed recovery state is quarantined without a successor loop
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 667702.1790288586.JGPGr1
+ok - watch-arm: publication after recovery handoff is surfaced
+ok - watch-arm: restart publishes recovery before clearing a reused-pid watcher lock
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 7 --recovery-generation 674934.1790288591.z3UIu0
+ok - watch-arm: markerless legacy queues are adopted and recovered
+ok - watch-arm: a watcher close during handling keeps the printed acknowledgement valid
+ok - watch-arm: a moved recovery generation consumes handled rows and names its remedy
+ok - watch-arm: downtime marker publication does not follow symlinks
+
+real	1m19.851s
+user	0m53.285s
+sys	0m33.995s
