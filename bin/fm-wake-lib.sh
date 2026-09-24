@@ -201,7 +201,9 @@ fm_watcher_healthy() {
 #               declared attempt, a recorded successor whose process is gone, and a
 #               lost session origin all stay down; the marker-ownership hand-off
 #               proof covers only a genuinely unheld lock when no usable lifecycle
-#               record exists at all.
+#               record exists at all. omp publishes no arm declaration, so its
+#               own marker-ownership proof over a genuinely unheld lock is
+#               accepted with any lifecycle record.
 #   persistent  every other harness (codex foreground checkpoint, opencode/grok
 #               background arm, tmux, unknown): the watcher runs as a tracked live
 #               process, so a live identity-matched pid is the real liveness signal.
@@ -468,17 +470,22 @@ fm_watch_cycle_successor_alive() {
 # fm_extension_relay_healthy <state> <root>
 # True when a fresh-beacon gap under the extension model is a RELAY in progress
 # rather than a broken chain. It requires a live session origin (the lock names
-# a live process) and then accepts either the newest lifecycle record's live
-# successor or the extension's own live-arm-child/retry declaration. Only when
-# no usable lifecycle record exists at all does it fall back to the
-# marker-ownership hand-off proof, so a home whose ledger has not yet seen a
-# cycle keeps the old tolerance while a recorded successor=none stays loud.
+# a live process) and then accepts the newest lifecycle record's live successor,
+# the Pi extension's own live-arm-child/retry declaration, or - because omp
+# publishes no arm declaration - the omp family's marker-ownership proof over a
+# genuinely unheld lock. The shared marker-ownership proof still covers a home
+# whose ledger has no usable record at all, while only the omp family may use it
+# alongside a recorded successor disposition, so a recorded Pi successor=none
+# stays loud.
 fm_extension_relay_healthy() {
   local state=$1 root=$2 version kind
   fm_pid_alive "$(sed -n '1p' "$state/.lock" 2>/dev/null)" || return 1
   fm_watch_cycle_successor_alive "$state" && return 0
   if version=$(fm_pi_extension_version "$root/.pi/extensions/fm-primary-pi-watch.ts"); then
     fm_pi_extension_arm_pending "$state" "$version" "$state/.lock" && return 0
+  fi
+  if fm_watcher_lock_unheld "$state" && fm_omp_extension_owns_supervision "$state" "$root"; then
+    return 0
   fi
   kind=$(fm_watch_cycle_successor "$state" | cut -f1)
   [ "$kind" = absent ] || return 1
@@ -506,12 +513,14 @@ fm_extension_relay_healthy() {
 # (fm_extension_relay_healthy): a live session origin plus either a live
 # successor recorded in the lifecycle ledger or the extension's own durable
 # declaration of a live arm child or scheduled retry. A recorded successor=none
-# with no declared pending attempt stays down even with the extension markers
-# present, and a recorded successor whose process is gone stays down. When no
-# lifecycle record exists at all, the marker-ownership hand-off proof still
-# covers a home that has not yet seen a cycle. An unloaded, version-drifted, or
-# exited Pi session still alarms, and a cycle the extension never restores still
-# alarms once the beacon passes grace.
+# with no declared pending attempt stays down even with the Pi extension markers
+# present, and a recorded successor whose process is gone stays down. The omp
+# primary publishes no arm declaration, so its unheld-lock marker-ownership
+# proof is accepted alongside the ledger instead. When no lifecycle record
+# exists at all, the marker-ownership hand-off proof still covers a home that
+# has not yet seen a cycle. An unloaded, version-drifted, or exited Pi or omp
+# session still alarms, and a cycle the extension never restores still alarms
+# once the beacon passes grace.
 # persistent: require a live identity-matched watcher with a fresh beacon
 # (fm_watcher_healthy); a fresh leftover beacon with no live watcher is still down.
 # shellcheck disable=SC2034 # Read by callers after the function returns.

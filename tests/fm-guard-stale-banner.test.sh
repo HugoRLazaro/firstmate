@@ -823,14 +823,14 @@ test_extension_relay_with_live_successor_stays_silent() {
 
 # The 16:14:29 close, verbatim: recorded successor=none with no arm child or
 # retry declared anywhere. That is the broken chain and must stay loud even
-# though a live session owns the lock and the beacon is fresh.
+# though a live Pi session has loaded both extensions and the beacon is fresh.
 test_extension_relay_successor_none_without_retry_alarms() {
   local dir home out pid
   dir=$(make_guard_case extension-relay-none)
   home=$(case_home "$dir")
   sleep 60 &
   pid=$!
-  printf '%s\n' "$pid" > "$home/state/.lock"
+  record_pi_extension_session "$dir" "$pid" || fail "could not record the Pi extension session"
   write_cycle_row "$home" "$REAL_NONE_ROW"
   touch "$home/state/.last-watcher-beat"
   out=$(run_guard_case_extension "$dir")

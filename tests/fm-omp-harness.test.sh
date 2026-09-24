@@ -419,17 +419,22 @@ test_ownership_proof_is_omp_keyed() {
   wait "$pid" 2>/dev/null || true
   owns "$root" "$home" && fail "a dead session must not own supervision"
 
-  # The pull-guard verdict tolerates the extension's own hand-off only with the proof.
+  # The pull-guard verdict tolerates the extension's own hand-off only with the
+  # proof. omp publishes no arm declaration, so the proof must still carry the
+  # ordinary restoration window even when the newest lifecycle record names no
+  # successor; without the proof the same state is a genuine watcher-down alarm.
   sleep 60 &
   pid=$!
   root="$TMP_ROOT/own-verdict/root"; home="$TMP_ROOT/own-verdict/home"
   record_omp_session "$root" "$home" "$pid" || fail "could not record the verdict session"
   touch "$home/state/.last-watcher-beat"
+  printf 'arm_pid=1\twatcher_pid=2\torigin=started\tstarted_at=1\tended_at=2\texit_code=0\tsignal=none\treason=actionable-stale\tbeacon_age=1\tlock_before=pid:2|identity:x\tlock_after=pid:none|identity:none\tsuccessor=none\n' \
+    > "$home/state/.watch-cycle-exits.log"
   local verdict
   verdict=$(FM_SUPERVISION_MODEL=extension FM_HOME="$home" bash -c '
     . "$1"; fm_watcher_supervision_verdict "$2" "$3" 999 "$4" "$5"; printf "%s %s" "$FM_WATCHER_VERDICT_OK" "$FM_WATCHER_VERDICT_REASON"' \
     _ "$ROOT/bin/fm-wake-lib.sh" "$home/state" "$root/bin/fm-watch.sh" "$home" "$root")
-  [ "${verdict%% *}" = true ] || fail "an unheld lock with a fresh beacon and the omp proof must be healthy, got '$verdict'"
+  [ "${verdict%% *}" = true ] || fail "an unheld lock with a fresh beacon, the omp proof, and a successor=none ledger must be healthy, got '$verdict'"
   rm -f "$home/state/.omp-turnend-extension-loaded"
   verdict=$(FM_SUPERVISION_MODEL=extension FM_HOME="$home" bash -c '
     . "$1"; fm_watcher_supervision_verdict "$2" "$3" 999 "$4" "$5"; printf "%s %s" "$FM_WATCHER_VERDICT_OK" "$FM_WATCHER_VERDICT_REASON"' \

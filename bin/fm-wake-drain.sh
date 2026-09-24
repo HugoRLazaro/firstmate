@@ -219,7 +219,8 @@ esac
 # the Pi extension model, a fresh beacon also stays silent during a hand-off
 # while direct relay evidence proves the chain: a live session origin plus a live
 # lifecycle-ledger successor or the extension's declared live arm child or
-# pending retry.
+# pending retry, while omp, which publishes no arm declaration, proves the same
+# hand-off with its own markers over a genuinely unheld lock.
 # Persistent-watcher models still require the live identity-matched watcher.
 # Never let a guard hiccup change the drain's exit status.
 assert_watcher_liveness() {
