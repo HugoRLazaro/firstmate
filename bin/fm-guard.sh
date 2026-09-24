@@ -19,11 +19,12 @@
 # actionable wake, so a fresh beacon without an identity-matched watcher is
 # healthy while direct relay evidence proves the hand-off: a live session origin
 # plus a live ledger successor or a declared live arm child or pending retry; a
-# recorded successor=none with no declared attempt, a successor whose process is
-# gone, and a lost session origin all stay down; omp, which publishes no arm
-# declaration, proves the same hand-off with its own markers over a genuinely
-# unheld lock, and the marker-ownership fallback still covers a home with no
-# usable lifecycle record; under every
+# recorded successor=none with no declared attempt or a successor whose process
+# is gone is not relay evidence on its own, and a lost session origin stays down
+# for both families; omp, which publishes no arm declaration, proves the same
+# hand-off with its own markers over a genuinely unheld lock, and the
+# marker-ownership fallback still covers a home with no usable lifecycle
+# record; under every
 # persistent-watcher harness a live identity-matched watcher with a fresh beacon
 # is required. The banner names the true failing condition (a missing live
 # watcher process vs a genuinely stale beacon). The full banner is emitted once

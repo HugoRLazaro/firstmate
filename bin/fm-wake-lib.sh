@@ -198,8 +198,9 @@ fm_watcher_healthy() {
 #               direct relay evidence (fm_extension_relay_healthy): a live session
 #               origin plus a live lifecycle-ledger successor or a declared live
 #               arm child or pending retry. A recorded successor=none with no
-#               declared attempt, a recorded successor whose process is gone, and a
-#               lost session origin all stay down; the marker-ownership hand-off
+#               declared attempt and a recorded successor whose process is gone
+#               are not relay evidence on their own, and a lost session origin
+#               stays down for both families; the Pi marker-ownership hand-off
 #               proof covers only a genuinely unheld lock when no usable lifecycle
 #               record exists at all. omp publishes no arm declaration, so its
 #               own marker-ownership proof over a genuinely unheld lock is
@@ -513,14 +514,14 @@ fm_extension_relay_healthy() {
 # (fm_extension_relay_healthy): a live session origin plus either a live
 # successor recorded in the lifecycle ledger or the extension's own durable
 # declaration of a live arm child or scheduled retry. A recorded successor=none
-# with no declared pending attempt stays down even with the Pi extension markers
-# present, and a recorded successor whose process is gone stays down. The omp
-# primary publishes no arm declaration, so its unheld-lock marker-ownership
-# proof is accepted alongside the ledger instead. When no lifecycle record
-# exists at all, the marker-ownership hand-off proof still covers a home that
-# has not yet seen a cycle. An unloaded, version-drifted, or exited Pi or omp
-# session still alarms, and a cycle the extension never restores still alarms
-# once the beacon passes grace.
+# with no declared pending attempt is not relay evidence even with the Pi
+# extension markers present, and neither is a recorded successor whose process
+# is gone. The omp primary publishes no arm declaration, so its unheld-lock
+# marker-ownership proof is accepted alongside the ledger instead. When no
+# lifecycle record exists at all, the marker-ownership hand-off proof still
+# covers a home that has not yet seen a cycle. An unloaded, version-drifted,
+# or exited Pi or omp session still alarms, and a cycle the extension never
+# restores still alarms once the beacon passes grace.
 # persistent: require a live identity-matched watcher with a fresh beacon
 # (fm_watcher_healthy); a fresh leftover beacon with no live watcher is still down.
 # shellcheck disable=SC2034 # Read by callers after the function returns.
