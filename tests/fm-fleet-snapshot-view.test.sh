@@ -1094,6 +1094,32 @@ EOF
   pass "home-summary excludes kind=secondmate from unowned_current and terminal_in_flight"
 }
 
+test_contribution_input_large_backlog() {
+  local home pad i json_bytes
+  home=$(make_home contribution-large)
+  # A real backlog grows past the kernel's single-argument limit (Linux
+  # MAX_ARG_STRLEN is 128 KiB), so the canonical backlog JSON must travel by
+  # file. The old --argjson transport died with E2BIG and printed nothing.
+  pad=$(printf '%060000d' 0 | tr 0 x)
+  {
+    printf '# Backlog\n\n## Queued\n'
+    i=1
+    while [ "$i" -le 40 ]; do
+      printf -- '- free-form large backlog line %05d %s\n' "$i" "$pad"
+      i=$((i + 1))
+    done
+  } > "$home/data/backlog.md"
+  FM_HOME="$home" "$SNAPSHOT" --contribution-input > "$home/input.json" 2> "$home/input.err" \
+    || fail "a large backlog broke contribution input: $(cat "$home/input.err")"
+  json_bytes=$(wc -c < "$home/input.json")
+  [ "$json_bytes" -gt 1048576 ] || fail "fixture too small to exercise argv transport: $json_bytes bytes"
+  jq -e '.backlog.present == true and (.backlog.records | length) == 40 and (.tasks | length) == 0' \
+    "$home/input.json" >/dev/null \
+    || fail 'a large backlog lost its records or structure in contribution input'
+  [ ! -s "$home/input.err" ] || fail "a large backlog printed a transport error: $(cat "$home/input.err")"
+  pass 'a backlog past the single-argument limit still yields contribution input'
+}
+
 test_empty_fleet_json
 test_fixture_snapshot_json
 test_home_summary_excludes_secondmate_from_child_inventory
@@ -1112,3 +1138,4 @@ test_scout_reports_include_teardown_reports
 test_backlog_tasks_axi_forms_and_overrides
 test_view_renders_snapshot
 test_view_renders_dead_secondmate_agent_status
+test_contribution_input_large_backlog
