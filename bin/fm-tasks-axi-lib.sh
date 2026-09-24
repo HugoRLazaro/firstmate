@@ -51,9 +51,12 @@
 # an executable TASKS_AXI_BIN, then the first native candidate (PATH entries
 # outside the Windows mount, then ~/.npm-global/bin and ~/.local/bin), then the
 # first PATH entry including the Windows mount - so a home with no native build
-# keeps its previous behavior. The
-# resolver runs once at source time into FM_TASKS_AXI_BIN, which is empty when
-# no binary exists at all.
+# keeps its previous behavior. A set TASKS_AXI_BIN that names no executable file
+# stops the sourcing process, naming the pin and its path, instead of falling
+# back to another binary; a usable pin resolves to an absolute path so the file
+# checked is the file consumers execute after their own working directory
+# changes. The resolver runs once at source time into FM_TASKS_AXI_BIN, which is
+# empty when no binary exists at all.
 
 FM_TASKS_AXI_MIN=0.2.4
 
@@ -65,18 +68,28 @@ case "$FM_TASKS_AXI_COMPATIBLE_MEMO" in
 esac
 
 # Print the tasks-axi binary this home should run and return 0; return 1 and
-# print nothing when no usable binary exists (an unusable TASKS_AXI_BIN prints
-# its own diagnostic). The optional <foreign-prefix> defaults to /mnt and exists
-# so tests can fake the Windows mount without touching the real one.
+# print nothing when no usable binary exists. A set TASKS_AXI_BIN that names no
+# executable file prints its own diagnostic and returns 1, and a usable pin is
+# printed as an absolute path. The optional <foreign-prefix> defaults to /mnt
+# and exists so tests can fake the Windows mount without touching the real one.
 fm_tasks_axi_bin() {  # [<foreign-prefix>]
   local foreign=${1:-/mnt}
   local path_left=${PATH:-} entry candidate
   if [ -n "${TASKS_AXI_BIN:-}" ]; then
     if [ -x "$TASKS_AXI_BIN" ] && [ ! -d "$TASKS_AXI_BIN" ]; then
-      printf '%s\n' "$TASKS_AXI_BIN"
-      return 0
+      case "$TASKS_AXI_BIN" in
+        */*)
+          entry=${TASKS_AXI_BIN%/*}
+          [ -n "$entry" ] || entry=/
+          ;;
+        *) entry=. ;;
+      esac
+      if candidate=$(CDPATH='' cd -- "$entry" 2>/dev/null && pwd -P); then
+        printf '%s/%s\n' "${candidate%/}" "${TASKS_AXI_BIN##*/}"
+        return 0
+      fi
     fi
-    printf 'fm-tasks-axi: TASKS_AXI_BIN names %s, which is not an executable file\n' "$TASKS_AXI_BIN" >&2
+    printf 'fm-tasks-axi: TASKS_AXI_BIN names %s, which is not an executable file; refusing to resolve a different tasks-axi\n' "$TASKS_AXI_BIN" >&2
     return 1
   fi
   while [ -n "$path_left" ]; do
@@ -111,7 +124,10 @@ fm_tasks_axi_bin() {  # [<foreign-prefix>]
   return 1
 }
 
-FM_TASKS_AXI_BIN=$(fm_tasks_axi_bin) || FM_TASKS_AXI_BIN=
+FM_TASKS_AXI_BIN=$(fm_tasks_axi_bin) || {
+  [ -z "${TASKS_AXI_BIN:-}" ] || exit 2
+  FM_TASKS_AXI_BIN=
+}
 
 fm_tasks_axi_version_parts() {
   local output

@@ -302,6 +302,46 @@ test_explicit_tasks_axi_bin_wins() {
   pass "an explicit TASKS_AXI_BIN wins and a broken pin refuses loudly"
 }
 
+test_relative_tasks_axi_bin_is_resolved_absolute() {
+  local dir tools out
+  dir=$(make_split wrapper-relative-bin)
+  tools="$dir/relbin"
+  make_marker_tasks_axi "$tools" relative
+  # shellcheck disable=SC2016  # Expansion is deliberately deferred to the child shell.
+  out=$(cd "$dir" && TASKS_AXI_BIN=relbin/tasks-axi bash -c \
+    '. "$1" >/dev/null 2>&1; printf "%s\n" "$FM_TASKS_AXI_BIN"' _ \
+    "$ROOT/bin/fm-tasks-axi-lib.sh")
+  assert_equals "$(cd "$dir" && pwd -P)/relbin/tasks-axi" "$out" \
+    "a relative TASKS_AXI_BIN was not resolved to an absolute path"
+  out=$(cd "$dir" && FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$dir/code" \
+    TASKS_AXI_BIN=relbin/tasks-axi "$WRAPPER" list 2>&1)
+  assert_equals "relative" "$out" \
+    "a relative TASKS_AXI_BIN stopped naming its file after the backlog-root cd"
+  pass "a relative TASKS_AXI_BIN is resolved to the absolute file it checked"
+}
+
+test_unusable_tasks_axi_bin_stops_resolution() {
+  local dir pin out rc
+  dir=$(make_split wrapper-unusable-bin)
+  pin="$dir/gone-tasks-axi"
+  # shellcheck disable=SC2016  # Expansion is deliberately deferred to the child shell.
+  out=$(cd "$dir/code" && TASKS_AXI_BIN="$pin" bash -c \
+    '. "$1"; printf "resolved-after-bad-pin\n"' _ \
+    "$ROOT/bin/fm-tasks-axi-lib.sh" 2>&1)
+  rc=$?
+  expect_code 2 "$rc" "an unusable TASKS_AXI_BIN did not stop resolution"
+  assert_contains "$out" "TASKS_AXI_BIN" "the pin refusal did not name TASKS_AXI_BIN"
+  assert_contains "$out" "$pin" "the pin refusal did not name the pinned path"
+  assert_not_contains "$out" "resolved-after-bad-pin" "resolution continued past an unusable pin"
+
+  out=$(PATH="$BASE_PATH" HOME="$dir/home" FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$dir/code" \
+    FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_NETWORK=skip TASKS_AXI_BIN="$pin" "$BOOTSTRAP" 2>&1)
+  rc=$?
+  expect_code 2 "$rc" "bootstrap did not stop on an unusable TASKS_AXI_BIN"
+  assert_not_contains "$out" "MISSING: tasks-axi" "the unusable pin produced an install diagnostic that cannot fix it"
+  pass "an unusable TASKS_AXI_BIN stops with the pin named instead of degrading"
+}
+
 test_transition_rows_use_resolved_binary() {
   local dir fb out
   dir=$(make_split resolver-transition)
@@ -324,6 +364,8 @@ test_resolver_prefers_native_over_windows_path
 test_resolver_finds_native_outside_path
 test_resolver_falls_back_to_windows_path
 test_explicit_tasks_axi_bin_wins
+test_relative_tasks_axi_bin_is_resolved_absolute
+test_unusable_tasks_axi_bin_stops_resolution
 test_transition_rows_use_resolved_binary
 test_guard_reports_regular_code_root_backlog
 test_guard_reports_foreign_link_and_archive
