@@ -216,6 +216,115 @@ test_wrapper_single_home() {
   pass "fm-tasks-axi.sh keeps the single-home layout addressing its own code-root backlog"
 }
 
+# --- binary resolution -------------------------------------------------------
+#
+# The defect these guard against: the wrapper used to run whatever `tasks-axi`
+# PATH found first, and a WSL home whose PATH puts a Windows-side npm shim in
+# front paid the WSL/Windows crossing on every backlog read, which tripped
+# bootstrap's 10s per-read bound and truncated the session-start digest. The
+# resolver must pick a native Linux binary wherever it lives, and keep the old
+# PATH behavior when no native binary exists at all.
+
+make_marker_tasks_axi() {  # <bin-dir> <marker>
+  mkdir -p "$1"
+  cat > "$1/tasks-axi" <<SH
+#!/bin/bash
+printf '%s\n' '$2'
+SH
+  chmod +x "$1/tasks-axi"
+}
+
+resolver_choice() {  # <path> <home> <foreign-prefix>
+  local bash_bin
+  bash_bin=$(command -v bash)
+  # shellcheck disable=SC2016  # Expansion is deliberately deferred to the child shell.
+  env -u TASKS_AXI_BIN PATH="$1" HOME="$2" "$bash_bin" -c \
+    '. "$1" >/dev/null 2>&1; fm_tasks_axi_bin "$2"' _ \
+    "$ROOT/bin/fm-tasks-axi-lib.sh" "$3"
+}
+
+test_resolver_prefers_native_over_windows_path() {
+  local dir foreign native
+  dir="$TMP_ROOT/resolver-native"
+  foreign="$dir/windows-bin"
+  native="$dir/native-bin"
+  mkdir -p "$dir/home"
+  make_marker_tasks_axi "$foreign" windows
+  make_marker_tasks_axi "$native" native
+  assert_equals "$native/tasks-axi" \
+    "$(resolver_choice "$foreign:$native" "$dir/home" "$foreign")" \
+    "a native binary behind the Windows mount was not preferred"
+  assert_equals "$native/tasks-axi" \
+    "$(resolver_choice "$native:$foreign" "$dir/home" "$foreign")" \
+    "the first native PATH entry was not chosen"
+  pass "resolver prefers a native tasks-axi over a Windows-mount copy regardless of PATH order"
+}
+
+test_resolver_finds_native_outside_path() {
+  local dir foreign usual
+  dir="$TMP_ROOT/resolver-usual"
+  foreign="$dir/windows-bin"
+  usual="$dir/home/.npm-global/bin"
+  make_marker_tasks_axi "$foreign" windows
+  make_marker_tasks_axi "$usual" native
+  assert_equals "$usual/tasks-axi" \
+    "$(resolver_choice "$foreign" "$dir/home" "$foreign")" \
+    "a native install outside PATH was not found"
+  pass "resolver finds a native tasks-axi in ~/.npm-global/bin when PATH only has the Windows mount"
+}
+
+test_resolver_falls_back_to_windows_path() {
+  local dir foreign
+  dir="$TMP_ROOT/resolver-fallback"
+  foreign="$dir/windows-bin"
+  mkdir -p "$dir/home"
+  make_marker_tasks_axi "$foreign" windows
+  assert_equals "$foreign/tasks-axi" \
+    "$(resolver_choice "$foreign" "$dir/home" "$foreign")" \
+    "a home with no native binary did not keep its PATH fallback"
+  pass "resolver falls back to the Windows-mount binary when no native binary exists"
+}
+
+test_explicit_tasks_axi_bin_wins() {
+  local dir explicit out rc
+  dir=$(make_split wrapper-explicit-bin)
+  explicit="$dir/explicit"
+  make_marker_tasks_axi "$explicit" explicit
+  out=$(cd "$dir/code" && PATH="$explicit:$PATH" FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$dir/code" \
+    TASKS_AXI_BIN="$explicit/tasks-axi" "$WRAPPER" list 2>&1)
+  assert_equals "explicit" "$out" "an explicit TASKS_AXI_BIN did not win over PATH"
+
+  out=$(cd "$dir/code" && FM_HOME="$dir/home" FM_ROOT_OVERRIDE="$dir/code" \
+    TASKS_AXI_BIN="$dir/missing-tasks-axi" "$WRAPPER" list 2>&1)
+  rc=$?
+  expect_code 2 "$rc" "a non-executable TASKS_AXI_BIN"
+  assert_contains "$out" "TASKS_AXI_BIN" "the bad pin refusal did not name TASKS_AXI_BIN"
+  pass "an explicit TASKS_AXI_BIN wins and a broken pin refuses loudly"
+}
+
+test_transition_rows_use_resolved_binary() {
+  local dir fb out
+  dir=$(make_split resolver-transition)
+  fb="$dir/fakebin"
+  mkdir -p "$fb"
+  make_marker_tasks_axi "$fb" resolved-marker
+  # The bootstrap reconcile reads each task through fm_backlog_row_show, so this
+  # is the exact hot path that used to pay the Windows-mount crossing per item.
+  # shellcheck disable=SC2016  # Expansion is deliberately deferred to the child shell.
+  out=$(env -u TASKS_AXI_BIN PATH="$fb:$PATH" bash -c '
+    . "$1/bin/fm-tasks-axi-lib.sh"
+    . "$1/bin/fm-backlog-transition-lib.sh"
+    fm_backlog_row_show "$2" demo-row
+  ' _ "$ROOT" "$dir/home/data" 2>&1)
+  assert_equals "resolved-marker" "$out" "a backlog row read did not run the resolved tasks-axi binary"
+  pass "per-task backlog reads run the resolved binary"
+}
+
+test_resolver_prefers_native_over_windows_path
+test_resolver_finds_native_outside_path
+test_resolver_falls_back_to_windows_path
+test_explicit_tasks_axi_bin_wins
+test_transition_rows_use_resolved_binary
 test_guard_reports_regular_code_root_backlog
 test_guard_reports_foreign_link_and_archive
 test_guard_silent_for_single_home

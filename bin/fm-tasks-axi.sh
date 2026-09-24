@@ -19,6 +19,15 @@
 # whenever the home lives elsewhere; docs/configuration.md ("Backlog backend")
 # owns that rationale.
 #
+# Binary preference: an explicit TASKS_AXI_BIN wins when it names an executable
+# file; otherwise a native Linux tasks-axi is preferred over any Windows-side
+# copy under /mnt/, because one read that crosses the WSL/Windows boundary costs
+# about 17s against 0.7s for the native binary and the session-start bootstrap
+# reconciles this home's backlog with a 10s bound per read, so the slow binary
+# trips every bound and truncates the digest. bin/fm-tasks-axi-lib.sh owns the
+# full resolution order; the whole PATH, including /mnt/, remains the fallback
+# when no native binary exists.
+#
 # Addressing is bin/fm-backlog-transition-lib.sh's fm_backlog_tasks_axi_addressing,
 # the same resolution the lifecycle transitions use: tasks-axi runs from the
 # configured data directory's parent, so that home's own `.tasks.toml` (or
@@ -33,7 +42,7 @@
 # root's data/ (FM_HOME unset keeps the single-home layout unchanged).
 #
 # Refusals (exit 2, nothing run):
-#   - tasks-axi missing from PATH;
+#   - no tasks-axi binary found (PATH or a usual install location);
 #   - a caller-supplied --file, because this command owns the addressing and
 #     tasks-axi would silently let the last --file win;
 #   - a data directory that cannot be resolved, or whose backend configuration
@@ -107,7 +116,7 @@ for arg in "$@"; do
   esac
 done
 
-command -v tasks-axi >/dev/null 2>&1 || fail "tasks-axi is not on PATH; run bin/fm-bootstrap.sh for the install command"
+[ -n "$FM_TASKS_AXI_BIN" ] || fail "no tasks-axi binary found; run bin/fm-bootstrap.sh for the install command"
 
 FM_BACKLOG_TRANSITION_ERROR=
 if ! fm_backlog_tasks_axi_addressing "$DATA"; then
@@ -124,4 +133,4 @@ else
 fi
 
 cd "$FM_BACKLOG_AXI_ROOT" || fail "cannot enter the backlog root $FM_BACKLOG_AXI_ROOT"
-exec tasks-axi ${ARGS[@]+"${ARGS[@]}"}
+exec "$FM_TASKS_AXI_BIN" ${ARGS[@]+"${ARGS[@]}"}

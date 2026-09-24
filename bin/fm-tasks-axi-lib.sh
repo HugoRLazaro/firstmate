@@ -41,6 +41,19 @@
 #     probe runs normally.
 # Both layers are bounded by process lifetime, so a tasks-axi install or upgrade
 # is picked up by the next process rather than being cached to disk.
+#
+# BACKEND BINARY. This library also owns which tasks-axi binary the whole home
+# runs. A native Linux build is preferred over any Windows-side copy under
+# /mnt/, because one read that crosses the WSL/Windows boundary costs about 17s
+# against 0.7s for the native binary; bin/fm-bootstrap.sh reconciles this home's
+# backlog with a 10s bound per read, so the slow binary trips every bound, the
+# phase consumes minutes, and the session-start digest truncates. Precedence is
+# an executable TASKS_AXI_BIN, then the first native candidate (PATH entries
+# outside the Windows mount, then ~/.npm-global/bin, ~/.local/bin,
+# /usr/local/bin, and /usr/bin), then the first PATH entry including the Windows
+# mount - so a home with no native build keeps its previous behavior. The
+# resolver runs once at source time into FM_TASKS_AXI_BIN, which is empty when
+# no binary exists at all.
 
 FM_TASKS_AXI_MIN=0.2.4
 
@@ -51,10 +64,59 @@ case "$FM_TASKS_AXI_COMPATIBLE_MEMO" in
   *) FM_TASKS_AXI_COMPATIBLE_MEMO= ;;
 esac
 
+# Print the tasks-axi binary this home should run and return 0; return 1 and
+# print nothing when no usable binary exists (an unusable TASKS_AXI_BIN prints
+# its own diagnostic). The optional <foreign-prefix> defaults to /mnt and exists
+# so tests can fake the Windows mount without touching the real one.
+fm_tasks_axi_bin() {  # [<foreign-prefix>]
+  local foreign=${1:-/mnt}
+  local path_left=${PATH:-} entry candidate
+  if [ -n "${TASKS_AXI_BIN:-}" ]; then
+    if [ -x "$TASKS_AXI_BIN" ] && [ ! -d "$TASKS_AXI_BIN" ]; then
+      printf '%s\n' "$TASKS_AXI_BIN"
+      return 0
+    fi
+    printf 'fm-tasks-axi: TASKS_AXI_BIN names %s, which is not an executable file\n' "$TASKS_AXI_BIN" >&2
+    return 1
+  fi
+  while [ -n "$path_left" ]; do
+    case "$path_left" in
+      *:*) entry=${path_left%%:*}; path_left=${path_left#*:} ;;
+      *) entry=$path_left; path_left= ;;
+    esac
+    [ -n "$entry" ] || continue
+    case "$entry" in
+      "$foreign"|"$foreign"/*) continue ;;
+    esac
+    candidate=$entry/tasks-axi
+    if [ -x "$candidate" ] && [ ! -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  for entry in "${HOME:-}/.npm-global/bin" "${HOME:-}/.local/bin" /usr/local/bin /usr/bin; do
+    case "$entry" in
+      /.npm-global/bin|/.local/bin) continue ;;
+    esac
+    candidate=$entry/tasks-axi
+    if [ -x "$candidate" ] && [ ! -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  if candidate=$(command -v tasks-axi 2>/dev/null); then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+FM_TASKS_AXI_BIN=$(fm_tasks_axi_bin) || FM_TASKS_AXI_BIN=
+
 fm_tasks_axi_version_parts() {
   local output
-  command -v tasks-axi >/dev/null 2>&1 || return 1
-  output=$(tasks-axi --version 2>/dev/null) || return 1
+  [ -n "$FM_TASKS_AXI_BIN" ] || return 1
+  output=$("$FM_TASKS_AXI_BIN" --version 2>/dev/null) || return 1
   printf '%s\n' "$output" |
     sed -n 's/.*\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2 \3/p' |
     head -1
@@ -95,15 +157,15 @@ fm_tasks_axi_compatible_probe() {
 
 fm_tasks_axi_update_has_archive_body() {
   local output
-  command -v tasks-axi >/dev/null 2>&1 || return 1
-  output=$(tasks-axi update --help 2>&1) || return 1
+  [ -n "$FM_TASKS_AXI_BIN" ] || return 1
+  output=$("$FM_TASKS_AXI_BIN" update --help 2>&1) || return 1
   printf '%s\n' "$output" | grep -F -- '--archive-body' >/dev/null
 }
 
 fm_tasks_axi_mv_has_multi_id() {
   local output
-  command -v tasks-axi >/dev/null 2>&1 || return 1
-  output=$(tasks-axi mv --help 2>&1) || return 1
+  [ -n "$FM_TASKS_AXI_BIN" ] || return 1
+  output=$("$FM_TASKS_AXI_BIN" mv --help 2>&1) || return 1
   printf '%s\n' "$output" | grep -F -- '[<id>...]' >/dev/null
 }
 

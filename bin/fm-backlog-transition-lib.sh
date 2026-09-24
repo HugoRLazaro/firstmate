@@ -344,14 +344,14 @@ fm_tasks_axi_timeout_expired() {  # <status>
 }
 
 fm_tasks_axi() {
-  local bound=${FM_TASKS_AXI_TIMEOUT:-}
+  local bound=${FM_TASKS_AXI_TIMEOUT:-} axi_bin=${FM_TASKS_AXI_BIN:-tasks-axi}
   if [ -z "$bound" ]; then
-    exec tasks-axi "$@"
+    exec "$axi_bin" "$@"
   fi
   if command -v timeout >/dev/null 2>&1; then
-    exec timeout -k "$bound" "$bound" tasks-axi "$@"
+    exec timeout -k "$bound" "$bound" "$axi_bin" "$@"
   elif command -v gtimeout >/dev/null 2>&1; then
-    exec gtimeout -k "$bound" "$bound" tasks-axi "$@"
+    exec gtimeout -k "$bound" "$bound" "$axi_bin" "$@"
   elif command -v perl >/dev/null 2>&1; then
     # Fork, run tasks-axi in the child, and poll waitpid(WNOHANG) until the
     # child exits or the bound expires: the same contract as
@@ -387,7 +387,7 @@ fm_tasks_axi() {
         select undef, undef, undef, $step;
         $elapsed += $step;
       }
-    ' -- "$bound" tasks-axi "$@"
+    ' -- "$bound" "$axi_bin" "$@"
   fi
   printf 'fm_tasks_axi: cannot bound tasks-axi within %ss: none of timeout, gtimeout, or perl is available\n' "$bound" >&2
   exit 127
@@ -438,8 +438,8 @@ fm_backlog_row_show() {  # <resolved-data-dir> <id> [flag...]
     set -- "$@" --file "$FM_BACKLOG_AXI_FILE"
   fi
   # shellcheck disable=SC2016  # Expansion is deliberately deferred to the child shell.
-  out=$(fm_run_timed "$secs" bash -c 'cd "$1" 2>/dev/null || exit 1; shift; exec tasks-axi show "$@"' \
-    _ "$FM_BACKLOG_AXI_ROOT" "$id" "$@" 2>&1)
+  out=$(fm_run_timed "$secs" bash -c 'cd "$1" 2>/dev/null || exit 1; bin=$2; shift 2; exec "$bin" show "$@"' \
+    _ "$FM_BACKLOG_AXI_ROOT" "${FM_TASKS_AXI_BIN:-tasks-axi}" "$id" "$@" 2>&1)
   status=$?
   # A backend that wrote a header or a progress line before wedging leaves that
   # fragment as the first output line, and every caller reads the first line as

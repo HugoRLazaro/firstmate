@@ -128,6 +128,7 @@ On the default markdown adapter, tasks-axi and manual edits produce the same `##
 The tracked `.tasks.toml` paths resolve against the directory tasks-axi runs in, not `FM_HOME`, so a bare `tasks-axi` run from the code root addresses the code root's `data/` whenever the home lives elsewhere.
 tasks-axi writes by renaming a temp file over its target, which replaces a symlink with a regular file, so linking the code-root copy into the home forks the queue on the first such write rather than keeping the two in step.
 Every routine firstmate backlog command therefore runs through [`bin/fm-tasks-axi.sh`](../bin/fm-tasks-axi.sh), which addresses this home's backlog and archive from any working directory exactly as lifecycle transitions do, and bootstrap reports a code-root `data/backlog.md` or `data/done-archive.md` that is not this home's own file as a `BACKLOG_RECONCILE: code-root ...` line even in a read-only session.
+Backend binary selection prefers a native Linux `tasks-axi` over any Windows-side copy under `/mnt/` whenever both exist, because a backlog read across the WSL/Windows boundary costs about 17s against 0.7s for the native build and bootstrap bounds each reconcile read at 10s; an executable `TASKS_AXI_BIN` wins over both, and a home with no native build keeps its existing PATH behavior ([`bin/fm-tasks-axi-lib.sh`](../bin/fm-tasks-axi-lib.sh) owns the resolution order).
 
 ## Runtime backend (config/backend / FM_BACKEND)
 
@@ -1051,6 +1052,7 @@ FM_BOOTSTRAP_DETECT_ONLY=0   # internal/read-only session-start mode: skip boots
 FM_BOOTSTRAP_NETWORK=all   # internal session-start phase split: all, skip (local steps only), or only (network steps only); see bin/fm-bootstrap.sh
 FM_STARTUP_NETWORK_TIMEOUT=120   # seconds bounding the deferred inactive-outcome scan plus network checks; hitting it prints an actionable NETWORK_CHECKS line
 FM_TASKS_AXI_COMPATIBLE=   # internal one-hop handoff of an already-computed tasks-axi compatibility verdict (0 or 1); consumed when bin/fm-tasks-axi-lib.sh is sourced
+TASKS_AXI_BIN=          # optional explicit tasks-axi binary for every firstmate backlog call; wins only when it names an executable file (bin/fm-tasks-axi-lib.sh owns the native-versus-Windows preference)
 FM_GUARD_READ_ONLY=0    # internal/read-only guard mode: keep alarms but suppress drain, supervision repair, and checkout repair commands
 FM_GUARD_CONTINUE_LINE='This is a supervision warning only; the guarded operation WILL still run.'   # banner continuation line; fm-send.sh overrides it to name the requested message specifically
 FM_POLL=15              # seconds between watcher poll cycles
