@@ -129,10 +129,24 @@ FM_TASKS_AXI_BIN=$(fm_tasks_axi_bin) || {
   FM_TASKS_AXI_BIN=
 }
 
+# Print the binary a compatibility probe should run: the backend binary the
+# resolver chose at source time, or whatever PATH resolves right now when it
+# chose none. The dynamic fallback matters after a --fix install: resolution ran
+# once at source time, when no binary existed, and the wrapper created later is
+# deliberately not in FM_TASKS_AXI_BIN.
+fm_tasks_axi_probe_bin() {
+  if [ -n "$FM_TASKS_AXI_BIN" ]; then
+    printf '%s\n' "$FM_TASKS_AXI_BIN"
+    return 0
+  fi
+  command -v tasks-axi 2>/dev/null
+}
+
 fm_tasks_axi_version_parts() {
-  local output
-  [ -n "$FM_TASKS_AXI_BIN" ] || return 1
-  output=$("$FM_TASKS_AXI_BIN" --version 2>/dev/null) || return 1
+  local output bin
+  bin=$(fm_tasks_axi_probe_bin) || return 1
+  [ -n "$bin" ] || return 1
+  output=$("$bin" --version 2>/dev/null) || return 1
   printf '%s\n' "$output" |
     sed -n 's/.*\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2 \3/p' |
     head -1
@@ -172,16 +186,18 @@ fm_tasks_axi_compatible_probe() {
 }
 
 fm_tasks_axi_update_has_archive_body() {
-  local output
-  [ -n "$FM_TASKS_AXI_BIN" ] || return 1
-  output=$("$FM_TASKS_AXI_BIN" update --help 2>&1) || return 1
+  local output bin
+  bin=$(fm_tasks_axi_probe_bin) || return 1
+  [ -n "$bin" ] || return 1
+  output=$("$bin" update --help 2>&1) || return 1
   printf '%s\n' "$output" | grep -F -- '--archive-body' >/dev/null
 }
 
 fm_tasks_axi_mv_has_multi_id() {
-  local output
-  [ -n "$FM_TASKS_AXI_BIN" ] || return 1
-  output=$("$FM_TASKS_AXI_BIN" mv --help 2>&1) || return 1
+  local output bin
+  bin=$(fm_tasks_axi_probe_bin) || return 1
+  [ -n "$bin" ] || return 1
+  output=$("$bin" mv --help 2>&1) || return 1
   printf '%s\n' "$output" | grep -F -- '[<id>...]' >/dev/null
 }
 
