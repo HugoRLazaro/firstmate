@@ -1,0 +1,12 @@
+# Per-read cost of the two real tasks-axi binaries on this WSL host
+# load reproduced as in the report (20 vitest workers -> here 16 CPU spinners on 20 vCPU)
+
+load average at measurement: 2.33 7.54 12.29
+
+== Windows-side binary: /mnt/c/Users/Hugo/AppData/Roaming/npm/tasks-axi show demo-1
+real	0m17.082s
+== Native Linux binary: /home/hugorl/.npm-global/bin/tasks-axi show demo-1
+real	0m0.449s
+
+Bootstrap bounds each reconcile read at 10s (FM_BACKLOG_ROW_TIMEOUT_SECS), so the Windows-side
+binary exceeds the bound on every item while the native one stays around half a second.

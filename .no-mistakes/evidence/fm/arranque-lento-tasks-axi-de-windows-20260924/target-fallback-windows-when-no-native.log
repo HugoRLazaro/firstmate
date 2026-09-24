@@ -1,0 +1,9 @@
+count: 4
+tasks[4]{id,state,kind,repo,title}:
+  demo-4,in_flight,task,alpha,demo task 4
+  demo-3,in_flight,task,alpha,demo task 3
+  demo-2,in_flight,task,alpha,demo task 2
+  demo-1,in_flight,task,alpha,demo task 1
+help[2]:
+  - Run `tasks-axi show <id>` for full notes on a task
+  - Run `tasks-axi ready` to see unblocked queued work

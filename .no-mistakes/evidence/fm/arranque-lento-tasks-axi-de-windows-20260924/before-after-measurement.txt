@@ -1,0 +1,22 @@
+# Before/after measurement - same command on both trees
+# machine: WSL2 6.18.33.2-microsoft-standard-WSL2; captain PATH first entry: /mnt/c/Users/Hugo/AppData/Roaming/npm (Windows-side npm shim)
+# native Linux binary present off-PATH at /home/hugorl/.npm-global/bin/tasks-axi (0.2.5)
+# command: bin/fm-tasks-axi.sh list   (FM_HOME=fixture home, HOME=/home/hugorl)
+# observation: a PATH-first 'node' wrapper logs which tasks-axi JS implementation ran
+
+==================================================================
+== BASE(commit de0188be)
+== tree: /tmp/fm-base
+==================================================================
+run 1: rc=0  wall=1.768s  tasks-axi implementation executed=/mnt/c/Users/Hugo/AppData/Roaming/npm/node_modules/tasks-axi/dist/bin/tasks-axi.js
+run 2: rc=0  wall=1.519s  tasks-axi implementation executed=/mnt/c/Users/Hugo/AppData/Roaming/npm/node_modules/tasks-axi/dist/bin/tasks-axi.js
+run 3: rc=0  wall=1.356s  tasks-axi implementation executed=/mnt/c/Users/Hugo/AppData/Roaming/npm/node_modules/tasks-axi/dist/bin/tasks-axi.js
+
+==================================================================
+== TARGET(commit d8b6c901)
+== tree: /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AKVVZV9QX9X22S2NX62C85
+==================================================================
+run 1: rc=0  wall=0.145s  tasks-axi implementation executed=/home/hugorl/.npm-global/bin/tasks-axi
+run 2: rc=0  wall=0.137s  tasks-axi implementation executed=/home/hugorl/.npm-global/bin/tasks-axi
+run 3: rc=0  wall=0.133s  tasks-axi implementation executed=/home/hugorl/.npm-global/bin/tasks-axi
+

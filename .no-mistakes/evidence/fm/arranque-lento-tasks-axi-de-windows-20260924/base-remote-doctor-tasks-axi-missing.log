@@ -1,0 +1,32 @@
+mode=check
+path=/home/hugorl/.nvm/versions/node/v24.20.0/bin:/usr/bin:/bin
+entrypoint=no
+note: not launched through the fixed remote entrypoint; the reported PATH is this caller environment.
+platform=linux
+required git=/usr/bin/git
+required jq=MISSING
+required herdr=MISSING
+required tasks-axi=MISSING
+required treehouse=MISSING
+required harness=pi:/home/hugorl/.nvm/versions/node/v24.20.0/bin/pi
+optional tmux=/usr/bin/tmux
+optional no-mistakes=absent
+optional gh=absent
+check herdr=human: the herdr CLI does not resolve on the remote runtime PATH
+check gui-session=skip: no Aqua login session applies on linux
+check remote-job-worker=human: the configured Firstmate code root has no safe remote job worker
+check remote-job-worker-loaded=skip: no worker executable is available
+check remote-job-probe=skip: no worker executable is available
+check launchagent=skip: launch agents apply only on darwin
+check launchagent-scope=skip: launch agents apply only on darwin
+check launchagent-loaded=skip: launch agents apply only on darwin
+check herdr-server=human: herdr server status cannot be read without both herdr and jq on the runtime PATH
+check entrypoint-link=fixable: no entrypoint symlink at /home/hugorl/.local/bin/fm-remote-entrypoint.sh
+action: herdr: install herdr from https://herdr.dev on that account, or add a ~/.local/bin wrapper for it; a remote second mate always runs on the Herdr backend
+action: remote-job-worker: update the remote Firstmate checkout, then rerun this command with --fix
+action: herdr-server: install the missing tool reported above, then rerun this command
+action: entrypoint-link: rerun this command with --fix to create it
+error: required tools do not resolve on the remote runtime PATH: jq herdr tasks-axi treehouse
+fix: install each one where it resolves on the path reported above, or put a wrapper script for it in /home/hugorl/.local/bin, which is always on that PATH.
+fix: tools in an unselected nvm version or outside the discovered asdf or mise paths need an absolute wrapper; see docs/remote-secondmates.md for the wrapper recipe.
+error: this host is not ready for a remote second mate; unresolved: herdr remote-job-worker herdr-server entrypoint-link

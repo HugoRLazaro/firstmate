@@ -1,0 +1,18 @@
+/home/hugorl/.npm-global/bin/tasks-axi --version
+/home/hugorl/.npm-global/bin/tasks-axi update --help
+/home/hugorl/.npm-global/bin/tasks-axi mv --help
+/home/hugorl/.npm-global/bin/tasks-axi show demo-1 --file /tmp/fm-live/home/data/backlog.md
+/home/hugorl/.npm-global/bin/tasks-axi start demo-1 --file /tmp/fm-live/home/data/backlog.md
+/home/hugorl/.npm-global/bin/tasks-axi show demo-2 --file /tmp/fm-live/home/data/backlog.md
+/home/hugorl/.npm-global/bin/tasks-axi start demo-2 --file /tmp/fm-live/home/data/backlog.md
+/home/hugorl/.npm-global/bin/tasks-axi show demo-3 --file /tmp/fm-live/home/data/backlog.md
+/home/hugorl/.npm-global/bin/tasks-axi start demo-3 --file /tmp/fm-live/home/data/backlog.md
+/home/hugorl/.npm-global/bin/tasks-axi show demo-4 --file /tmp/fm-live/home/data/backlog.md
+/home/hugorl/.npm-global/bin/tasks-axi start demo-4 --file /tmp/fm-live/home/data/backlog.md
+/tmp/fm-live/native-tools/gh-axi --version
+/tmp/fm-live/native-tools/lavish-axi --version
+/tmp/fm-live/native-tools/quota-axi --version
+/home/hugorl/.npm-global/bin/tasks-axi list --file /tmp/fm-live/home/data/backlog.md --state in_flight --fields blocked_by,hold_kind,hold_reason
+/home/hugorl/.npm-global/bin/tasks-axi list --file /tmp/fm-live/home/data/backlog.md --state held --fields blocked_by,hold_kind,hold_reason
+/home/hugorl/.npm-global/bin/tasks-axi list --file /tmp/fm-live/home/data/backlog.md --state queued --blocked --fields blocked_by,hold_kind,hold_reason
+/home/hugorl/.npm-global/bin/tasks-axi ready --file /tmp/fm-live/home/data/backlog.md

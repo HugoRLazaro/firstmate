@@ -1,0 +1,4 @@
+handed off 1 item(s) to design: routed-item
+  into /tmp/fm-live/handoff-sub/data/backlog.md
+error: no-mistakes gate agent must not drive the fleet (NO_MISTAKES_GATE set)
+error: backlog delivery to secondmate design succeeded, but its receiver wake failed; retry a tracked remote wake with --resume-pending or a later new handoff, and retry a local wake by rerunning its handoff

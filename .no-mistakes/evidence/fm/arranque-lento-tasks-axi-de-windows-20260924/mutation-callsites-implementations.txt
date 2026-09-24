@@ -1,0 +1,15 @@
+# Mutation call sites: which tasks-axi implementation each real mutation ran
+# fixture: PATH=<Windows npm first>:<native-tools>:... HOME=/home/hugorl, native tasks-axi off-PATH
+
+## fm-backlog-receive.sh (delegated mv)
+received: mate-a moved=1 already=0
+tasks-axi calls: 4
+  native: 4  windows: 0
+
+## fm-backlog-handoff.sh (delegated mv; terminal backend is a fixture, the doorbell is refused by the gate afterwards)
+handed off 1 item(s) to design: routed-item
+  into /tmp/fm-live/handoff-sub/data/backlog.md
+error: no-mistakes gate agent must not drive the fleet (NO_MISTAKES_GATE set)
+tasks-axi calls: 4
+  native: 4  windows: 0
+item in destination backlog: 1

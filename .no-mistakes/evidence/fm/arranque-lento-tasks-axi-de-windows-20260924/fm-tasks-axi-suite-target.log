@@ -1,0 +1,11 @@
+ok - resolver prefers a native tasks-axi over a Windows-mount copy regardless of PATH order
+ok - resolver finds a native tasks-axi in ~/.npm-global/bin when PATH only has the Windows mount
+ok - resolver falls back to the Windows-mount binary when no native binary exists
+ok - an explicit TASKS_AXI_BIN wins and a broken pin refuses loudly
+ok - a relative TASKS_AXI_BIN is resolved to the absolute file it checked
+ok - an unusable TASKS_AXI_BIN stops with the pin named instead of degrading
+ok - per-task backlog reads run the resolved binary
+ok - bootstrap reports a regular code-root backlog and stays silent for a link into the home or no copy
+ok - bootstrap reports a code-root backlog linked elsewhere and a forked archive
+ok - bootstrap stays silent when the code root is the home
+skip: tasks-axi not found; home-addressing cases not run

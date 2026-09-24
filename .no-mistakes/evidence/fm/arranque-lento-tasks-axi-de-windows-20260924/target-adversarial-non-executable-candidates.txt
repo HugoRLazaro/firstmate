@@ -1,0 +1,17 @@
+# Adversarial: non-executable candidates must be skipped
+
+## 1. $HOME/.npm-global/bin/tasks-axi is a directory
+command: PATH=<Windows npm first>:... HOME=/tmp/fm-live/dirhome bin/fm-tasks-axi.sh list
+exit: 0
+count: 4
+tasks[4]{id,state,kind,repo,title}:
+implementation executed: /mnt/c/Users/Hugo/AppData/Roaming/npm/node_modules/tasks-axi/dist/bin/tasks-axi.js
+
+## 2. a PATH entry before the Windows copy contains a tasks-axi directory
+command: PATH=<nodelog>:<fakedirbin>:/mnt/c/.../npm:... HOME=/tmp/fm-live/nohome bin/fm-tasks-axi.sh list
+exit: 0
+count: 4
+tasks[4]{id,state,kind,repo,title}:
+implementation executed: /mnt/c/Users/Hugo/AppData/Roaming/npm/node_modules/tasks-axi/dist/bin/tasks-axi.js
+
+Both skipped the directory and fell back to a real executable; no directory was ever exec'd.
