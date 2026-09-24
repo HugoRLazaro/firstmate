@@ -4011,7 +4011,10 @@ test_pool_prune_real_treehouse_reclaims_only_the_returned_copy() {
     || rm -rf "$case_dir/wt"
   git -C "$case_dir/project" branch -D fm/task-x1 >/dev/null 2>&1 || true
   pool="$case_dir/treehouse-root"
-  mkdir -p "$pool"
+  # teardown resolves the shared Treehouse project lock under the home root's
+  # state dir, so this case needs the same home shape a real firstmate home has.
+  # Without it a fresh checkout (no state/ at $ROOT) refuses the close.
+  mkdir -p "$pool" "$case_dir/home/state"
   wt=$(cd "$case_dir/project" && TREEHOUSE_ROOT="$pool" treehouse get --lease --no-fetch 2>/dev/null) \
     || fail "real-pool-prune: treehouse could not hand out a slot"
   dirty_wt=$(cd "$case_dir/project" && TREEHOUSE_ROOT="$pool" treehouse get --lease --no-fetch 2>/dev/null) \
@@ -4035,6 +4038,7 @@ test_pool_prune_real_treehouse_reclaims_only_the_returned_copy() {
     "spawn_gen=teardown-test-task-x1"
 
   set +e
+  FM_HOME="$case_dir/home" \
   FM_ROOT_OVERRIDE="$ROOT" \
   FM_STATE_OVERRIDE="$case_dir/state" \
   FM_DATA_OVERRIDE="$case_dir/data" \
