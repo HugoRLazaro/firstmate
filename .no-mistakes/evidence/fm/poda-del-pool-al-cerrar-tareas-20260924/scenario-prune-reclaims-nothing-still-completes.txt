@@ -1,0 +1,18 @@
+== case: /tmp/fm-pool-prune-live/prune-reclaims-nothing
+== slot1(task-x1, landed, but its slot dir is unwritable so treehouse cannot remove it)
+== teardown exit: 0
+== stdout
+🌳 Worktree returned to pool.
+teardown: pool prune for the worktree pool: no reclaimable copies
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /tmp/fm-pool-prune-live/prune-reclaims-nothing/pool/.treehouse/project-9b1109/1/project)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at /tmp/fm-pool-prune-live/prune-reclaims-nothing/data/backlog.md). Update /tmp/fm-pool-prune-live/prune-reclaims-nothing/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+== stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 3s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-turnend-guard.ts -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+== slot1 exists: yes
+== task-x1 record exists: no

@@ -1,0 +1,45 @@
+== case: /tmp/fm-pool-prune-live/two-landed-tasks
+== pool: /tmp/fm-pool-prune-live/two-landed-tasks/pool (real treehouse v2.3.0)
+== slot1(task-x1, 64MiB landed): /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/1/project
+== slot2(task-x2, 32MiB landed): /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/2/project
+== slot3(bystander, leased+dirty): /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/3/project
+
+== before
+161M	/tmp/fm-pool-prune-live/two-landed-tasks/pool
+1     leased       /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/1/project
+2     leased       /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/2/project
+3     leased       /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/3/project
+== teardown task-x1 (exit 0) stdout
+🌳 Worktree returned to pool.
+teardown: pool prune for the worktree pool freed 96 MiB (1 copy)
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/1/project; pool prune freed 96 MiB (1 copy))
+Backlog: task-x1 just finished (this home keeps no markdown backlog at /tmp/fm-pool-prune-live/two-landed-tasks/data/backlog.md). Update /tmp/fm-pool-prune-live/two-landed-tasks/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+== teardown task-x1 stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  2 task(s) in flight, but no live watcher process holds this home lock (last beat: 12s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-turnend-guard.ts -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+== after task-x1
+97M	/tmp/fm-pool-prune-live/two-landed-tasks/pool
+2     leased       /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/2/project
+3     leased       /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/3/project
+== teardown task-x2 (exit 0) stdout
+🌳 Worktree returned to pool.
+teardown: pool prune for the worktree pool freed 96 MiB (1 copy)
+teardown task-x2 complete (window firstmate:fm-task-x2, worktree /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/2/project; pool prune freed 96 MiB (1 copy))
+Backlog: task-x2 just finished (this home keeps no markdown backlog at /tmp/fm-pool-prune-live/two-landed-tasks/data/backlog.md). Update /tmp/fm-pool-prune-live/two-landed-tasks/data/backlog.md - move task-x2 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+== teardown task-x2 stderr
+WARNING: watcher still down (same stale episode; last beat: 15s ago, grace 300s) - full banner already printed this episode.
+== after task-x2
+36K	/tmp/fm-pool-prune-live/two-landed-tasks/pool
+3     leased       /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/3/project
+
+== slot1 exists: no
+== slot2 exists: no
+== slot3 exists: yes
+== slot3 scratch intact: yes
+== task-x1 record exists: no
+== task-x2 record exists: no

@@ -1,0 +1,25 @@
+== case: /tmp/fm-pool-prune-legacy-line/legacy-line (real treehouse v2.3.0)
+== legacy record has no spawn_gen; endpoint stubbed agent-less (missing)
+== slot (task-x1, 16MiB landed): /tmp/fm-pool-prune-legacy-line/legacy-line/pool/.treehouse/project-f29bbe/1/project
+== bystander (leased+dirty): /tmp/fm-pool-prune-legacy-line/legacy-line/pool/.treehouse/project-f29bbe/2/project
+== teardown --legacy-record exit: 0
+== pool before: 17M / after: 36K
+== stdout
+🌳 Worktree returned to pool.
+teardown: pool prune for the worktree pool freed 16 MiB (1 copy)
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /tmp/fm-pool-prune-legacy-line/legacy-line/pool/.treehouse/project-f29bbe/1/project, legacy record accepted without spawn_gen: endpoint missing, incarnation legacy-20260924T220212Z-285061; pool prune freed 16 MiB (1 copy))
+Backlog: task-x1 is closed in /tmp/fm-pool-prune-legacy-line/legacy-line/data/backlog.md. Run bin/fm-tasks-axi.sh ready for dependency-cleared candidates, check date gates, and dispatch only work whose blockers are gone and date is due.
+== stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 1s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-turnend-guard.ts -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+== slot exists: no
+== bystander exists: yes; scratch intact: yes
+== treehouse status
+2     leased       /tmp/fm-pool-prune-legacy-line/legacy-line/pool/.treehouse/project-f29bbe/2/project
+== completion line:
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /tmp/fm-pool-prune-legacy-line/legacy-line/pool/.treehouse/project-f29bbe/1/project, legacy record accepted without spawn_gen: endpoint missing, incarnation legacy-20260924T220212Z-285061; pool prune freed 16 MiB (1 copy))

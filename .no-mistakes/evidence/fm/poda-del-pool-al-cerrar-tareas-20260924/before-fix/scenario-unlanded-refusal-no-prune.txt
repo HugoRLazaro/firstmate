@@ -1,0 +1,21 @@
+== case: /tmp/fm-pool-prune-live/unlanded-refusal
+== slot1(task-x1, unlanded unpushed commit): /tmp/fm-pool-prune-live/unlanded-refusal/pool/.treehouse/project-1f68b9/1/project
+== teardown exit: 1
+== stdout
+== stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 0s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-turnend-guard.ts -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: local-only worktree /tmp/fm-pool-prune-live/unlanded-refusal/pool/.treehouse/project-1f68b9/1/project has work not yet merged into main and not on any remote.
+commits not yet on main:
+59da6aa unlanded work
+Merge the branch into local main first (bin/fm-merge-local.sh after the captain approves), or push to a fork/remote, or get the captain's explicit OK to discard, then --force.
+== slot1 exists: yes
+== slot1 still leased:
+1     leased       /tmp/fm-pool-prune-live/unlanded-refusal/pool/.treehouse/project-1f68b9/1/project
+2     leased       /tmp/fm-pool-prune-live/unlanded-refusal/pool/.treehouse/project-1f68b9/2/project
+== task-x1 record exists: yes

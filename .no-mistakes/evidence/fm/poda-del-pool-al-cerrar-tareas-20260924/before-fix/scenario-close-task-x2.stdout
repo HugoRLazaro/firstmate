@@ -1,0 +1,3 @@
+🌳 Worktree returned to pool.
+teardown task-x2 complete (window firstmate:fm-task-x2, worktree /tmp/fm-pool-prune-live/two-landed-tasks/pool/.treehouse/project-8d5d7d/2/project)
+Backlog: task-x2 just finished (this home keeps no markdown backlog at /tmp/fm-pool-prune-live/two-landed-tasks/data/backlog.md). Update /tmp/fm-pool-prune-live/two-landed-tasks/data/backlog.md - move task-x2 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.

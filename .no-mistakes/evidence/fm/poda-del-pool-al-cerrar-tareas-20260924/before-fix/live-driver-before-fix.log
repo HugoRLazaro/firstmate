@@ -1,0 +1,24 @@
+=== live pool-prune drive against treehouse v2.3.0
+=== evidence dir: /home/hugorl/.no-mistakes/evidence/01M3AMHC7C6SMB3X55CHE4TJS3/before-fix
+FAIL - no reclaimed amount reported
+FAIL - the accumulated copies were not reported as 3 copies
+FAIL - the closed task's copy is still in the pool
+FAIL - a previously returned stale copy is still in the pool
+FAIL - a previously returned stale copy is still in the pool
+ok   - one close reclaimed the accumulated backlog (3 stale copies) and left the in-use copy
+FAIL - task-x1 close did not report a freed pool copy
+FAIL - task-x2 close did not report a freed pool copy
+FAIL - task-x1 completion line lacks the freed amount
+FAIL - task-x2 completion line lacks the freed amount
+FAIL - task-x1's returned copy is still in the pool
+FAIL - task-x2's returned copy is still in the pool
+FAIL - task-x1's returned copy is still listed in the pool
+FAIL - task-x2's returned copy is still listed in the pool
+FAIL - the pool did not shrink after two closes (before=163900KiB after=196668KiB)
+ok   - two landed closes each pruned their returned copy and reported the freed disk; the in-use copy survived
+ok   - an unlanded close refused and pruned nothing
+ok   - a slot claimed by another task was left alone and no prune ran
+FAIL - the non-reclaiming prune was not reported
+ok   - a real prune that reclaimed nothing was reported honestly and the close still completed
+
+SCENARIO FAILURES PRESENT

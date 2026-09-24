@@ -1,0 +1,15 @@
+FM_TEST_BEGIN 2026-09-24T21:41:38Z tests/.tmp-pool-prune-focused.test.sh family=unclassified expected_gate_skip=none
+ok - the accepted return's copy is pruned and the reclaimed size and count are reported
+ok - the pool is pruned only after a return the pool accepted
+ok - a failing pool prune warns and the teardown still completes
+ok - a missing treehouse is reported and the teardown still completes
+---DEBUG stdout ---
+---DEBUG stderr ---
+REFUSED: cannot resolve the shared Treehouse project lock for /tmp/fm-teardown-tests.nJCwre/real-pool-prune/project; nothing was changed
+---DEBUG meta exists: yes
+---DEBUG ROOT=/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3 state dir: no
+not ok - real-pool-prune: teardown should succeed: expected exit 0, got 1
+FM_TEST_END 2026-09-24T21:41:45Z tests/.tmp-pool-prune-focused.test.sh exit=1 duration_ms=6441 gate_skip=false
+FM_TEST_SUMMARY total=1 failed=1 skipped_gate=0 duration_ms=6508
+FM_TEST_SUMMARY_FAMILY family=unclassified count=1 duration_ms=6441 failed=1
+FM_TEST_SLOWEST rank=1 script=tests/.tmp-pool-prune-focused.test.sh duration_ms=6441

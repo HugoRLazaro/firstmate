@@ -1,0 +1,31 @@
+== case: /tmp/fm-pool-prune-live/accumulated-backlog
+== slot1(task-x1, landed, closed now): /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/1/project
+== slot2/slot3(landed copies returned by earlier closes, still in the pool):
+   /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/2/project
+   /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/3/project
+== slot4(in use, leased+dirty): /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/4/project
+== teardown exit: 0
+== before
+113M	/tmp/fm-pool-prune-live/accumulated-backlog/pool
+1     leased       /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/1/project
+2     available    /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/2/project
+3     available    /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/3/project
+4     leased       /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/4/project
+== stdout
+🌳 Worktree returned to pool.
+teardown: pool prune for the worktree pool freed 144 MiB (3 copies)
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/1/project; pool prune freed 144 MiB (3 copies))
+Backlog: task-x1 just finished (this home keeps no markdown backlog at /tmp/fm-pool-prune-live/accumulated-backlog/data/backlog.md). Update /tmp/fm-pool-prune-live/accumulated-backlog/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+== stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no live watcher process holds this home lock (last beat: 8s ago).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-turnend-guard.ts -e /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3AMHC7C6SMB3X55CHE4TJS3/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+== after
+36K	/tmp/fm-pool-prune-live/accumulated-backlog/pool
+4     leased       /tmp/fm-pool-prune-live/accumulated-backlog/pool/.treehouse/project-a91c11/4/project
+== slot1/2/3 exist: no/no/no
+== slot4 exists: yes, scratch intact: yes
