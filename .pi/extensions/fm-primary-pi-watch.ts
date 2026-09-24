@@ -10,6 +10,10 @@
 // state/extensions/pi-primary-watch/session-replacement-actionable.json.
 // Terminal quit leaves the final generation stopped so late callbacks cannot rearm.
 // Stale callbacks from a prior generation are no-ops against the active replacement.
+// The active generation also publishes state/.pi-watch-extension-arm, a durable
+// declaration of its armed child or scheduled retry that bin/fm-wake-lib.sh reads
+// to classify a fresh-beacon relay window; docs/watcher-continuity.md owns that
+// classification contract.
 //
 // Delivery versus consumption (stated once here):
 // A main follow-up is delivered once Pi accepts it (sendUserMessage resolves).
@@ -145,6 +149,7 @@ const state = process.env.FM_STATE_OVERRIDE || `${fmHome}/state`;
 const config = process.env.FM_CONFIG_OVERRIDE || `${fmHome}/config`;
 const armScript = `${fmRoot}/bin/fm-watch-arm.sh`;
 const marker = `${state}/.pi-watch-extension-loaded`;
+const armStateMarker = `${state}/.pi-watch-extension-arm`;
 const handoffDir = `${state}/extensions/pi-primary-watch`;
 const actionableHandoff = `${handoffDir}/session-replacement-actionable.json`;
 const extensionVersion = `sha256:${createHash("sha256").update(readFileSync(extensionFile)).digest("hex")}`;
@@ -245,6 +250,49 @@ function markLoaded(): void {
   if (lockOwnership() === "other") return;
   mkdirSync(state, { recursive: true });
   writeFileSync(marker, `${extensionVersion}\n${process.pid}\n`);
+}
+
+// Durable declaration of the active generation's armed child or scheduled
+// retry, read by bin/fm-wake-lib.sh's relay classification. It is rewritten on
+// every arm-child, retry, and restore transition so the pull guard can tell a
+// relay window from a broken chain without inferring either from the session
+// lock alone.
+function publishArmState(generation: SessionGeneration, phase: "active" | "handoff" = "active"): void {
+  if (lockOwnership() === "other") return;
+  mkdirSync(state, { recursive: true });
+  const pid = generation.child?.pid;
+  const child = pid === undefined ? "child=none" : `child=${pid}`;
+  const retry = generation.retryTimer !== null || generation.restoring ? 1 : 0;
+  const temporary = `${armStateMarker}.tmp-${process.pid}-${generation.id}`;
+  writeFileSync(
+    temporary,
+    `${extensionVersion}\n${process.pid}\ngeneration=${generation.id} phase=${phase}\n${child} retry=${retry}\n`,
+    { mode: 0o600 },
+  );
+  renameSync(temporary, armStateMarker);
+}
+
+function retireArmState(generation: SessionGeneration, replacement: boolean): void {
+  let lines: string[];
+  try {
+    lines = readFileSync(armStateMarker, "utf8").trimEnd().split(/\r?\n/);
+  } catch {
+    return;
+  }
+  if (
+    lines[0] !== extensionVersion ||
+    lines[1] !== String(process.pid) ||
+    lines[2] !== `generation=${generation.id} phase=active`
+  ) return;
+  if (replacement) {
+    publishArmState(generation, "handoff");
+    return;
+  }
+  try {
+    unlinkSync(armStateMarker);
+  } catch (error) {
+    if (nodeErrorCode(error) !== "ENOENT") throw error;
+  }
 }
 
 function actionableLine(output: string): string {
@@ -472,6 +520,7 @@ async function waitForGenerationChildClose(armChild: ChildProcess | null): Promi
 
 async function stopSessionGeneration(generation: SessionGeneration, replacement: boolean): Promise<void> {
   generation.replacement = replacement;
+  retireArmState(generation, replacement);
   let persistedTokens = "";
   try {
     if (replacement && generation.pendingActionables.length > 0) {
@@ -742,6 +791,7 @@ export default function (pi: ExtensionAPI) {
   async function processPendingActionables(owner: SessionGeneration): Promise<void> {
     if (!generationIsLive(owner) || owner.restoring || owner.pendingActionables.length === 0) return;
     owner.restoring = true;
+    publishArmState(owner);
     const attemptedCleanup = new Set<string>();
     try {
       while (generationIsLive(owner) && owner.pendingActionables.length > 0) {
@@ -831,6 +881,7 @@ export default function (pi: ExtensionAPI) {
     } finally {
       if (generationIsLive(owner)) {
         owner.restoring = false;
+        publishArmState(owner);
         if (owner.pendingActionables.some((pending) => pending.delivered)) schedulePendingCleanup(owner);
         // No bare arm is launched here. A generation without a child at this
         // point has either delivered a typed restoration failure after its
@@ -935,6 +986,7 @@ export default function (pi: ExtensionAPI) {
     }
     owner.retryFailures += 1;
     if (owner.retryFailures > retryLimit) {
+      publishArmState(owner);
       surfaceFailure(owner, `watcher: FAILED - Pi extension could not restore watcher continuity after ${retryLimit} retries\n${message}`);
       return;
     }
@@ -948,6 +1000,7 @@ export default function (pi: ExtensionAPI) {
     }, retryDelay(owner.retryFailures));
     timer.unref();
     owner.retryTimer = timer;
+    publishArmState(owner);
   }
 
   function startArm(owner: SessionGeneration, predecessorArmPid = ""): ArmResult {
@@ -961,6 +1014,7 @@ export default function (pi: ExtensionAPI) {
       };
     }
     markLoaded();
+    publishArmState(owner);
     if (owner.child) {
       return {
         ok: true,
@@ -988,6 +1042,7 @@ export default function (pi: ExtensionAPI) {
       stdio: ["ignore", "pipe", "pipe"],
     });
     owner.child = armChild;
+    publishArmState(owner);
     let stdout = "";
     let stderr = "";
     let settled = false;
