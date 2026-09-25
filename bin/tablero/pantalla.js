@@ -128,6 +128,7 @@ function pestanaActual() {
 
 function ponerPestana(nombre) {
   const chat = nombre === "chat";
+  const entrando = chat && pestanaActual() !== "chat";
   document.body.dataset.vista = chat ? "chat" : "tablero";
   document.getElementById("tabTablero").setAttribute("aria-selected", chat ? "false" : "true");
   document.getElementById("tabChat").setAttribute("aria-selected", chat ? "true" : "false");
@@ -135,9 +136,12 @@ function ponerPestana(nombre) {
   document.getElementById("panelChat").hidden = !chat;
   document.title = chat ? "Conversación - Tablero del trabajo" : "Tablero del trabajo";
   guardarPreferencias();
-  if (chat) {
-    chatInput.focus();
+  // Solo al entrar en la pestaña se empieza por el mensaje más reciente; a
+  // partir de ahí la posición la decide quien lee, no los refrescos.
+  if (entrando) {
     chatLog.scrollTop = chatLog.scrollHeight;
+    // En el móvil, enfocar el cuadro de texto abriría el teclado y taparía la conversación.
+    if (window.matchMedia("(pointer: fine)").matches) chatInput.focus({ preventScroll: true });
   }
 }
 
@@ -179,7 +183,6 @@ function pintar(datos) {
 
   subEl.textContent = datos.generado_texto ? "Actualizado el " + datos.generado_texto + "." : "";
   aviso(datos.aviso);
-  ponerPestana(pestanaActual());
 }
 
 function pintarColumna(col) {
@@ -563,7 +566,10 @@ async function cargarConversacion(urgente) {
 }
 
 function pintarConversacion() {
+  // Repintar vacía la lista un instante: se guarda dónde estaba quien lee para
+  // devolverle exactamente ahí, salvo que ya estuviera al final siguiendo lo nuevo.
   const pegadoAbajo = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 90;
+  const posicion = chatLog.scrollTop;
   chatLog.replaceChildren();
   if (conversacion.length === 0) {
     const vacio = el("p", "empty", "Todavía no hay nada hablado. Escribe abajo y firstmate lo recibe.");
@@ -592,7 +598,7 @@ function pintarConversacion() {
     ? "Firstmate tiene " + esperando + " mensaje" + (esperando > 1 ? "s" : "") + " tuyo" + (esperando > 1 ? "s" : "") + " por contestar. Intro envía."
     : "Intro envía. Mayúsculas e Intro, otra línea.";
 
-  if (pegadoAbajo) chatLog.scrollTop = chatLog.scrollHeight;
+  chatLog.scrollTop = pegadoAbajo ? chatLog.scrollHeight : posicion;
 }
 
 function burbuja(m) {
