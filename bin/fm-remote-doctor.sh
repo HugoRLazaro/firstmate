@@ -425,7 +425,11 @@ report_required_tools() {
   local tool resolved harness
   MISSING=()
   for tool in "${REQUIRED_TOOLS[@]}"; do
-    resolved=$(command -v "$tool" 2>/dev/null || true)
+    if [ "$tool" = tasks-axi ] && [ -n "$FM_TASKS_AXI_BIN" ]; then
+      resolved=$FM_TASKS_AXI_BIN
+    else
+      resolved=$(command -v "$tool" 2>/dev/null || true)
+    fi
     if [ -n "$resolved" ] && [ -x "$resolved" ]; then
       if [ "$tool" = tasks-axi ] && ! fm_tasks_axi_compatible; then
         printf 'required tasks-axi=MISSING (incompatible)\n'

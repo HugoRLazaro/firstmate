@@ -584,7 +584,12 @@ test_budget_exhaustion_keeps_prior_record() { # exhaust|hang
   wrap_forge "$home"
   mutate_record "$home" delivery '.records[0].checked_at="2026-09-15T08:00:00Z"'
   cp "$home/data/delivery/contributions.json" "$home/prior.json"
-  if [ "$mode" = exhaust ]; then /bin/date +%s > "$home/forge/clock"; fi
+  # Freeze the fake clock for both modes. On a real wall clock a loaded runner
+  # can spend the whole 1s budget between DEADLINE and the first forge call, so
+  # hang mode never reached its forge call. Exhaust advances this clock
+  # mid-observation from the fake gh; hang is bounded by the real 1s
+  # fm_run_timed timeout instead.
+  /bin/date +%s > "$home/forge/clock"
   printf '%s\n' "$mode" > "$home/forge/fault"
   out=$(with_home "$home" env FM_CONTRIBUTIONS_BUDGET=1 "$ROOT/bin/fm-contributions.sh" poll) \
     || fail "poll failed when its budget ran out ($mode)"

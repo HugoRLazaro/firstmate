@@ -1467,7 +1467,11 @@ detect_local_tools() {
       || missing_tool_diagnostic "$t"
   done
   for t in $COMMON_TOOLS; do
-    command -v "$t" >/dev/null || missing_tool_diagnostic "$t"
+    if [ "$t" = tasks-axi ]; then
+      [ -n "$FM_TASKS_AXI_BIN" ] || missing_tool_diagnostic "$t"
+    else
+      command -v "$t" >/dev/null || missing_tool_diagnostic "$t"
+    fi
   done
   # The treehouse lease-support upgrade check is only relevant when the resolved
   # backend actually requires treehouse (every backend except orca, which owns its
@@ -1488,7 +1492,7 @@ detect_local_tools() {
   if command -v quota-axi >/dev/null 2>&1 && ! fm_quota_axi_compatible; then
     echo "MISSING: quota-axi (install: $(install_cmd quota-axi))"
   fi
-  if command -v tasks-axi >/dev/null 2>&1 && ! fm_tasks_axi_compatible; then
+  if [ -n "$FM_TASKS_AXI_BIN" ] && ! fm_tasks_axi_compatible; then
     echo "MISSING: tasks-axi (install: $(install_cmd tasks-axi))"
   fi
 }

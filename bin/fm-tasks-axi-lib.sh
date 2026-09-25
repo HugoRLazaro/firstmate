@@ -41,6 +41,22 @@
 #     probe runs normally.
 # Both layers are bounded by process lifetime, so a tasks-axi install or upgrade
 # is picked up by the next process rather than being cached to disk.
+#
+# BACKEND BINARY. This library also owns which tasks-axi binary the whole home
+# runs. A native Linux build is preferred over any Windows-side copy under
+# /mnt/, because one read that crosses the WSL/Windows boundary costs about 17s
+# against 0.7s for the native binary; bin/fm-bootstrap.sh reconciles this home's
+# backlog with a 10s bound per read, so the slow binary trips every bound, the
+# phase consumes minutes, and the session-start digest truncates. Precedence is
+# an executable TASKS_AXI_BIN, then the first native candidate (PATH entries
+# outside the Windows mount, then ~/.npm-global/bin and ~/.local/bin), then the
+# first PATH entry including the Windows mount - so a home with no native build
+# keeps its previous behavior. A set TASKS_AXI_BIN that names no executable file
+# stops the sourcing process, naming the pin and its path, instead of falling
+# back to another binary; a usable pin resolves to an absolute path so the file
+# checked is the file consumers execute after their own working directory
+# changes. The resolver runs once at source time into FM_TASKS_AXI_BIN, which is
+# empty when no binary exists at all.
 
 FM_TASKS_AXI_MIN=0.2.4
 
@@ -51,10 +67,86 @@ case "$FM_TASKS_AXI_COMPATIBLE_MEMO" in
   *) FM_TASKS_AXI_COMPATIBLE_MEMO= ;;
 esac
 
+# Print the tasks-axi binary this home should run and return 0; return 1 and
+# print nothing when no usable binary exists. A set TASKS_AXI_BIN that names no
+# executable file prints its own diagnostic and returns 1, and a usable pin is
+# printed as an absolute path. The optional <foreign-prefix> defaults to /mnt
+# and exists so tests can fake the Windows mount without touching the real one.
+fm_tasks_axi_bin() {  # [<foreign-prefix>]
+  local foreign=${1:-/mnt}
+  local path_left=${PATH:-} entry candidate
+  if [ -n "${TASKS_AXI_BIN:-}" ]; then
+    if [ -x "$TASKS_AXI_BIN" ] && [ ! -d "$TASKS_AXI_BIN" ]; then
+      case "$TASKS_AXI_BIN" in
+        */*)
+          entry=${TASKS_AXI_BIN%/*}
+          [ -n "$entry" ] || entry=/
+          ;;
+        *) entry=. ;;
+      esac
+      if candidate=$(CDPATH='' cd -- "$entry" 2>/dev/null && pwd -P); then
+        printf '%s/%s\n' "${candidate%/}" "${TASKS_AXI_BIN##*/}"
+        return 0
+      fi
+    fi
+    printf 'fm-tasks-axi: TASKS_AXI_BIN names %s, which is not an executable file; refusing to resolve a different tasks-axi\n' "$TASKS_AXI_BIN" >&2
+    return 1
+  fi
+  while [ -n "$path_left" ]; do
+    case "$path_left" in
+      *:*) entry=${path_left%%:*}; path_left=${path_left#*:} ;;
+      *) entry=$path_left; path_left= ;;
+    esac
+    [ -n "$entry" ] || continue
+    case "$entry" in
+      "$foreign"|"$foreign"/*) continue ;;
+    esac
+    candidate=$entry/tasks-axi
+    if [ -x "$candidate" ] && [ ! -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  for entry in "${HOME:-}/.npm-global/bin" "${HOME:-}/.local/bin"; do
+    case "$entry" in
+      /.npm-global/bin|/.local/bin) continue ;;
+    esac
+    candidate=$entry/tasks-axi
+    if [ -x "$candidate" ] && [ ! -d "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  if candidate=$(command -v tasks-axi 2>/dev/null); then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+FM_TASKS_AXI_BIN=$(fm_tasks_axi_bin) || {
+  [ -z "${TASKS_AXI_BIN:-}" ] || exit 2
+  FM_TASKS_AXI_BIN=
+}
+
+# Print the binary a compatibility probe should run: the backend binary the
+# resolver chose at source time, or whatever PATH resolves right now when it
+# chose none. The dynamic fallback matters after a --fix install: resolution ran
+# once at source time, when no binary existed, and the wrapper created later is
+# deliberately not in FM_TASKS_AXI_BIN.
+fm_tasks_axi_probe_bin() {
+  if [ -n "$FM_TASKS_AXI_BIN" ]; then
+    printf '%s\n' "$FM_TASKS_AXI_BIN"
+    return 0
+  fi
+  command -v tasks-axi 2>/dev/null
+}
+
 fm_tasks_axi_version_parts() {
-  local output
-  command -v tasks-axi >/dev/null 2>&1 || return 1
-  output=$(tasks-axi --version 2>/dev/null) || return 1
+  local output bin
+  bin=$(fm_tasks_axi_probe_bin) || return 1
+  [ -n "$bin" ] || return 1
+  output=$("$bin" --version 2>/dev/null) || return 1
   printf '%s\n' "$output" |
     sed -n 's/.*\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2 \3/p' |
     head -1
@@ -94,16 +186,18 @@ fm_tasks_axi_compatible_probe() {
 }
 
 fm_tasks_axi_update_has_archive_body() {
-  local output
-  command -v tasks-axi >/dev/null 2>&1 || return 1
-  output=$(tasks-axi update --help 2>&1) || return 1
+  local output bin
+  bin=$(fm_tasks_axi_probe_bin) || return 1
+  [ -n "$bin" ] || return 1
+  output=$("$bin" update --help 2>&1) || return 1
   printf '%s\n' "$output" | grep -F -- '--archive-body' >/dev/null
 }
 
 fm_tasks_axi_mv_has_multi_id() {
-  local output
-  command -v tasks-axi >/dev/null 2>&1 || return 1
-  output=$(tasks-axi mv --help 2>&1) || return 1
+  local output bin
+  bin=$(fm_tasks_axi_probe_bin) || return 1
+  [ -n "$bin" ] || return 1
+  output=$("$bin" mv --help 2>&1) || return 1
   printf '%s\n' "$output" | grep -F -- '[<id>...]' >/dev/null
 }
 

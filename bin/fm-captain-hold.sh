@@ -344,15 +344,15 @@ tasks_axi() {
   backend=$(fm_tasks_axi_backend "$root") || return 2
   if [ "$backend" = markdown ]; then
     file=$(fm_backlog_file "$data") || fail "$FM_BACKLOG_TRANSITION_ERROR"
-    (cd "$root" && tasks-axi "$@" --file "$file")
+    (cd "$root" && "${FM_TASKS_AXI_BIN:-tasks-axi}" "$@" --file "$file")
   else
-    (cd "$root" && tasks-axi "$@")
+    (cd "$root" && "${FM_TASKS_AXI_BIN:-tasks-axi}" "$@")
   fi
 }
 
 require_tasks_axi() {
   fm_tasks_axi_compatible || fail "compatible tasks-axi is required"
-  tasks-axi hold --help 2>&1 | grep -F -- '--kind captain' >/dev/null \
+  "${FM_TASKS_AXI_BIN:-tasks-axi}" hold --help 2>&1 | grep -F -- '--kind captain' >/dev/null \
     || fail "tasks-axi does not expose the captain-hold contract"
 }
 
@@ -1809,7 +1809,7 @@ command_diverged() {
   # A read-only listing on a per-wake path, so it skips the mutation-oriented
   # compatibility floor and its extra probes: a listing this parser cannot read
   # simply yields no candidates and the report stays silent.
-  command -v tasks-axi >/dev/null 2>&1 || return 0
+  [ -n "$FM_TASKS_AXI_BIN" ] || return 0
   ids=$(open_task_ids) || return 0
   [ -n "$ids" ] || return 0
   resolve=${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}

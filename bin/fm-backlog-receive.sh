@@ -79,7 +79,7 @@ remove_dead_stale_lock() { # <lock-path>
 }
 
 run_move() { # <keys...>
-  tasks-axi mv "$@" --file "$DELIVERED" --to "$DEST"
+  "${FM_TASKS_AXI_BIN:-tasks-axi}" mv "$@" --file "$DELIVERED" --to "$DEST"
 }
 
 [ "$#" -eq 4 ] || usage
