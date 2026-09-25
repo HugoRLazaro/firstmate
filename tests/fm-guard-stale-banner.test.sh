@@ -149,6 +149,45 @@ record_pi_extension_session() {
   return 0
 }
 
+# Two verbatim 2026-09-24 lifecycle rows the false-alarm measurement cited in
+# state/.watch-cycle-exits.log. The relay row (ended_at=1790168002) closed with
+# its successor already recorded; the none row (ended_at=1790259269) is the
+# 16:14:29 close the alerts landed on. The relay row's recorded successor pid is
+# gone now, so the relay tests swap in a pid that is live while they run.
+REAL_RELAY_ROW='arm_pid=2958555	watcher_pid=2958572	origin=started	started_at=1790167958	ended_at=1790168002	exit_code=0	signal=none	reason=actionable-signal	beacon_age=43	lock_before=pid:2958572|identity:linux-starttime=34025038 cmdline-hex=62617368002f686f6d652f6875676f726c2f66697273746d6174652f62696e2f666d2d77617463682e736800	lock_after=pid:none|identity:none	successor=started:3023040'
+REAL_NONE_ROW='arm_pid=121788	watcher_pid=121891	origin=started	started_at=1790259225	ended_at=1790259269	exit_code=0	signal=none	reason=actionable-stale	beacon_age=43	lock_before=pid:121891|identity:linux-starttime=22788 cmdline-hex=62617368002f686f6d652f6875676f726c2f66697273746d6174652f62696e2f666d2d77617463682e736800	lock_after=pid:none|identity:none	successor=none'
+
+write_cycle_row() {  # <home> <row>
+  printf '%s\n' "$2" > "$1/state/.watch-cycle-exits.log"
+}
+
+write_relay_row() {  # <home> <live-successor-pid> [recorded-identity]
+  local home=$1 pid=$2 identity=${3:-} successor
+  successor="started:$pid"
+  [ -z "$identity" ] || successor="$successor|$identity"
+  printf '%s\n' "${REAL_RELAY_ROW/3023040/$pid}" \
+    | sed "s/successor=.*/successor=$successor/" > "$home/state/.watch-cycle-exits.log"
+}
+
+# Stand up the extension's own relay declaration
+# (state/.pi-watch-extension-arm): the loaded build, the lock-owning session pid,
+# the generation phase, and the current arm-child/retry state. The extension
+# source must already exist under the case root.
+record_pi_arm_declaration() {  # <dir> <child|none> <retry> [phase] [drift]
+  local dir=$1 child=$2 retry=$3 phase=${4:-active} drift=${5:-} home root pid version
+  home=$(case_home "$dir")
+  root=$(case_root "$dir")
+  pid=$(sed -n '1p' "$home/state/.lock")
+  if [ "$drift" = drift ]; then
+    version="sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  else
+    version=$(FM_STATE_OVERRIDE="$home/state" bash -c '. "$1"; fm_pi_extension_version "$2"' \
+      _ "$ROOT/bin/fm-wake-lib.sh" "$root/.pi/extensions/fm-primary-pi-watch.ts") || return 1
+  fi
+  printf '%s\n%s\ngeneration=1 phase=%s\nchild=%s retry=%s\n' \
+    "$version" "$pid" "$phase" "$child" "$retry" > "$home/state/.pi-watch-extension-arm"
+}
+
 count_text() {
   local haystack=$1 needle=$2
   awk -v needle="$needle" 'index($0, needle) { c++ } END { print c + 0 }' <<EOF
@@ -761,6 +800,215 @@ test_extension_stale_beacon_alarms_despite_live_session() {
   pass "fm-guard stale banner: extension model still alarms on a genuinely stale beacon"
 }
 
+# The 2026-09-24 false-alarm shape: the newest lifecycle record already named a
+# live successor while no watcher held the watch lock at the guarded command.
+# That is a relay in progress and must stay silent.
+test_extension_relay_with_live_successor_stays_silent() {
+  local dir home out pid
+  dir=$(make_guard_case extension-relay-live)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  write_relay_row "$home" "$pid"
+  printf '%s\n' "$pid" > "$home/state/.lock"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ -z "$out" ] || fail "a recorded live successor must keep the relay silent, got: $out"
+  assert_absent "$home/state/.guard-watcher-stale-banner" \
+    "a recorded live successor must not open a down-episode"
+  pass "fm-guard stale banner: a recorded live relay successor stays silent"
+}
+
+# The 16:14:29 close, verbatim: recorded successor=none with no arm child or
+# retry declared anywhere. That is the broken chain and must stay loud even
+# though a live Pi session has loaded both extensions and the beacon is fresh.
+test_extension_relay_successor_none_without_retry_alarms() {
+  local dir home out pid
+  dir=$(make_guard_case extension-relay-none)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  record_pi_extension_session "$dir" "$pid" || fail "could not record the Pi extension session"
+  write_cycle_row "$home" "$REAL_NONE_ROW"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ "$(count_text "$out" "WATCHER DOWN - SUPERVISION IS OFF")" -eq 1 ] \
+    || fail "a recorded successor=none with no pending attempt must alarm: $out"
+  assert_contains "$out" "no live watcher process holds this home lock" \
+    "the broken-chain banner must name the missing watcher process"
+  pass "fm-guard stale banner: successor=none without a declared retry stays loud"
+}
+
+# A 2026-09-24 relay row whose recorded successor process is gone is stale
+# evidence, not a relay: the chain is not running and the banner must fire. The
+# fixture uses a pid guaranteed to have exited instead of the recorded one, so
+# the case cannot depend on an unrelated process not holding that pid.
+test_extension_relay_dead_successor_alarms() {
+  local dir home out pid dead
+  dir=$(make_guard_case extension-relay-dead)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  dead=$(bash -c 'printf "%s\n" "$$"')
+  printf '%s\n' "$pid" > "$home/state/.lock"
+  write_relay_row "$home" "$dead"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ "$(count_text "$out" "WATCHER DOWN - SUPERVISION IS OFF")" -eq 1 ] \
+    || fail "a recorded successor whose process is gone must alarm: $out"
+  assert_contains "$out" "no live watcher process holds this home lock" \
+    "the dead-successor banner must name the missing watcher process"
+  pass "fm-guard stale banner: a dead recorded successor stays loud"
+}
+
+# A recorded live successor is not enough when the session origin is gone: no
+# live session owns the lock, so the chain cannot continue and the banner fires.
+test_extension_relay_without_session_origin_alarms() {
+  local dir home out pid
+  dir=$(make_guard_case extension-relay-origin-lost)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  write_relay_row "$home" "$pid"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ "$(count_text "$out" "WATCHER DOWN - SUPERVISION IS OFF")" -eq 1 ] \
+    || fail "a live successor with no live session origin must alarm: $out"
+  assert_contains "$out" "no live watcher process holds this home lock" \
+    "the lost-origin banner must name the missing watcher process"
+  pass "fm-guard stale banner: a relay without a live session origin stays loud"
+}
+
+# A recorded identity that no longer matches the live pid is stale evidence too:
+# the pid was recycled or exec'd away, so the relay cannot be trusted.
+test_extension_relay_stale_identity_alarms() {
+  local dir home out pid
+  dir=$(make_guard_case extension-relay-stale-identity)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  printf '%s\n' "$pid" > "$home/state/.lock"
+  write_relay_row "$home" "$pid" "linux-starttime=1 cmdline-hex=00"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ "$(count_text "$out" "WATCHER DOWN - SUPERVISION IS OFF")" -eq 1 ] \
+    || fail "a recorded successor whose identity no longer matches must alarm: $out"
+  pass "fm-guard stale banner: a stale recorded successor identity stays loud"
+}
+
+# successor=none stays silent only with the extension's own declaration of a
+# live arm child: the arm is running, so supervision is being restored.
+test_extension_relay_declared_child_stays_silent() {
+  local dir home out pid child
+  dir=$(make_guard_case extension-relay-declared-child)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  sleep 60 &
+  child=$!
+  record_pi_extension_session "$dir" "$pid" || fail "could not record the Pi extension session"
+  write_cycle_row "$home" "$REAL_NONE_ROW"
+  record_pi_arm_declaration "$dir" "$child" 0 || fail "could not record the Pi arm declaration"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" "$child" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  wait "$child" 2>/dev/null || true
+  [ -z "$out" ] || fail "a declared live arm child must keep the relay silent, got: $out"
+  pass "fm-guard stale banner: a declared live arm child keeps the relay silent"
+}
+
+# successor=none with the extension's scheduled continuity retry pending is a
+# relay being restored, not a broken chain. The retry stays evidence after the
+# last arm child has exited, because the extension publishes child=<arm-pid>
+# retry=1 while restoration or the retry timer is still in flight.
+test_extension_relay_declared_retry_stays_silent() {
+  local dir home out pid
+  dir=$(make_guard_case extension-relay-declared-retry)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  record_pi_extension_session "$dir" "$pid" || fail "could not record the Pi extension session"
+  write_cycle_row "$home" "$REAL_NONE_ROW"
+  record_pi_arm_declaration "$dir" none 1 || fail "could not record the Pi arm declaration"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ -z "$out" ] || fail "a declared pending retry must keep the relay silent, got: $out"
+  pass "fm-guard stale banner: a declared pending retry keeps the relay silent"
+}
+
+# The pending retry remains relay evidence when the declaration also names an
+# already-exited arm child: the extension republishes retry=0 when restoration
+# settles, so a dead child with retry=1 is in-flight continuity work, not a
+# broken chain. Only a dead child with no retry is not evidence.
+test_extension_relay_declared_retry_with_dead_child_stays_silent() {
+  local dir home out pid dead
+  dir=$(make_guard_case extension-relay-declared-retry-dead-child)
+  home=$(case_home "$dir")
+  sleep 60 &
+  pid=$!
+  dead=$(bash -c 'printf "%s\n" "$$"')
+  record_pi_extension_session "$dir" "$pid" || fail "could not record the Pi extension session"
+  write_cycle_row "$home" "$REAL_NONE_ROW"
+  record_pi_arm_declaration "$dir" "$dead" 1 || fail "could not record the dead-child retry declaration"
+  touch "$home/state/.last-watcher-beat"
+  out=$(run_guard_case_extension "$dir")
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ -z "$out" ] || fail "a pending retry with an exited arm child must keep the relay silent, got: $out"
+  pass "fm-guard stale banner: a pending retry with an exited arm child stays silent"
+}
+
+# Every declaration signal is load-bearing: a dead child with no retry, a
+# drifted build, a handoff-phase generation, and a declaration bound to another
+# pid each restore the alarm on the same successor=none ledger.
+test_extension_relay_declaration_signals_are_load_bearing() {
+  local dir home out pid case_name spec dead
+  for spec in \
+    "dead-child:none:0:active:" \
+    "exhausted-retry:none:0:active:" \
+    "drifted-build:none:1:active:drift" \
+    "handoff-generation:none:1:handoff:"; do
+    case_name=${spec%%:*}
+    dir=$(make_guard_case "extension-relay-$case_name")
+    home=$(case_home "$dir")
+    sleep 60 &
+    pid=$!
+    record_pi_extension_session "$dir" "$pid" || fail "could not record the Pi extension session for $case_name"
+    write_cycle_row "$home" "$REAL_NONE_ROW"
+    if [ "$case_name" = dead-child ]; then
+      # A child that has already exited gives a genuinely dead pid without a
+      # mid-test kill, so the fixture survives the shell's exit-trap cleanup.
+      dead=$(bash -c 'printf "%s\n" "$$"')
+      record_pi_arm_declaration "$dir" "$dead" 0 || fail "could not record the dead-child declaration"
+    else
+      record_pi_arm_declaration "$dir" "$(printf '%s' "$spec" | cut -d: -f2)" \
+        "$(printf '%s' "$spec" | cut -d: -f3)" \
+        "$(printf '%s' "$spec" | cut -d: -f4)" \
+        "$(printf '%s' "$spec" | cut -d: -f5)" || fail "could not record the $case_name declaration"
+    fi
+    touch "$home/state/.last-watcher-beat"
+    out=$(run_guard_case_extension "$dir")
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    [ "$(count_text "$out" "WATCHER DOWN - SUPERVISION IS OFF")" -eq 1 ] \
+      || fail "the relay declaration must not survive $case_name; guard output: $out"
+  done
+  pass "fm-guard stale banner: every relay-declaration signal is load-bearing"
+}
+
 # The queued-wake hazard is independent of the watcher verdict and must survive the
 # hand-off tolerance: a silenced banner must never take this warning down with it.
 test_extension_handoff_keeps_queued_wake_warning() {
@@ -900,6 +1148,15 @@ test_extension_held_unhealthy_locks_stay_alarm
 test_extension_without_ownership_evidence_stays_alarm
 test_extension_ownership_needs_every_signal
 test_extension_stale_beacon_alarms_despite_live_session
+test_extension_relay_with_live_successor_stays_silent
+test_extension_relay_successor_none_without_retry_alarms
+test_extension_relay_dead_successor_alarms
+test_extension_relay_without_session_origin_alarms
+test_extension_relay_stale_identity_alarms
+test_extension_relay_declared_child_stays_silent
+test_extension_relay_declared_retry_stays_silent
+test_extension_relay_declared_retry_with_dead_child_stays_silent
+test_extension_relay_declaration_signals_are_load_bearing
 test_extension_handoff_keeps_queued_wake_warning
 test_branch_actor_is_not_told_to_drain_queued_wakes
 test_persistent_model_ignores_pi_extension_evidence

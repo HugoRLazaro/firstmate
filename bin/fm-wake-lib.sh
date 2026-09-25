@@ -193,9 +193,18 @@ fm_watcher_healthy() {
 #               (fm_autoarm_midturn_healthy).
 #   extension   Pi (and pi-signed): .pi/extensions/fm-primary-pi-watch.ts owns
 #               continuity. It tears the watcher down on every actionable wake and
-#               spawns the replacement itself, so a genuinely unheld singleton lock
-#               is healthy during that hand-off only with extension ownership and a
-#               fresh beacon. Any held but unhealthy lock remains down.
+#               spawns the replacement itself, so a fresh beacon without an
+#               identity-matched watcher is healthy during that hand-off only with
+#               direct relay evidence (fm_extension_relay_healthy): a live session
+#               origin plus a live lifecycle-ledger successor or a declared live
+#               arm child or pending retry. A recorded successor=none with no
+#               declared attempt and a recorded successor whose process is gone
+#               are not relay evidence on their own, and a lost session origin
+#               stays down for both families; the Pi marker-ownership hand-off
+#               proof covers only a genuinely unheld lock when no usable lifecycle
+#               record exists at all. omp publishes no arm declaration, so its
+#               own marker-ownership proof over a genuinely unheld lock is
+#               accepted with any lifecycle record.
 #   persistent  every other harness (codex foreground checkpoint, opencode/grok
 #               background arm, tmux, unknown): the watcher runs as a tracked live
 #               process, so a live identity-matched pid is the real liveness signal.
@@ -298,6 +307,54 @@ fm_extension_pair_owns_supervision() {  # <state> <extension-dir> <source:marker
   fm_pid_alive "$session_pid"
 }
 
+# fm_pi_extension_arm_pending <state> <expected-version> <session-lock>
+# True when the Pi watcher extension durably declares, in
+# <state>/.pi-watch-extension-arm, either a live arm child or a scheduled
+# continuity retry for its active generation. The extension writes that
+# declaration itself, so a matching build, the lock-owning pid, and the active
+# generation phase together prove it describes this live session rather than a
+# stale one. A declaration that is absent, mismatched, or names a dead child
+# with no retry is not evidence, and the caller stays loud.
+fm_pi_extension_arm_pending() {
+  local state=$1 expected_version=$2 lock=$3 marker version pid lock_pid owner child retry
+  marker="$state/.pi-watch-extension-arm"
+  [ -f "$marker" ] && [ -f "$lock" ] && [ -n "$expected_version" ] || return 1
+  version=$(sed -n '1p' "$marker")
+  pid=$(sed -n '2p' "$marker")
+  lock_pid=$(sed -n '1p' "$lock")
+  [ -n "$pid" ] || return 1
+  [ "$version" = "$expected_version" ] && [ "$pid" = "$lock_pid" ] || return 1
+  owner=$(sed -n '3p' "$marker")
+  case "$owner" in
+    generation=*\ phase=active) ;;
+    *) return 1 ;;
+  esac
+  owner=${owner#generation=}
+  owner=${owner%% *}
+  case "$owner" in
+    ''|0|*[!0-9]*) return 1 ;;
+  esac
+  child=$(sed -n '4p' "$marker")
+  case "$child" in
+    'child=none retry=1') return 0 ;;
+    'child=none retry=0') return 1 ;;
+    child=*\ retry=*)
+      retry=${child##*retry=}
+      child=${child#child=}
+      child=${child%% *}
+      case "$child" in
+        ''|*[!0-9]*) return 1 ;;
+      esac
+      case "$retry" in
+        0) fm_pid_alive "$child" ;;
+        1) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 # Away-mode supervision evidence. While state/.afk exists the away-mode daemon
 # (bin/fm-supervise-daemon.sh) owns supervision: it runs bin/fm-watch.sh
 # one-shot, so the watcher exits on EVERY wake and the daemon starts its
@@ -349,6 +406,93 @@ fm_afk_mode() {
   esac
 }
 
+# fm_watch_cycle_successor <state>
+# Classify the newest watcher lifecycle record in
+# <state>/.watch-cycle-exits.log by its recorded successor disposition. Print
+# three tab-separated fields: <kind><TAB><pid><TAB><identity>.
+#   started  - a successor watcher process was launched with <pid>.
+#              bin/fm-watch-arm.sh writes that as soon as the successor process
+#              exists, before confirmation, and appends the confirmed
+#              "|<identity>" suffix once the process holds the lock and beats.
+#   attached - this arm attached to an already-live successor <pid>.
+#   none     - the record exists and names no successor: no relay was declared.
+#   absent   - no usable record exists (absent, empty, unreadable, or a record
+#              whose successor field is missing or unrecognized).
+# <pid> and <identity> are empty for none and absent. Callers must read absent
+# as "the ledger cannot classify this" and decide on their own evidence rather
+# than treating a corrupt or missing ledger as a healthy relay.
+fm_watch_cycle_successor() {
+  local state=$1 line field value kind pid identity
+  line=$(tail -n 1 "$state/.watch-cycle-exits.log" 2>/dev/null) || true
+  [ -n "$line" ] || { printf 'absent\t\t\n'; return 0; }
+  value=
+  while IFS= read -r field; do
+    case "$field" in
+      successor=*) value=${field#successor=} ;;
+    esac
+  done < <(printf '%s\n' "$line" | tr '\t' '\n')
+  case "$value" in
+    none) printf 'none\t\t\n' ;;
+    started:*|attached:*)
+      kind=${value%%:*}
+      value=${value#*:}
+      pid=${value%%|*}
+      identity=
+      [ "$pid" = "$value" ] || identity=${value#*|}
+      case "$pid" in
+        ''|*[!0-9]*) printf 'absent\t\t\n'; return 0 ;;
+      esac
+      printf '%s\t%s\t%s\n' "$kind" "$pid" "$identity"
+      ;;
+    *) printf 'absent\t\t\n' ;;
+  esac
+}
+
+# fm_watch_cycle_successor_alive <state>
+# True when the newest lifecycle record names a successor watcher that is still
+# alive: kind started or attached, a numeric pid, a live process, and - when the
+# record carries the optional identity suffix - an identity that still matches.
+# That is the direct relay evidence: the pid was the cycle's replacement process
+# when the record was written, so an alive identity-matched pid proves the chain
+# is relaying even while no process holds the watch lock.
+fm_watch_cycle_successor_alive() {
+  local state=$1 kind pid identity current
+  { IFS=$'\t' read -r kind pid identity; } < <(fm_watch_cycle_successor "$state") || return 1
+  case "$kind" in
+    started|attached) ;;
+    *) return 1 ;;
+  esac
+  fm_pid_alive "$pid" || return 1
+  [ -n "$identity" ] || return 0
+  current=$(fm_pid_identity "$pid" 2>/dev/null) || return 1
+  [ "$current" = "$identity" ]
+}
+
+# fm_extension_relay_healthy <state> <root>
+# True when a fresh-beacon gap under the extension model is a RELAY in progress
+# rather than a broken chain. It requires a live session origin (the lock names
+# a live process) and then accepts the newest lifecycle record's live successor,
+# the Pi extension's own live-arm-child/retry declaration, or - because omp
+# publishes no arm declaration - the omp family's marker-ownership proof over a
+# genuinely unheld lock. The shared marker-ownership proof still covers a home
+# whose ledger has no usable record at all, while only the omp family may use it
+# alongside a recorded successor disposition, so a recorded Pi successor=none
+# stays loud.
+fm_extension_relay_healthy() {
+  local state=$1 root=$2 version kind
+  fm_pid_alive "$(sed -n '1p' "$state/.lock" 2>/dev/null)" || return 1
+  fm_watch_cycle_successor_alive "$state" && return 0
+  if version=$(fm_pi_extension_version "$root/.pi/extensions/fm-primary-pi-watch.ts"); then
+    fm_pi_extension_arm_pending "$state" "$version" "$state/.lock" && return 0
+  fi
+  if fm_watcher_lock_unheld "$state" && fm_omp_extension_owns_supervision "$state" "$root"; then
+    return 0
+  fi
+  kind=$(fm_watch_cycle_successor "$state" | cut -f1)
+  [ "$kind" = absent ] || return 1
+  fm_watcher_lock_unheld "$state" && fm_extension_owns_supervision "$state" "$root"
+}
+
 # fm_watcher_supervision_verdict <state> <watch-path> [grace] [home] [root]
 # Model-aware "is supervision healthy right now" verdict for the pull warning
 # guard (bin/fm-guard.sh), NOT the arm layer or the turn-end guard. Sets:
@@ -365,15 +509,19 @@ fm_afk_mode() {
 # explains the gap (a rewake bound to the current recovery generation and
 # live session lock), because turn-end re-arms.
 # Without that proof a stale or absent beacon is a genuine lapse.
-# extension: a live identity-matched watcher is the ordinary healthy state, but a
-# genuinely unheld lock is also healthy while the beacon is fresh AND a live Pi
-# session provably owns continuity (fm_extension_owns_supervision: the Pi or the
-# omp extension pair, whichever the lock-owning session recorded) - that is the
-# extension's own tear-down-and-respawn hand-off, which it retries and escalates
-# itself. A lock with any recorded pid remains down if the strict health check fails.
-# Without ownership proof an unheld lock is down exactly as before, so an unloaded,
-# version-drifted, or exited Pi session still alarms immediately, and a cycle the
-# extension never restores still alarms once the beacon passes grace.
+# extension: a live identity-matched watcher is the ordinary healthy state. A
+# fresh beacon without one is healthy only with direct relay evidence
+# (fm_extension_relay_healthy): a live session origin plus either a live
+# successor recorded in the lifecycle ledger or the extension's own durable
+# declaration of a live arm child or scheduled retry. A recorded successor=none
+# with no declared pending attempt is not relay evidence even with the Pi
+# extension markers present, and neither is a recorded successor whose process
+# is gone. The omp primary publishes no arm declaration, so its unheld-lock
+# marker-ownership proof is accepted alongside the ledger instead. When no
+# lifecycle record exists at all, the marker-ownership hand-off proof still
+# covers a home that has not yet seen a cycle. An unloaded, version-drifted,
+# or exited Pi or omp session still alarms, and a cycle the extension never
+# restores still alarms once the beacon passes grace.
 # persistent: require a live identity-matched watcher with a fresh beacon
 # (fm_watcher_healthy); a fresh leftover beacon with no live watcher is still down.
 # shellcheck disable=SC2034 # Read by callers after the function returns.
@@ -403,8 +551,7 @@ fm_watcher_supervision_verdict() {
     # shellcheck disable=SC2034 # Read by callers after the function returns.
     FM_WATCHER_VERDICT_OK=true
   elif [ "$fresh" = true ]; then
-    if [ "$model" = extension ] && fm_watcher_lock_unheld "$state" \
-      && fm_extension_owns_supervision "$state" "$root"; then
+    if [ "$model" = extension ] && fm_extension_relay_healthy "$state" "$root"; then
       # shellcheck disable=SC2034 # Read by callers after the function returns.
       FM_WATCHER_VERDICT_OK=true
     else

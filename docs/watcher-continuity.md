@@ -106,6 +106,10 @@ Only a cycle with no matching delivery record emits `watcher: FAILED - cycle end
 
 The arm layer appends one tab-separated record per observed cycle to `state/.watch-cycle-exits.log`.
 Each record includes arm and watcher PIDs, start and end timestamps, exit code and signal, classified reason, beacon age, lock identity before and after close, and successor disposition.
+The successor disposition is written as soon as a replacement process is launched (`started:<pid>`, extended with the confirmed identity once that process holds the lock), when this arm attaches to a live peer (`attached:<pid>|<identity>`), or `none` when the cycle closed without one.
+`bin/fm-wake-lib.sh` owns reading that disposition, so the pull guard can tell a relay in progress from a broken chain instead of inferring it from the watch lock alone.
+The Pi watcher extension publishes its own `state/.pi-watch-extension-arm` declaration beside that ledger, rewritten on every arm-child, retry, and restore transition and carrying the loaded build, the session pid, the active generation phase, and the current `child=`/`retry=` state.
+`bin/fm-wake-lib.sh`'s `fm_pi_extension_arm_pending` owns reading it; a live declared child or a pending retry is relay evidence, never proof that the watcher is already healthy.
 The file is size-capped through `FM_WATCH_CYCLE_LOG_MAX_BYTES` and `FM_WATCH_CYCLE_LOG_KEEP_LINES`.
 `state/.watch-triage.log` remains only the watcher's bounded absorbed-wake debug log and carries no lifecycle semantics.
 

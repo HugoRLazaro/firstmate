@@ -930,8 +930,8 @@ SH
   done
   successor_pid=$(cat "$state/.watch.lock/pid" 2>/dev/null || true)
   grep -qF "watcher: started pid=$successor_pid" "$armout" || fail "successor ledger cycle did not start"
-  grep -q "arm_pid=$first_arm.*successor=started:$successor_pid" "$state/.watch-cycle-exits.log" \
-    || fail "predecessor ledger record was not linked to its verified successor"
+  grep -q "arm_pid=$first_arm.*successor=started:$successor_pid|" "$state/.watch-cycle-exits.log" \
+    || fail "predecessor ledger record was not linked to its verified successor identity"
   kill -HUP "$successor_arm" 2>/dev/null || true
   wait "$successor_arm" 2>/dev/null || true
   # The forced interruption is a watcher-down interval. Consume the prior

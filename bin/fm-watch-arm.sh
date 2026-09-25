@@ -47,9 +47,13 @@
 # Every observed watcher cycle appends one tab-separated lifecycle record to
 # state/.watch-cycle-exits.log. The arm layer owns that bounded ledger; it records
 # arm/watcher identities, timestamps, exit/signal classification, beacon age,
-# lock identity before and after close, and successor disposition. The separate
-# state/.watch-triage.log remains exclusively the watcher's absorbed-wake debug
-# log and is never written here.
+# lock identity before and after close, and successor disposition. The successor
+# disposition is written as soon as a replacement process is launched
+# (started:<pid>, extended with the confirmed identity once that process holds
+# the lock), when this arm attaches to a live peer, or none when the cycle
+# closed without one, so the pull guard can tell a relay in progress from a
+# broken chain. The separate state/.watch-triage.log remains exclusively the
+# watcher's absorbed-wake debug log and is never written here.
 #
 # --restart: stop ONLY this FM_HOME's watcher (the pid recorded in THIS home's
 # state/.watch.lock) and own a fresh cycle, or attach if a verified live peer
@@ -207,13 +211,13 @@ cycle_mark_predecessor_successor() {
       count = split($0, fields, "\t")
       if (fields[1] == target) {
         for (i = 1; i <= count; i += 1) {
-          if (fields[i] == "successor=none") last = NR
+          if (fields[i] ~ /^successor=/) last = NR
         }
       }
     }
     END {
       for (i = 1; i <= NR; i += 1) {
-        if (i == last) sub(/\tsuccessor=none$/, "\t" replacement, lines[i])
+        if (i == last) sub(/\tsuccessor=[^\t]*$/, "\t" replacement, lines[i])
         print lines[i]
       }
     }
@@ -314,7 +318,7 @@ attach_and_wait() {
   while :; do
     if healthy_watcher; then
       if [ "$HEALTHY_PID" != "$attached_pid" ] || [ "$HEALTHY_IDENTITY" != "$cycle_watcher_identity" ]; then
-        cycle_log_append unknown unknown lock-replaced "attached:$HEALTHY_PID"
+        cycle_log_append unknown unknown lock-replaced "attached:$HEALTHY_PID|$HEALTHY_IDENTITY"
         attached_pid=$HEALTHY_PID
         cycle_begin "$attached_pid" attached "$HEALTHY_IDENTITY"
         report_attached
@@ -323,7 +327,7 @@ attach_and_wait() {
       continue
     fi
     if wait_for_healthy_successor; then
-      cycle_log_append unknown unknown attached-cycle-ended "attached:$HEALTHY_PID"
+      cycle_log_append unknown unknown attached-cycle-ended "attached:$HEALTHY_PID|$HEALTHY_IDENTITY"
       attached_pid=$HEALTHY_PID
       cycle_begin "$attached_pid" attached "$HEALTHY_IDENTITY"
       report_attached
@@ -435,7 +439,7 @@ fi
 # then, not as an immediate empty wake. (--restart skips this: it just stopped
 # this home's watcher and wants a fresh one.)
 if [ "$mode" = arm ] && healthy_watcher; then
-  cycle_mark_predecessor_successor "attached:$HEALTHY_PID"
+  cycle_mark_predecessor_successor "attached:$HEALTHY_PID|$HEALTHY_IDENTITY"
   cycle_begin "$HEALTHY_PID" attached "$HEALTHY_IDENTITY"
   report_attached
   attach_and_wait "$HEALTHY_PID"
@@ -485,6 +489,11 @@ else
 fi
 child=$!
 cycle_begin "$child" started "$(fm_pid_identity "$child" 2>/dev/null || true)"
+# Declare the attempt in the predecessor's record as soon as the successor
+# process exists, before confirmation: the pull guard reads a live started: pid
+# as a relay in progress. Confirmation below rewrites the same field with the
+# confirmed identity.
+cycle_mark_predecessor_successor "started:$child"
 child_done=0
 
 owned_child_finished() {
@@ -502,12 +511,12 @@ owned_child_finished() {
 
   if [ "$rc" -eq 0 ]; then
     if wait_for_healthy_successor; then
-      cycle_log_append "$rc" "$signal" unexpected-clean-exit "attached:$HEALTHY_PID"
+      cycle_log_append "$rc" "$signal" unexpected-clean-exit "attached:$HEALTHY_PID|$HEALTHY_IDENTITY"
       print_watch_output "$child_out"
       rm -f "$child_out" 2>/dev/null || true
       child=
       child_out=
-      cycle_mark_predecessor_successor "attached:$HEALTHY_PID"
+      cycle_mark_predecessor_successor "attached:$HEALTHY_PID|$HEALTHY_IDENTITY"
       report_attached
       cycle_begin "$HEALTHY_PID" attached "$HEALTHY_IDENTITY"
       attach_and_wait "$HEALTHY_PID"
@@ -557,7 +566,7 @@ while :; do
         echo "watcher: FAILED - established successor could not inspect handling state"
         exit 1
       fi
-      cycle_mark_predecessor_successor "started:$child"
+      cycle_mark_predecessor_successor "started:$child|$cycle_watcher_identity"
       if [ -n "$handling_generation" ]; then
         echo "watcher: started pid=$child (beacon fresh) recovery-generation=$handling_generation"
       else

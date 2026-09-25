@@ -799,6 +799,51 @@ test_downtime_marker_does_not_follow_symlink() {
   pass "watch-arm: downtime marker publication does not follow symlinks"
 }
 
+# The relay window opens before confirmation: the arm writes the predecessor's
+# successor disposition as soon as its replacement process exists, so the pull
+# guard can classify a hand-off while no watcher holds the lock yet. A live but
+# unconfirmable lock holder keeps the arm inside that window on purpose, and the
+# declared pid dies with the failed attempt, which is the stale evidence the
+# guard must keep alarming on.
+test_cycle_ledger_declares_the_successor_before_confirmation() {
+  local dir state fakebin armout live predecessor pid i status
+  dir=$(make_case ledger-successor-before-confirmation)
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  armout="$dir/arm.out"
+  predecessor=424242
+  # The predecessor record starts with no successor, exactly as an actionable
+  # close writes it before any replacement is launched.
+  printf 'arm_pid=%s\twatcher_pid=1\torigin=started\tstarted_at=1\tended_at=2\texit_code=0\tsignal=none\treason=actionable-signal\tbeacon_age=1\tlock_before=pid:1|identity:x\tlock_after=pid:none|identity:none\tsuccessor=none\n' \
+    "$predecessor" > "$state/.watch-cycle-exits.log"
+  sleep 300 &
+  live=$!
+  mkdir -p "$state/.watch.lock"
+  printf '%s\n' "$live" > "$state/.watch.lock/pid"
+  touch -t 200001010000 "$state/.last-watcher-beat"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=5 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 FM_ARM_CONFIRM_TIMEOUT=5 \
+    FM_WATCH_PREDECESSOR_ARM_PID="$predecessor" "$WATCH_ARM" > "$armout" &
+  ARM_PID=$!
+  i=0
+  pid=
+  while [ "$i" -lt 100 ]; do
+    pid=$(sed -n 's/.*successor=started:\([0-9][0-9]*\).*/\1/p' "$state/.watch-cycle-exits.log" | head -1)
+    [ -n "$pid" ] && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  [ -n "$pid" ] || fail "the arm did not declare its successor attempt before confirmation"
+  kill -0 "$pid" 2>/dev/null || fail "the declared successor pid was not a live replacement process"
+  wait_for_exit "$ARM_PID" 200
+  status=$?
+  [ "$status" -ne 0 ] || fail "the unconfirmable arm reported success: $(cat "$armout")"
+  kill "$live" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+  kill -0 "$pid" 2>/dev/null && fail "the failed attempt left its child running as pid $pid"
+  pass "watch-arm: the predecessor ledger record declares the successor before confirmation"
+}
+
 # The watcher validates FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS when it arms and
 # refuses to arm on an unusable value. Under a running watcher that value would
 # make every per-cycle reconcile refuse by name into a discarded stdout, so no
@@ -843,6 +888,7 @@ test_arm_refuses_an_unusable_launch_confirm_window() {
 
 test_attached_arm_reports_the_delivered_wake
 test_attached_arm_reports_the_delivered_wake_after_drain
+test_cycle_ledger_declares_the_successor_before_confirmation
 test_arm_refuses_an_unusable_launch_confirm_window
 test_attached_arm_still_fails_on_a_wake_it_did_not_deliver
 test_rearm_resurfaces_durable_queue_and_remote_open_decision

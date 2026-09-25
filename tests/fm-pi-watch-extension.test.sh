@@ -277,6 +277,114 @@ EOF
   pass "Pi redundant tool call returns ownership guidance and spawns no second child"
 }
 
+# The pull guard classifies a fresh-beacon relay window from the extension's own
+# durable arm declaration (state/.pi-watch-extension-arm, read by
+# bin/fm-wake-lib.sh): it must name the live session, an active generation, and
+# the current arm-child/retry state, so a running child and a pending retry are
+# distinguishable from a broken chain. This drives the real extension twice,
+# once with a child that stays up and once with one that closes into a retry.
+test_pi_arm_declaration_tracks_child_and_retry() {
+  local repo home plugin stop out status
+  repo="$TMP_ROOT/pi-arm-declaration-root"
+  home="$TMP_ROOT/pi-arm-declaration-home"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  stop="$TMP_ROOT/pi-arm-declaration.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+trap 'exit 0' TERM INT
+while [ ! -e "${FM_STOP_FILE:?}" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_STOP_FILE="$stop" node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const pi = {
+  on() {},
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async () => {},
+};
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("tool-call-first", {}, undefined, undefined, {});
+const marker = `${process.env.FM_HOME}/state/.pi-watch-extension-arm`;
+for (let i = 0; i < 200 && !existsSync(marker); i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+if (!existsSync(marker)) throw new Error("arm declaration was not published");
+const lines = readFileSync(marker, "utf8").trimEnd().split("\n");
+if (lines.length !== 4) throw new Error(`arm declaration has ${lines.length} lines: ${JSON.stringify(lines)}`);
+if (!/^sha256:[0-9a-f]{64}$/.test(lines[0])) throw new Error(`invalid arm declaration build: ${lines[0]}`);
+if (lines[1] !== String(process.pid)) throw new Error(`arm declaration names the wrong session pid: ${lines[1]}`);
+if (!/^generation=[0-9]+ phase=active$/.test(lines[2])) throw new Error(`invalid arm declaration generation: ${lines[2]}`);
+const state = lines[3].match(/^child=([0-9]+) retry=([01])$/);
+if (!state) throw new Error(`invalid arm declaration state: ${lines[3]}`);
+if (state[2] !== "0") throw new Error(`a live arm child must not claim a retry pending: ${lines[3]}`);
+try {
+  process.kill(Number(state[1]), 0);
+} catch {
+  throw new Error(`arm declaration child pid ${state[1]} is not alive`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "the live arm child declaration must name the live session and child"
+  [ -z "$out" ] || fail "Pi arm-declaration live-child test printed output: $out"
+
+  repo="$TMP_ROOT/pi-arm-retry-root"
+  home="$TMP_ROOT/pi-arm-retry-home"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_WATCH_REARM_RETRY_BASE_MS=10000 FM_WATCH_REARM_RETRY_MAX_MS=10000 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const pi = {
+  on() {},
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async () => {},
+};
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("tool-call-first", {}, undefined, undefined, {});
+const marker = `${process.env.FM_HOME}/state/.pi-watch-extension-arm`;
+let state = "";
+for (let i = 0; i < 300; i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  if (!existsSync(marker)) continue;
+  const lines = readFileSync(marker, "utf8").trimEnd().split("\n");
+  state = lines[3] ?? "";
+  if (state === "child=none retry=1") break;
+}
+if (state !== "child=none retry=1") throw new Error(`scheduled retry was not declared: ${state}`);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "a scheduled retry must be declared as child=none retry=1"
+  [ -z "$out" ] || fail "Pi arm-declaration retry test printed output: $out"
+  pass "Pi extension declares its arm child and scheduled retry for the pull guard"
+}
+
 test_pi_scheduled_retry_call_is_owned_noop() {
   local repo home plugin log out status
   repo="$TMP_ROOT/pi-scheduled-retry-root"
@@ -4152,6 +4260,7 @@ EOF
 
 test_pi_extension_reports_external_healthy_watcher
 test_pi_tool_returns_agent_tool_result
+test_pi_arm_declaration_tracks_child_and_retry
 test_pi_redundant_tool_call_is_owned_noop
 test_pi_scheduled_retry_call_is_owned_noop
 test_pi_actionable_close_starts_single_successor_before_delivery
