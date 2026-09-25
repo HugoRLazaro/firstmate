@@ -237,6 +237,20 @@ function pintarColumna(col) {
   return colEl;
 }
 
+// Lo que escribiste en esta tarjeta: si firstmate ya contestó en la conversación
+// o sigue sin contestar. Es distinto de "Espera tu respuesta", que es al revés:
+// ahí quien tiene que contestar eres tú.
+function chipPregunta(p) {
+  const espera = p.estado === "espera";
+  const chip = el("span", "pregunta " + (espera ? "p-espera" : "p-contestada"));
+  chip.innerHTML = (espera ? ICONO.reloj : ICONO.visto) +
+    (espera ? "Espera respuesta de firstmate" : "Firstmate ya te contestó");
+  chip.title = espera
+    ? "Lo que escribiste en esta tarjeta sigue sin contestar en la conversación del tablero."
+    : "Firstmate contestó en la conversación del tablero a lo que escribiste en esta tarjeta.";
+  return chip;
+}
+
 function pintarTarjeta(t) {
   const tipo = TIPOS[t.tipo] || TIPOS.plan;
   const abierta = abiertas.has(t.id);
@@ -268,6 +282,7 @@ function pintarTarjeta(t) {
   etiqueta.textContent = tipo.label;
   meta.appendChild(etiqueta);
   if (t.area) meta.appendChild(el("span", "area", t.area));
+  if (t.pregunta && t.pregunta.estado) meta.appendChild(chipPregunta(t.pregunta));
   arriba.appendChild(meta);
   arriba.appendChild(el("h3", null, t.titulo));
   if (t.necesita) {
@@ -424,6 +439,7 @@ function pintarFila(t) {
 
   const necesidad = el("div", "row-need");
   necesidad.appendChild(document.createTextNode(t.necesita || ""));
+  if (t.pregunta && t.pregunta.estado) necesidad.appendChild(chipPregunta(t.pregunta));
   if (t.bloquea) necesidad.appendChild(el("span", "blk", t.bloquea));
   if (t.quien || t.desde) {
     necesidad.appendChild(el("span", "blk who-line", [t.quien, t.desde].filter(Boolean).join(" · ")));
@@ -635,8 +651,11 @@ function burbuja(m) {
     const respuestas = m.respuestas || [];
     const estadoMsg = el(respuestas.length ? "button" : "span", "state " + (respuestas.length ? "ok" : "wait"));
     if (respuestas.length) {
+      // `respuestas` lleva identificadores, no fechas: la hora sale del mensaje
+      // que contestó, y si ya no está en la conversación cargada, no se inventa.
+      const ultima = conversacion.find((x) => x.id === respuestas[respuestas.length - 1]);
       estadoMsg.type = "button";
-      estadoMsg.innerHTML = ICONO.visto + "Respondido a las " + hora(respuestas[respuestas.length - 1]);
+      estadoMsg.innerHTML = ICONO.visto + "Respondido" + (ultima ? " a las " + hora(ultima.ts) : "");
       estadoMsg.addEventListener("click", () => destacar(respuestas[respuestas.length - 1]));
     } else {
       estadoMsg.innerHTML = ICONO.reloj + "Esperando respuesta";
@@ -650,7 +669,7 @@ function burbuja(m) {
 }
 
 function tipoDeMensaje(m) {
-  if (m.tipo === "decision") return "Respuesta a: «" + (m.titulo_tarea || "una decisión del tablero") + "»";
+  if (m.tipo === "decision") return "Escrito en la tarjeta de «" + (m.titulo_tarea || "una tarea") + "»";
   if (m.tipo === "peticion") return "Encargo recibido";
   return "";
 }

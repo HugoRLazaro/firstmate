@@ -106,6 +106,27 @@ pide_chat "¿Cómo va lo del motor de conflictos? ¿Se puede ya aplicar al exped
 FM_HOME="$HOME_DIR" "$TABLERO" reply "Medido: 8 de los 14 conflictos eran dos partes que se complementan. Te lo dejo en la tarjeta." >/dev/null
 pide_chat "Y para el móvil, ¿me lo puedo llevar de una en una?"
 
+# Una pregunta escrita en la tarjeta de otra tarea, ya contestada por firstmate:
+# así la pantalla tiene que enseñar las dos caras, sin contestar y contestada.
+pide_tarjeta() {  # <tarea> <texto>
+  python3 - "$BASE/api/responder" "$1" "$2" <<'PY'
+import json, sys, urllib.request
+cuerpo = json.dumps({"tarea": sys.argv[2], "texto": sys.argv[3]}).encode()
+peticion = urllib.request.Request(sys.argv[1], data=cuerpo, method="POST")
+peticion.add_header("Content-Type", "application/json")
+urllib.request.urlopen(peticion, timeout=20).read()
+PY
+}
+pide_tarjeta "portales-decidir" "¿El plan de portales lo cierro yo o lo cierras tú?"
+ID_TARJETA=$(python3 - "$BASE/api/conversacion" <<'PY'
+import json, sys, urllib.request
+d = json.load(urllib.request.urlopen(sys.argv[1], timeout=20))["mensajes"]
+print([m["id"] for m in d if m.get("tarea") == "portales-decidir"][-1])
+PY
+)
+FM_HOME="$HOME_DIR" "$TABLERO" reply --reply-to "$ID_TARJETA" \
+  "Lo cierro yo: te dejo el plan en la tarjeta cuando lo tenga." >/dev/null
+
 MOTOR_DIR=$(dirname "$MOTOR")
 if [ -n "${FM_TABLERO_CAPTURAS:-}" ]; then
   export TABLERO_CAPTURAS="$FM_TABLERO_CAPTURAS"

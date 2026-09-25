@@ -4,8 +4,10 @@
 # The board is a small server on THIS machine that reads this home's real state
 # (backlog, workers under way, captain holds) and lets the captain answer from
 # his phone. bin/fm-tablero.py owns the derivation, the durable conversation
-# log, and the three commands that carry a captain action to firstmate; this
-# script owns home resolution, the process, the bind address, and the pidfile.
+# log, and the three captain actions, each of which leaves exactly one note in
+# firstmate's inbox: answering a card also closes or releases its decision
+# through the house mechanism; this script owns home resolution, the process,
+# the bind address, and the pidfile.
 #
 # It never writes to a project, never changes a task, and never opens the board
 # to the internet: unless told otherwise it listens on the machine's Tailscale

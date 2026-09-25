@@ -118,11 +118,17 @@ nuevo_home() {
     mkdir -p "$home/bin"
     cat > "$home/bin/fm-inbox.sh" <<'SH'
 #!/usr/bin/env bash
-# Recorder for `note -`: keeps the argv and the body it was handed.
+# Recorder for `note -`: keeps the argv, the whole body, and each note on its
+# own numbered file, so a case can assert note by note and count the calls.
 printf '%s\n' "$*" >> "$FM_HOME/recorder-inbox-argv.txt"
-cat >> "$FM_HOME/recorder-inbox-cuerpo.txt"
-echo "  saved note 20260925-0abc123 at $FM_HOME/state/inbox/20260925-0abc123.note"
-echo "  firstmate will pick this up at its next check."
+numero=$(grep -c '' "$FM_HOME/recorder-inbox-argv.txt")
+cuerpo=$(cat)
+printf '%s' "$cuerpo" >> "$FM_HOME/recorder-inbox-cuerpo.txt"
+mkdir -p "$FM_HOME/recorder-notas"
+printf '%s' "$cuerpo" > "$FM_HOME/recorder-notas/$numero.note"
+# La misma forma que publica el fm-inbox.sh de verdad: `queued <id>`.
+printf 'queued 20260925-0abc%03d\n' "$numero"
+printf '  %s\n' "$(printf '%s' "$cuerpo" | tr '\n\t' '  ' | cut -c1-100)"
 SH
     cat > "$home/bin/fm-captain-hold.sh" <<'SH'
 #!/usr/bin/env bash
@@ -319,6 +325,38 @@ assert_equals "$ANTES" "$(wc -l < "$HOME_B/recorder-hold-argv.txt")" \
   "una respuesta vacía no llega al mecanismo de decisión"
 pass "una respuesta vacía no llega al mecanismo de decisión"
 
+# Lo escrito en una tarjeta avisa al buzón igual que un mensaje del chat: una sola
+# nota por envío, con la tarea, las palabras del capitán tal cual y el camino de
+# vuelta emparejado con ese mensaje concreto.
+assert_equals "2" "$(grep -c '' "$HOME_B/recorder-inbox-argv.txt")" \
+  "cada envío desde una tarjeta deja exactamente una nota, sin duplicarla"
+pass "cada envío desde una tarjeta deja exactamente una nota, sin duplicarla"
+assert_contains "$(cat "$HOME_B/recorder-notas/1.note")" "tarea-decision" \
+  "la nota de la tarjeta nombra la tarea a la que se refiere"
+assert_contains "$(cat "$HOME_B/recorder-notas/1.note")" "$DECISION" \
+  "la nota lleva las palabras del capitán tal cual, con acentos y saltos de línea"
+pass "la nota de la tarjeta nombra la tarea y lleva las palabras del capitán tal cual"
+ID_TARJETA=$(pide GET "http://127.0.0.1:$PUERTO_B/api/conversacion" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["mensajes"]
+print([m["id"] for m in d if m["tarea"] == "tarea-decision"][0])')
+assert_grep "--reply-to $ID_TARJETA" "$HOME_B/recorder-notas/1.note" \
+  "la nota dice cómo contestar emparejado con ese mensaje de la tarjeta"
+assert_grep "La decisión queda cerrada con estas palabras." "$HOME_B/recorder-notas/1.note" \
+  "la nota cuenta que el tablero ya cerró la decisión con ellas"
+pass "la nota de la tarjeta dice cómo contestar emparejado y qué hizo el tablero"
+NOTA_DEL_MENSAJE=$(pide GET "http://127.0.0.1:$PUERTO_B/api/conversacion" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["mensajes"]
+print([m["nota"] for m in d if m.get("tarea") == "tarea-decision"][0])')
+assert_equals "20260925-0abc001" "$NOTA_DEL_MENSAJE" \
+  "el mensaje de la tarjeta guarda la referencia de la nota que dejó"
+assert_contains "$(cat "$HOME_B/recorder-notas/2.note")" "a. si, se construye" \
+  "la nota del trabajo que se suelta lleva sus palabras"
+assert_grep "El trabajo que esperaba sigue en marcha con ellas." "$HOME_B/recorder-notas/2.note" \
+  "la nota del trabajo que se suelta dice que sigue en marcha"
+pass "lo escrito en una tarjeta con trabajo en marcha también llega al buzón"
+
 # ------------------------------- escenario: el mecanismo de decisión, de verdad
 
 if "$ROOT/bin/fm-tasks-axi.sh" --help >/dev/null 2>&1; then
@@ -348,6 +386,96 @@ if "$ROOT/bin/fm-tasks-axi.sh" --help >/dev/null 2>&1; then
 else
   echo "skip: live: no hay tasks-axi, así que el cierre real de la decisión no se puede probar aquí"
 fi
+
+# --------------------- escenario: la tarjeta despierta a firstmate de verdad
+
+HOME_E=$(nuevo_home tarjeta real)
+backlog_de "$HOME_E" '# Backlog
+
+## Queued
+- [ ] tarea-tarjeta - Una decision escrita en su tarjeta (repo: firstmate) (kind: captain) (since 2026-09-25) (hold: Decisión: dime si borro las ramas de prueba o espero) (hold-kind: captain)
+  Captain hold set: 2026-09-25T20:00:00Z
+- [ ] tarea-suelta - Una tarea que ya no espera nada (repo: firstmate) (kind: ship) (since 2026-09-25)'
+PUERTO_E=$(puerto_libre)
+arrancar "$HOME_E" "$PUERTO_E"
+
+# La pregunta del capitán, con la misma forma que la que se perdió de verdad.
+PREGUNTA_TARJETA='¿Esto no lo hiciste ya antes?'
+pide POST "http://127.0.0.1:$PUERTO_E/api/responder" \
+  "$(python3 -c 'import json,sys; print(json.dumps({"tarea":"tarea-tarjeta","texto":sys.argv[1],"titulo":"Una decision escrita en su tarjeta"}))' "$PREGUNTA_TARJETA")" >/dev/null
+
+NOTA=$(find "$HOME_E/state/inbox" -maxdepth 1 -name '*.note' -print -quit 2>/dev/null)
+assert_present "${NOTA:-$HOME_E/state/inbox/NO-HAY-NOTA}" \
+  "una pregunta escrita en la tarjeta deja su nota durable en el buzón de firstmate"
+assert_grep "tarea-tarjeta" "${NOTA:-/dev/null}" "la nota de la tarjeta nombra la tarea"
+assert_grep "$PREGUNTA_TARJETA" "${NOTA:-/dev/null}" "la nota lleva la pregunta del capitán tal cual"
+assert_grep "check" "$HOME_E/state/.wake-queue" "la pregunta despierta a firstmate con su aviso"
+pass "la pregunta escrita en una tarjeta deja su nota durable en el buzón y despierta a firstmate"
+
+ID_E=$(pide GET "http://127.0.0.1:$PUERTO_E/api/conversacion" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["mensajes"]
+print([m["id"] for m in d if m["de"] == "capitan"][-1])')
+assert_grep "--reply-to $ID_E" "${NOTA:-/dev/null}" \
+  "la nota dice cómo contestar emparejado con ese mensaje de la tarjeta"
+assert_grep "La decisión queda cerrada con estas palabras." "${NOTA:-/dev/null}" \
+  "la nota cuenta que el tablero ya cerró la decisión"
+pass "la nota de la tarjeta dice cómo contestar emparejado y qué hizo el tablero"
+
+ID_NOTA=$(basename "${NOTA:-x}" .note)
+NOTA_DEL_MENSAJE=$(pide GET "http://127.0.0.1:$PUERTO_E/api/conversacion" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["mensajes"]
+print([m["nota"] for m in d if m.get("tarea") == "tarea-tarjeta"][0])')
+assert_equals "$ID_NOTA" "$NOTA_DEL_MENSAJE" \
+  "el mensaje de la tarjeta guarda la referencia de la nota que dejó en el buzón"
+pass "la conversación guarda la referencia de la nota que dejó la tarjeta"
+
+comprobar "$PUERTO_E" "la tarjeta dice que su pregunta espera la respuesta de firstmate" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-tarjeta"][0]
+assert tarjeta["pregunta"]["estado"] == "espera", tarjeta.get("pregunta")
+print("espera")
+'
+
+FM_HOME="$HOME_E" "$TABLERO" reply --reply-to "$ID_E" "No: aquello era la limpieza de espacio. Esto sigue pendiente." >/dev/null
+
+comprobar_charla "$PUERTO_E" "la respuesta de firstmate se empareja con la pregunta hecha en la tarjeta" '
+import json, sys
+d = json.load(sys.stdin)["mensajes"]
+pregunta = [m for m in d if m.get("tarea") == "tarea-tarjeta" and m["de"] == "capitan"][-1]
+assert pregunta["respuestas"], d
+respuesta = [m for m in d if m["id"] == pregunta["respuestas"][0]][0]
+assert "sigue pendiente" in respuesta["texto"], respuesta
+assert respuesta["responde_a"] == pregunta["id"], respuesta
+print("emparejado")
+'
+
+comprobar "$PUERTO_E" "la tarjeta pasa a contestada en cuanto firstmate responde" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-tarjeta"][0]
+assert tarjeta["pregunta"]["estado"] == "contestada", tarjeta.get("pregunta")
+print("contestada")
+'
+
+assert_equals "1" "$(find "$HOME_E/state/inbox" -maxdepth 1 -name '*.note' | wc -l)" \
+  "cerrar la decisión y avisar no duplica la nota de la tarjeta"
+pass "la tarjeta deja una sola nota aunque el tablero cierre la decisión"
+
+# Una tarjeta que ya no espera nada no puede cerrar nada, pero lo que escribe el
+# capitán no se pierde: queda guardado, avisado y dicho en el aviso.
+AVISO_SUELTA=$(pide POST "http://127.0.0.1:$PUERTO_E/api/responder" \
+  '{"tarea":"tarea-suelta","texto":"Una pregunta sobre algo que ya no espera nada."}')
+assert_contains "$AVISO_SUELTA" '"ok": true' \
+  "una tarjeta sin decisión que cerrar no pierde la pregunta del capitán"
+assert_contains "$AVISO_SUELTA" "no se ha podido cerrar" \
+  "el aviso dice claramente que la decisión no se cerró"
+assert_grep "Una pregunta sobre algo que ya no espera nada." \
+  "$(find "$HOME_E/state/inbox" -maxdepth 1 -name '*.note' -newer "$NOTA" -print -quit)" \
+  "la pregunta llega al buzón aunque la decisión no se pueda cerrar"
+pass "una tarjeta sin nada que cerrar guarda y avisa igual la pregunta del capitán"
 
 # -------------------------------------- escenario: el chat y el buzón de firstmate
 
@@ -447,6 +575,9 @@ assert_contains "$PETICIONES" "Ahora mismo" "el encargo de mover dice a qué col
 assert_contains "$PETICIONES" "pide quitar la tarea tarea-quieta" "el encargo de quitar llega al buzón"
 assert_contains "$PETICIONES" "confírmalo con él" "el encargo de quitar pide confirmación antes de borrar"
 pass "mover y quitar dejan su encargo en el buzón, con la confirmación del borrado pedida"
+assert_equals "4" "$(find "$HOME_D/state/inbox" -maxdepth 1 -name '*.note' | wc -l)" \
+  "cada mensaje del chat y cada encargo deja una sola nota, sin duplicar ninguna"
+pass "el chat y las peticiones de mover y quitar siguen dejando una nota cada uno"
 
 comprobar_charla "$PUERTO_D" "las dos peticiones quedan en la conversación como lo que son" '
 import json, sys

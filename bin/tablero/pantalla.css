@@ -221,6 +221,17 @@
   .k-ahora { background: var(--blue-bg); color: var(--blue); }
   .k-plan { background: var(--grey-bg); color: var(--grey); }
   .k-hecho { background: var(--mint-bg); color: var(--mint-ink); }
+  /* Lo que el capitán escribió en la tarjeta: al revés que "Espera tu respuesta". */
+  .pregunta {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; font-weight: 650; letter-spacing: 0.005em;
+    padding: 2px 8px; border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pregunta svg { width: 12px; height: 12px; }
+  .p-espera { background: var(--violet-bg); color: var(--violet); }
+  .p-contestada { background: var(--mint-bg); color: var(--mint-ink); }
+  .row-need .pregunta { margin-left: 8px; vertical-align: 1px; }
   .area { font-size: 12px; font-weight: 650; color: var(--muted); }
   .card h3 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.38; letter-spacing: -0.012em; color: var(--ink); }
   .need { margin-top: 7px; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
