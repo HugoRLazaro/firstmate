@@ -11,9 +11,11 @@ Serves, over HTTP on loopback and the machine's Tailscale address only:
   GET  /                    the page
   GET  /pantalla.css        its stylesheet
   GET  /pantalla.js         its behaviour
-  GET  /api/estado          the five columns, derived from this home's real state
+  GET  /api/estado          the five columns, derived from this home's real state,
+                            each card with the state of what the captain wrote in it
   GET  /api/conversacion    the durable conversation, paired question -> answer
-  POST /api/responder       {"tarea","texto"}            -> bin/fm-captain-hold.sh answer
+  POST /api/responder       {"tarea","texto"}            -> bin/fm-inbox.sh note
+                                                            + bin/fm-captain-hold.sh answer
   POST /api/mensaje         {"texto"}                    -> bin/fm-inbox.sh note
   POST /api/peticion        {"tarea","accion","destino"} -> bin/fm-inbox.sh note
 
@@ -30,6 +32,12 @@ Nothing here changes a task's state on its own. Answering a decision closes it
 through the existing decision mechanism with the captain's own words, and
 moving or removing a card is only a request placed in firstmate's inbox: the
 board asks, firstmate does.
+
+A question or an answer written in a card is ALSO a message to firstmate, so it
+leaves exactly one note in that inbox, naming the task and carrying the
+captain's words verbatim, before the decision mechanism is asked to close or
+release anything. The chat and the move/remove requests keep their own single
+note, and no action ever writes two.
 
 Usage:
   fm-tablero.py serve --home <home> [--host <addr>]... [--port <n>]
@@ -454,10 +462,13 @@ def tablero(home: Path, ahora: datetime | None = None) -> dict:
     for tarea in tareas:
         nuevas[tarea["id"]] = leer_novedad(state_dir, tarea["id"])
 
+    charla = preguntas_de_tarjeta(emparejar(leer_conversacion(home)))
     tarjetas = []
     for tarea in tareas:
         encargado = (state_dir / f"{tarea['id']}.meta").exists()
-        tarjetas.append(clasificar(tarea, nuevas.get(tarea["id"]), encargado))
+        tarjeta = clasificar(tarea, nuevas.get(tarea["id"]), encargado)
+        tarjeta["pregunta"] = charla.get(tarjeta["id"], {})
+        tarjetas.append(tarjeta)
 
     columnas = []
     for etapa in ETAPAS:
@@ -507,11 +518,18 @@ def leer_conversacion(home: Path) -> list[dict]:
                     dato = json.loads(linea)
                 except json.JSONDecodeError:
                     continue
-                if isinstance(dato, dict) and dato.get("texto"):
+                # Sin identificador no se puede emparejar ni contestar, así que no
+                # entra: una línea a medio escribir no puede tumbar el tablero.
+                if isinstance(dato, dict) and dato.get("texto") and dato.get("id"):
                     mensajes.append(dato)
     except OSError:
         return []
     return mensajes[-MAX_MENSAJES:]
+
+
+def nuevo_mensaje_id() -> str:
+    """El identificador de un mensaje antes de escribirlo, para poder nombrarlo en la nota."""
+    return f"m{int(datetime.now(timezone.utc).timestamp() * 1000)}-{os.getpid()}"
 
 
 def anadir_mensaje(home: Path, de: str, texto: str, tipo: str = "mensaje",
@@ -522,7 +540,7 @@ def anadir_mensaje(home: Path, de: str, texto: str, tipo: str = "mensaje",
     ruta.parent.mkdir(parents=True, exist_ok=True)
     ahora = datetime.now(timezone.utc)
     registro = {
-        "id": mensaje_id or f"m{int(ahora.timestamp() * 1000)}-{os.getpid()}",
+        "id": mensaje_id or nuevo_mensaje_id(),
         "ts": ahora.isoformat(timespec="seconds"),
         "de": de,
         "tipo": tipo,
@@ -572,6 +590,31 @@ def emparejar(mensajes: list[dict]) -> list[dict]:
     return salida
 
 
+def preguntas_de_tarjeta(mensajes: list[dict]) -> dict[str, dict]:
+    """Estado, por tarea, de lo último que el capitán escribió en su tarjeta.
+
+    Un mensaje escrito en una tarjeta nombra su tarea; uno del chat no nombra
+    ninguna, y una petición de mover o quitar no es una pregunta al capitán, así
+    que la tarjeta sólo mira los mensajes que llevan tarea y no son peticiones.
+    Manda el último: mientras no tenga respuesta espera contestación, y en cuanto
+    firstmate la contesta queda contestada.
+    """
+    estado: dict[str, dict] = {}
+    for mensaje in mensajes:
+        tarea = (mensaje.get("tarea") or "").strip()
+        if not tarea or mensaje.get("de") != "capitan":
+            continue
+        if mensaje.get("tipo") == "peticion":
+            continue
+        respuestas = mensaje.get("respuestas") or []
+        estado[tarea] = {
+            "estado": "contestada" if respuestas else "espera",
+            "mensaje": mensaje["id"],
+            "ts": mensaje.get("ts", ""),
+        }
+    return estado
+
+
 # ------------------------------------------------------------------- comandos
 
 
@@ -616,14 +659,17 @@ def responder_decision(home: Path, tarea: str, texto: str) -> dict:
 
 
 def escribir_buzon(home: Path, texto: str) -> tuple[bool, str]:
+    """Deja la nota y devuelve si se guardó más el identificador que el buzón anuncia.
+
+    `fm-inbox.sh note` publica la línea `queued <id>`, ese es el único sitio del
+    que se lee el identificador: lleva mayúsculas, así que recortarlo de la ruta
+    del fichero lo dejaría a medias.
+    """
     codigo, salida, error = _ejecutar([str(home / "bin" / "fm-inbox.sh"), "note", "-"], entrada=texto)
-    referencia = ""
-    m = re.search(r"([0-9]{8,}-[0-9a-f]+)\.note", salida + error)
-    if m:
-        referencia = m.group(1)
     if codigo != 0:
         return False, (error or salida or "El buzón de firstmate rechazó el mensaje.").strip()[:400]
-    return True, referencia
+    m = re.search(r"(?m)^queued\s+(\S+)", salida)
+    return True, (m.group(1) if m else "")
 
 
 def texto_peticion(accion: str, tarea: str, titulo: str, columna: str) -> str:
@@ -653,6 +699,22 @@ def texto_mensaje(texto: str) -> str:
     return ("[Tablero] Mensaje del capitán desde la conversación del tablero:\n"
             + texto.strip()
             + '\n\nContesta en el tablero con: bin/fm-tablero.sh reply "<texto>"')
+
+
+def texto_tarjeta(tarea: str, titulo: str, texto: str, mensaje_id: str,
+                  situacion: str = "") -> str:
+    """El aviso que deja en el buzón una pregunta o respuesta escrita en una tarjeta.
+
+    Nombra la tarea a la que se refiere, lleva las palabras del capitán tal cual y
+    dice cómo contestar en la conversación emparejado con ese mensaje concreto, que
+    ya tiene identificador porque se le pasa el mismo con el que se guardará.
+    """
+    quien = f"{tarea}" + (f' («{titulo}»)' if titulo else "")
+    aviso = f"[Tablero] El capitán escribe en la tarjeta de la tarea {quien}:\n{texto.strip()}"
+    if situacion:
+        aviso += f"\n\n{situacion}"
+    return (aviso
+            + f'\n\nContesta en el tablero con: bin/fm-tablero.sh reply --reply-to {mensaje_id} "<texto>"')
 
 
 # --------------------------------------------------------------------- HTTP
@@ -747,20 +809,46 @@ class Manejador(BaseHTTPRequestHandler):
 
     def _responder(self, datos: dict) -> None:
         tarea = str(datos.get("tarea") or "").strip()
-        texto = str(datos.get("texto") or "")
+        titulo = str(datos.get("titulo") or "")
+        limpio = str(datos.get("texto") or "").strip()
         if not tarea:
             self._json({"ok": False, "error": "Falta la tarea."}, 400)
             return
-        resultado = responder_decision(self.home, tarea, texto)
-        if not resultado["ok"]:
-            self._json({"ok": False, "error": resultado["error"]}, 409)
+        if not limpio:
+            self._json({"ok": False, "error": "La respuesta está vacía."}, 400)
             return
-        anadir_mensaje(self.home, "capitan", texto.strip(), tipo="decision", tarea=tarea,
-                       titulo_tarea=str(datos.get("titulo") or ""))
-        aviso = ("Respuesta enviada: la decisión queda cerrada, con tus palabras."
-                 if resultado["modo"] == "cerrar"
-                 else "Respuesta enviada: el trabajo que esperaba sigue con ella.")
-        self._json({"ok": True, "aviso": aviso})
+
+        resultado = responder_decision(self.home, tarea, limpio)
+        if resultado["ok"]:
+            situacion = ("La decisión queda cerrada con estas palabras."
+                         if resultado["modo"] == "cerrar"
+                         else "El trabajo que esperaba sigue en marcha con ellas.")
+        else:
+            situacion = "El tablero no ha podido cerrar la decisión: " + resultado["error"]
+
+        # Lo escrito en una tarjeta avisa por el mismo camino que un mensaje del
+        # chat, y sólo por uno: mover o quitar ya avisan por su propia petición.
+        mensaje_id = nuevo_mensaje_id()
+        en_buzon, detalle = escribir_buzon(
+            self.home, texto_tarjeta(tarea, titulo, limpio, mensaje_id, situacion))
+        anadir_mensaje(self.home, "capitan", limpio, tipo="decision", tarea=tarea,
+                       titulo_tarea=titulo, nota=detalle if en_buzon else "",
+                       mensaje_id=mensaje_id)
+
+        avisos = []
+        if resultado["ok"]:
+            avisos.append("Respuesta enviada: la decisión queda cerrada, con tus palabras."
+                          if resultado["modo"] == "cerrar"
+                          else "Respuesta enviada: el trabajo que esperaba sigue con ella.")
+        else:
+            avisos.append("Tu mensaje queda guardado, pero la decisión no se ha podido cerrar: "
+                          + resultado["error"])
+        if en_buzon:
+            avisos.append("Firstmate lo tiene ya en su buzón.")
+        else:
+            avisos.append("Firstmate no ha recibido el aviso (" + detalle
+                          + "): escríbele desde la conversación.")
+        self._json({"ok": True, "aviso": " ".join(avisos)})
 
     def _mensaje(self, datos: dict) -> None:
         texto = str(datos.get("texto") or "").strip()

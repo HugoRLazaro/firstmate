@@ -197,6 +197,23 @@ let idRespondida = null;
     cerrada,
     JSON.stringify({ aviso, pendientesAntes, pendientesDespues: Number(await pagina.textContent("#waitN")) })
   );
+
+  // Lo escrito en una tarjeta se ve en la tarjeta: sin contestar mientras firstmate
+  // no responda, y contestado cuando responde a esa pregunta concreta. La columna
+  // «Terminado y publicado» nace plegada, así que se despliega para verlo.
+  await pagina.click(".col:nth-child(5) .fold");
+  await pagina.waitForTimeout(350);
+  const chipEspera = ((await pagina.textContent(`.card[data-id="${idRespondida}"] .pregunta.p-espera`).catch(() => "")) || "").trim();
+  comprobar(
+    "la tarjeta dice que lo escrito en ella espera la respuesta de firstmate",
+    /firstmate/.test(chipEspera) && !/tu respuesta/i.test(chipEspera),
+    JSON.stringify(chipEspera)
+  );
+  const chipContestada = ((await pagina.textContent('.card[data-id="portales-decidir"] .pregunta.p-contestada').catch(() => "")) || "").trim();
+  comprobar("una pregunta ya contestada se ve contestada en su tarjeta", /contest/i.test(chipContestada), JSON.stringify(chipContestada));
+  await captura("tarjeta-pregunta-contestada-1280");
+  await pagina.click(".col:nth-child(5) .fold");
+  await pagina.waitForTimeout(350);
   }
 }
 
@@ -213,6 +230,12 @@ if (MUTAR) {
   comprobar("los mensajes sin respuesta se ven esperando", esperando > 0, String(esperando));
   const respondidos = await pagina.$$eval(".chat-log .state.ok", (n) => n.length);
   comprobar("las respuestas de firstmate se emparejan con su mensaje", respondidos > 0, String(respondidos));
+  const cuando = await pagina.$$eval(".chat-log .state.ok", (n) => n.map((e) => e.textContent.trim()));
+  comprobar(
+    "el mensaje respondido dice a qué hora se le contestó, no sólo que se le contestó",
+    cuando.length > 0 && cuando.every((t) => /Respondido a las \d{1,2}:\d{2}/.test(t)),
+    JSON.stringify(cuando)
+  );
 } else {
   const vacio = (await pagina.textContent(".chat-log")) || "";
   comprobar("un tablero que aún no ha hablado dice que no hay nada hablado", burbujas === 0 && vacio.includes("Todavía no hay nada hablado"), vacio.trim());
