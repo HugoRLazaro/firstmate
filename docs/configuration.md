@@ -580,7 +580,7 @@ Only the host disk is judged; the root disk is reported.
 A machine that is not WSL has no host disk, so nothing disk-related is judged, armed, or reported low there.
 
 This section is the single owner of the floor schema and the operating rules.
-`bin/fm-memory.sh` owns the reading, the episode record, and every exact command.
+`bin/fm-memory.sh` owns the readings, the episode records, and every exact command.
 
 `config/memory-floor` is an optional local, gitignored file with one `key=<whole megabytes>` per line; blank lines and `#` comments are ignored.
 
@@ -632,7 +632,7 @@ The disk line names the free space on the host and root disks, the floor, and th
 Each is reported once per episode: `state/.memory-low` and `state/.disk-low` record the episodes, and nothing more is reported until the reading has climbed back to its floor plus a quarter, so a reading hovering at the floor does not wake firstmate on every poll.
 Swap is named in the memory line but never opens or closes an episode.
 A reading that cannot be parsed reports nothing.
-Silence a notification by setting its alert floor to `0`; `bin/fm-memory.sh disarm` removes the shims, their trust bindings, and the episode records, and the next locked session start arms them again.
+Silence a notification by setting its alert floor to `0`; `bin/fm-memory.sh disarm` removes the shims, their trust bindings, and the episode records, and the next locked session start in a primary home arms them again.
 The watcher polls every `FM_CHECK_INTERVAL` seconds (default 300), so this is an early warning for a host filling over minutes; a job that takes everything in seconds is bounded only by a cap on that job.
 
 ### Operating rules
