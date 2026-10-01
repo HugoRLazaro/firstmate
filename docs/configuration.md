@@ -573,6 +573,12 @@ A worker that finishes its work stays alive in its window with its whole convers
 None of them changes a host setting, and every one reads the kernel's own numbers from `/proc/meminfo`: `MemAvailable`, the kernel's estimate of what can be claimed without swapping, and `SwapFree`.
 A host with no `/proc/meminfo` has no reading, so every action steps aside silently there.
 
+The same script judges the host disk, because a full one takes down more than a full memory does.
+A WSL machine's own disk is a file on the Windows drive, and when that drive fills, the file cannot grow and the whole machine goes down with every worker on it, whatever the memory reading says.
+The disk reading is free space from `df` for the root disk and for the host disk, which is the Windows drive mounted at `/mnt/c` on a machine the kernel itself identifies as WSL.
+Only the host disk is judged; the root disk is reported.
+A machine that is not WSL has no host disk, so nothing disk-related is judged, armed, or reported low there.
+
 This section is the single owner of the floor schema and the operating rules.
 `bin/fm-memory.sh` owns the reading, the episode record, and every exact command.
 
@@ -583,6 +589,8 @@ spawn_available_mb=2048
 spawn_swap_free_mb=512
 alert_available_mb=1536
 job_max_mb=4096
+spawn_host_disk_free_mb=10240
+alert_host_disk_free_mb=20480
 ```
 
 | Key | Default | Meaning |
@@ -591,6 +599,8 @@ job_max_mb=4096
 | `spawn_swap_free_mb` | 512 | A launch is refused while `SwapFree` is under this, on a host that has swap at all. |
 | `alert_available_mb` | 1536 | Firstmate is told when `MemAvailable` drops under this. |
 | `job_max_mb` | 4096 | The cap `bin/fm-memory.sh run` applies when `--max-mb` is not given. |
+| `spawn_host_disk_free_mb` | 10240 | A launch is refused while the host disk has less free space than this. |
+| `alert_host_disk_free_mb` | 20480 | Firstmate is told when free space on the host disk drops under this. |
 
 A missing file or key uses the default, and `0` turns that one floor off.
 A value that is not a whole number, or an unknown key, is named on stderr and ignored, so a mistyped floor never refuses a launch by itself.
@@ -599,27 +609,30 @@ It is not inherited by secondmate homes: the floors describe one host, and a hom
 
 ### Launch floor
 
-`bin/fm-spawn.sh` asks `bin/fm-memory.sh guard` before every launch on this host - ship, scout, secondmate, and the relaunch behind `bin/fm-control.sh relaunch` - and refuses, before any window, local copy, or task record exists, when the host is under either launch floor.
+`bin/fm-spawn.sh` asks `bin/fm-memory.sh guard` before every launch on this host - ship, scout, secondmate, and the relaunch behind `bin/fm-control.sh relaunch` - and refuses, before any window, local copy, or task record exists, when the host is under a memory launch floor or the host-disk launch floor.
 The refusal names the reading and the floor.
 A relaunch asks before the running worker is stopped, so a refused relaunch leaves that worker exactly as it was.
-A remote secondmate launches on another host and is not judged by this host's memory.
-A reading that exists but cannot be parsed warns and lets the launch continue; only a positive low reading refuses.
-`FM_MEMORY_GUARD=off` in the environment of one `fm-spawn.sh` or `fm-control.sh` command launches anyway and says on stderr that the floor was skipped.
+A remote secondmate launches on another host and is not judged by this host's memory or disk.
+A reading that exists but cannot be parsed, or a host disk that does not answer, warns and lets the launch continue; only a positive low reading refuses.
+`FM_MEMORY_GUARD=off` in the environment of one `fm-spawn.sh` or `fm-control.sh` command launches anyway and says on stderr that the memory floor was skipped; `FM_DISK_GUARD=off` does the same for the disk floor, and neither waives the other.
 
 The defaults were sized from measurements on a 16 GB host on 2026-10-01.
 An idle worker held 210 to 330 MB resident plus 25 to 65 MB of swap, whichever of the two measured tools ran it, so one worker is budgeted at 0.4 GB.
 The 2048 MB launch floor is that worker, about 1 GB for the tests and builds it will run, and a margin.
 The swap floor is deliberately low: swapped-out pages stay out after memory recovers, so it refuses only when swap is nearly gone, which on that host preceded the kernel killing the whole session.
+The disk floors come from the same host on the same day: three aborted test workers left crash dumps of about 4.7 GB each on the Windows drive within six minutes, and the machine went down hours later when the drive reached zero.
+The 10 GB launch floor is two such dumps with nothing else writing, and the 20 GB alert floor leaves room to act before a launch is refused.
 
-### Low-memory notification
+### Low-memory and low-disk notifications
 
-Arm the check once per home with `bin/fm-memory.sh arm`.
-That writes `state/memory.check.sh` and binds its bytes with `bin/fm-check-register.sh`, so the existing watcher polls it on its normal cadence and turns its one line into a `check:` wake.
-The line names the reading, the floor, and the three largest processes with where they are working.
-It is reported once per episode: `state/.memory-low` records the episode, and nothing more is reported until `MemAvailable` has climbed back to the floor plus a quarter, so a reading hovering at the floor does not wake firstmate on every poll.
-Swap is named in the line but never opens or closes an episode.
+A locked session start arms both notifications in a primary home through `bin/fm-memory.sh arm --missing`, which writes only a check that does not exist yet and never rewrites one that does; `bin/fm-memory.sh arm` does the same by hand and rewrites both, which is how a secondmate home on another machine is armed.
+Arming writes `state/memory.check.sh` and, on a machine with a host disk, `state/disk.check.sh`, and binds their bytes with `bin/fm-check-register.sh`, so the existing watcher polls them on its normal cadence and turns each one line into a `check:` wake.
+The memory line names the reading, the floor, and the three largest processes with where they are working.
+The disk line names the free space on the host and root disks, the floor, and the three largest of the places that can be sized cheaply: the WSL crash-dump folder and each `data/<task-id>/` directory of the home.
+Each is reported once per episode: `state/.memory-low` and `state/.disk-low` record the episodes, and nothing more is reported until the reading has climbed back to its floor plus a quarter, so a reading hovering at the floor does not wake firstmate on every poll.
+Swap is named in the memory line but never opens or closes an episode.
 A reading that cannot be parsed reports nothing.
-`bin/fm-memory.sh disarm` removes the shim, its trust binding, and the episode record.
+Silence a notification by setting its alert floor to `0`; `bin/fm-memory.sh disarm` removes the shims, their trust bindings, and the episode records, and the next locked session start arms them again.
 The watcher polls every `FM_CHECK_INTERVAL` seconds (default 300), so this is an early warning for a host filling over minutes; a job that takes everything in seconds is bounded only by a cap on that job.
 
 ### Operating rules
@@ -634,7 +647,13 @@ The watcher polls every `FM_CHECK_INTERVAL` seconds (default 300), so this is an
   A job that outgrows its cap is killed alone.
   Keep the caps of the jobs running at once, plus 0.4 GB per live worker, under the host's memory minus the launch floor.
   Every worker brief carries this rule.
+  A node or vitest test suite is such a job and also gets a bounded worker count, because each test worker can grow to its own heap limit and, under WSL, every worker that aborts is written whole to the host disk as a crash dump.
+- A job that will write more than a few GB checks free space first and deletes its intermediate data when it finishes; every worker brief carries this rule too.
+  `bin/fm-memory.sh status` prints the free space on the host and root disks, the disk floors, and the size of the WSL crash-dump folder when there is one.
+- Cleanup never removes a task's `data/<id>/` directory.
+  `bin/fm-teardown.sh` names its size when the task closes, and removing it is the captain's decision.
 - On a low-memory notification, read `bin/fm-memory.sh status`, clean up finished tasks first, and only then decide whether a running job has to be stopped; stopping another task's job is that task's decision, routed through its worker.
+- On a low-disk notification, hold back jobs that write data, and take the places the line names to the captain: deleting crash dumps or a task's data is the captain's decision, and so is any change to the machine's own configuration.
 
 ### Supported limits
 
@@ -1119,6 +1138,9 @@ FM_CONFIG_OVERRIDE=      # alternate config dir, mainly for tests
 FM_PROC_ROOT_OVERRIDE=   # alternate /proc root for Linux process-identity and working-directory reads in fm-wake-lib.sh, fm-cursor-lib.sh, fm-teardown.sh, and fm-memory.sh, mainly for tests
 FM_MEMINFO_PATH=         # alternate meminfo file for the reading bin/fm-memory.sh judges; unset means /proc/meminfo, mainly for tests (docs/configuration.md "Memory guard")
 FM_MEMORY_GUARD=         # unset enforces the memory launch floor; off skips it for one fm-spawn.sh or fm-control.sh command and reports the skip (docs/configuration.md "Memory guard")
+FM_DISK_GUARD=           # unset enforces the host-disk launch floor; off skips it for one fm-spawn.sh or fm-control.sh command and reports the skip (docs/configuration.md "Memory guard")
+FM_DISK_HOST_PATH=       # alternate mount of the host disk bin/fm-memory.sh reads on a WSL machine; unset means /mnt/c (docs/configuration.md "Memory guard")
+FM_DISKINFO_PATH=        # alternate file replacing the live disk reading bin/fm-memory.sh judges, with RootAvailable and HostAvailable lines in kB, mainly for tests (docs/configuration.md "Memory guard")
 FM_MEMORY_SYSTEMD_RUN=   # test override for the systemd-run executable bin/fm-memory.sh run uses for a heavy job's memory-capped scope
 FM_BACKEND=             # optional runtime backend override for new spawns; tmux/herdr/zellij/orca/cmux support ship/scout spawns, codex-app is not accepted
 FM_TRACE_CONTEXT=       # optional trace-context override; see "Trace context propagation"

@@ -1558,6 +1558,26 @@ backlog_done_args() {
 # printed instruction for a later turn (bin/fm-backlog-transition-lib.sh owns the
 # invariant). This prints what already happened, so the follow-up wording stays
 # only where a human still owes the edit.
+# Cleanup never removes a task's data directory: it holds the brief, the report,
+# and whatever the worker built there, and one task's has reached 98 GB. So the
+# size is named at the moment the task closes, and removing it stays the
+# captain's decision. Purely informative and bounded: a directory that cannot be
+# sized in time is named without a size, and nothing here can fail a teardown.
+report_retained_data() {
+  local dir="$DATA/$ID" kb
+  [ -d "$dir" ] && [ ! -L "$dir" ] || return 0
+  if command -v timeout >/dev/null 2>&1; then
+    kb=$(timeout 15 du -sk -- "$dir" 2>/dev/null | awk 'NR == 1 { print $1 }') || kb=
+  else
+    kb=$(du -sk -- "$dir" 2>/dev/null | awk 'NR == 1 { print $1 }') || kb=
+  fi
+  case "$kb" in
+    ''|*[!0-9]*) echo "teardown: data/$ID is kept and could not be sized; removing it is the captain's decision" >&2 ;;
+    *) echo "teardown: data/$ID is kept and holds $((kb / 1024)) MB; removing it is the captain's decision" >&2 ;;
+  esac
+  return 0
+}
+
 backlog_refresh_reminder() {
   local backlog_display root backend=markdown
   [ "$KIND" = secondmate ] && return 0
@@ -3883,4 +3903,5 @@ elif teardown_owns_worktree; then
 else
   echo "teardown $ID complete (window $T; pool slot $WT left to task $TEARDOWN_SLOT_REASSIGNED_TO${TEARDOWN_SLOT_REASSIGNED_HOME:+ (home $TEARDOWN_SLOT_REASSIGNED_HOME)}, which it was reassigned to)"
 fi
+report_retained_data
 backlog_refresh_reminder

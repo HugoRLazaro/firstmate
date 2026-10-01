@@ -9,8 +9,9 @@
 # launch under the floor is refused before anything is created, firstmate is
 # told once per episode, and a heavy job can be run under a cap of its own.
 #
-# Every case supplies its own reading through FM_MEMINFO_PATH, so no verdict
-# here depends on how busy the machine running the suite is.
+# Every case supplies its own reading through FM_MEMINFO_PATH or
+# FM_DISKINFO_PATH, so no verdict here depends on how busy or how full the
+# machine running the suite is.
 set -u
 
 # shellcheck source=tests/fixtures.sh
@@ -265,7 +266,7 @@ test_relaunch_refuses_under_the_floor_before_touching_the_agent() {
     FM_MEMINFO_PATH="$HOME_DIR/meminfo" PATH="$FAKEBIN_DIR:$PATH" \
     "$ROOT/bin/fm-control.sh" ship-rel-a1 relaunch --note "carry on" 2>&1) || status=$?
   [ "$status" -ne 0 ] || fail "a relaunch under the memory floor should refuse: $out"
-  assert_contains "$out" "under its memory floor" "the relaunch refusal should name the memory floor"
+  assert_contains "$out" "under a launch floor" "the relaunch refusal should name the launch floor"
   assert_contains "$out" "900 MB of memory available" "the relaunch refusal should state the reading"
   assert_contains "$out" "before its agent was touched" "the relaunch refusal should say nothing was stopped"
   assert_equals "$meta_before" "$(cat "$HOME_DIR/state/ship-rel-a1.meta")" \
@@ -298,7 +299,7 @@ test_local_secondmate_relaunch_refuses_under_the_floor_before_touching_the_agent
     FM_MEMINFO_PATH="$HOME_DIR/meminfo" PATH="$FAKEBIN_DIR:$PATH" \
     "$ROOT/bin/fm-control.sh" sm-rel-a1 relaunch 2>&1) || status=$?
   [ "$status" -ne 0 ] || fail "a local secondmate relaunch under the memory floor should refuse: $out"
-  assert_contains "$out" "under its memory floor" "the secondmate relaunch refusal should name the memory floor"
+  assert_contains "$out" "under a launch floor" "the secondmate relaunch refusal should name the launch floor"
   assert_contains "$out" "900 MB of memory available" "the secondmate relaunch refusal should state the reading"
   assert_contains "$out" "before its agent was touched" "the secondmate relaunch refusal should say nothing was stopped"
   assert_equals "$meta_before" "$(cat "$HOME_DIR/state/sm-rel-a1.meta")" \
@@ -606,6 +607,343 @@ test_run_really_kills_a_job_that_outgrows_its_cap() {
   pass "a job that outgrows its cap is killed by itself, and a job inside the cap runs normally"
 }
 
+# --- disk -------------------------------------------------------------------
+#
+# On 2026-10-01 the same host went down twice with memory to spare: the Windows
+# drive holding its virtual disk filled, the virtual disk could not grow, and
+# every process on the machine died together. These cases pin the disk half of
+# the guard against that: a launch is refused while the host disk is nearly
+# full, firstmate is told once per episode, and a machine with no host disk
+# behaves exactly as it did before.
+
+# write_diskinfo <file> <root-MB> [host-MB]; no host value means no host disk.
+write_diskinfo() {
+  local file=$1 root=$2 host=${3:-}
+  printf 'RootAvailable: %s kB\n' "$((root * 1024))" > "$file"
+  [ -z "$host" ] || printf 'HostAvailable: %s kB\n' "$((host * 1024))" >> "$file"
+}
+
+run_disk() { # <home> <diskinfo> <action...>
+  local home=$1 diskinfo=$2
+  shift 2
+  FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_CONFIG_OVERRIDE="$home/config" FM_MEMINFO_PATH="$ROOT/tests/assets/meminfo-healthy" \
+    FM_DISKINFO_PATH="$diskinfo" FM_DISK_HOST_PATH="$home/host-disk" "$MEMORY" "$@"
+}
+
+test_disk_guard_allows_above_and_refuses_under_the_host_floor() {
+  local home out status=0
+  home=$(make_home disk-guard)
+  write_diskinfo "$home/diskinfo" 500000 60000
+  out=$(run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 0 "$status" "guard on a host disk above its floor"
+  assert_equals "" "$out" "a host disk above its floor should pass the guard silently"
+
+  write_diskinfo "$home/diskinfo" 500000 482
+  status=0
+  out=$(run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 3 "$status" "guard under the host-disk floor"
+  assert_contains "$out" "has 482 MB free" "the refusal should state the reading"
+  assert_contains "$out" "10240 MB launch floor" "the refusal should state the floor"
+  assert_contains "$out" "root disk 500000 MB free" "the refusal should carry the root reading"
+  assert_contains "$out" "FM_DISK_GUARD=off" "the refusal should name the override"
+
+  # A full root disk alone is reported, never judged: only the host disk takes
+  # the whole machine down.
+  write_diskinfo "$home/diskinfo" 5 60000
+  status=0
+  out=$(run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 0 "$status" "guard with only the root disk low"
+  pass "guard refuses under the host-disk floor with the reading, the floor, and the override, and allows above it"
+}
+
+test_disk_guard_reads_the_configured_floor() {
+  local home out status=0
+  home=$(make_home disk-guard-config)
+  write_diskinfo "$home/diskinfo" 500000 15000
+  printf 'spawn_host_disk_free_mb=30000\n' > "$home/config/memory-floor"
+  out=$(run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 3 "$status" "guard under a raised host-disk floor"
+  assert_contains "$out" "30000 MB launch floor" "the refusal should state the configured floor"
+
+  printf 'spawn_host_disk_free_mb=0\n' > "$home/config/memory-floor"
+  write_diskinfo "$home/diskinfo" 500000 1
+  status=0
+  out=$(run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 0 "$status" "guard with the host-disk floor turned off: $out"
+  pass "guard judges the host disk against config/memory-floor, and 0 turns the disk floor off"
+}
+
+test_disk_override_skips_only_the_disk_floor_and_says_so() {
+  local home out status=0
+  home=$(make_home disk-guard-override)
+  write_diskinfo "$home/diskinfo" 500000 100
+  out=$(FM_DISK_GUARD=off run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 0 "$status" "the explicit disk override"
+  assert_contains "$out" "disk launch floor skipped (FM_DISK_GUARD=off)" "the disk override should be visible"
+
+  # The memory override is a different floor: it never waives the disk one.
+  status=0
+  out=$(FM_MEMORY_GUARD=off run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 3 "$status" "the memory override must not waive the disk floor"
+  pass "FM_DISK_GUARD=off launches under the disk floor and says so, and the memory override does not waive it"
+}
+
+test_an_unreadable_disk_reading_warns_and_allows() {
+  local home out status label
+  home=$(make_home disk-guard-unreadable)
+  printf '%s\n' 'RootAvailable: 9000000 kB' 'HostAvailable: plenty kB' > "$home/not-a-number"
+  printf '%s\n' 'RootAvailable: 9000000 kB' 'HostAvailable: 900 MB' > "$home/wrong-unit"
+  printf '%s\n' 'HostAvailable: 900 kB' 'HostAvailable: 90000000 kB' > "$home/twice"
+  printf '%s\n' 'Filesystem 1024-blocks Used Available' > "$home/no-fields"
+  : > "$home/empty"
+  mkdir -p "$home/a-directory"
+  for label in not-a-number wrong-unit twice no-fields empty a-directory missing; do
+    status=0
+    out=$(run_disk "$home" "$home/$label" guard 2>&1) || status=$?
+    expect_code 0 "$status" "an unreadable disk reading ($label) must not refuse a launch"
+    assert_contains "$out" "disk space could not be read" "an unreadable disk reading ($label) should warn"
+    assert_contains "$out" "launching without the disk floor" "the warning ($label) should say the launch continues"
+    out=$(run_disk "$home" "$home/$label" disk-check 2>&1)
+    assert_equals "" "$out" "an unreadable disk reading ($label) must not wake firstmate"
+    assert_absent "$home/state/.disk-low" "an unreadable disk reading ($label) opened an episode"
+  done
+  pass "a missing, empty, malformed, or ambiguous disk reading warns and lets the launch continue, and never wakes firstmate"
+}
+
+test_a_machine_without_a_host_disk_behaves_as_before() {
+  local home out status=0 proc
+  home=$(make_home disk-absent)
+  # A reading with no host disk in it: nothing is judged or reported.
+  write_diskinfo "$home/diskinfo" 5
+  out=$(run_disk "$home" "$home/diskinfo" guard 2>&1) || status=$?
+  expect_code 0 "$status" "guard on a machine with no host disk"
+  assert_equals "" "$out" "a machine with no host disk should pass the guard silently"
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_equals "" "$out" "a machine with no host disk must never report a low disk"
+
+  # The live reading on a machine whose kernel is not WSL: no host disk exists,
+  # so the guard is silent, no disk check is armed, and status says so.
+  proc="$home/proc"
+  mkdir -p "$proc/sys/kernel"
+  printf '6.8.0-generic\n' > "$proc/sys/kernel/osrelease"
+  status=0
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_CONFIG_OVERRIDE="$home/config" \
+    FM_DISKINFO_PATH='' FM_PROC_ROOT_OVERRIDE="$proc" FM_DISK_HOST_PATH="$home/nowhere" \
+    "$MEMORY" guard 2>&1) || status=$?
+  expect_code 0 "$status" "guard on a non-WSL machine"
+  assert_equals "" "$out" "a non-WSL machine should pass the guard silently"
+  FM_HOME="$home" FM_DISKINFO_PATH='' FM_PROC_ROOT_OVERRIDE="$proc" "$MEMORY" arm >/dev/null \
+    || fail "arm failed on a non-WSL machine"
+  assert_present "$home/state/memory.check.sh" "arm did not arm the memory check on a non-WSL machine"
+  assert_absent "$home/state/disk.check.sh" "arm wrote a disk check on a machine with no host disk"
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_DISKINFO_PATH='' FM_PROC_ROOT_OVERRIDE="$proc" "$MEMORY" status 2>&1)
+  assert_contains "$out" "this machine has no host disk to read" "status should say there is no host disk"
+  pass "a machine with no host disk is never refused, never armed for disk, and never reported low"
+}
+
+test_a_wsl_machine_reads_its_host_disk_live() {
+  local home out status=0 proc
+  home=$(make_home disk-wsl)
+  proc="$home/proc"
+  mkdir -p "$proc/sys/kernel" "$home/host-disk/Users/someone/AppData/Local/Temp/wsl-crashes"
+  printf '6.18.33.2-microsoft-standard-WSL2\n' > "$proc/sys/kernel/osrelease"
+  printf 'dump\n' > "$home/host-disk/Users/someone/AppData/Local/Temp/wsl-crashes/wsl-crash-1.dmp"
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_DISKINFO_PATH='' FM_PROC_ROOT_OVERRIDE="$proc" FM_DISK_HOST_PATH="$home/host-disk" \
+    "$MEMORY" status 2>&1)
+  printf '%s\n' "$out" | grep -Eq "^disk: host disk \($home/host-disk\) [0-9]+ MB free, root disk [0-9]+ MB free$" \
+    || fail "status on a WSL machine did not print the live host and root readings: $out"
+  assert_contains "$out" "disk floors: launch 10240 MB free on the host disk, alert 20480 MB free" \
+    "status should print the disk floors"
+  assert_contains "$out" "wsl crash dumps: 0 MB in $home/host-disk/Users/someone/AppData/Local/Temp/wsl-crashes" \
+    "status should size the crash-dump folder"
+
+  # The host disk should be there and is not: that is an unreadable reading,
+  # which warns and never refuses.
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_CONFIG_OVERRIDE="$home/config" \
+    FM_DISKINFO_PATH='' FM_PROC_ROOT_OVERRIDE="$proc" FM_DISK_HOST_PATH="$home/not-mounted" \
+    "$MEMORY" guard 2>&1) || status=$?
+  expect_code 0 "$status" "guard on a WSL machine whose host disk is not mounted"
+  assert_contains "$out" "disk space could not be read" "an unmounted host disk should warn"
+  pass "a WSL machine, detected from its kernel, reads its host disk live and sizes the crash-dump folder"
+}
+
+test_disk_check_reports_once_per_episode() {
+  local home out
+  home=$(make_home disk-episode)
+  mkdir -p "$home/data/big-task" "$home/data/small-task" \
+    "$home/host-disk/Users/someone/AppData/Local/Temp/wsl-crashes"
+  dd if=/dev/zero of="$home/data/big-task/blob" bs=1024 count=3072 2>/dev/null
+  dd if=/dev/zero of="$home/host-disk/Users/someone/AppData/Local/Temp/wsl-crashes/a.dmp" bs=1024 count=2048 2>/dev/null
+  printf 'tiny\n' > "$home/data/small-task/report.md"
+
+  write_diskinfo "$home/diskinfo" 500000 60000
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_equals "" "$out" "a roomy host disk should produce no report"
+  assert_absent "$home/state/.disk-low" "a roomy host disk opened an episode"
+
+  write_diskinfo "$home/diskinfo" 500000 15000
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_contains "$out" "disk low: the host disk ($home/host-disk) has 15000 MB free, under the 20480 MB floor" \
+    "the first low reading should be reported"
+  assert_contains "$out" "root disk 500000 MB free" "the report should carry the root reading"
+  assert_contains "$out" "largest: $home/data/big-task 3 MB, $home/host-disk/Users/someone/AppData/Local/Temp/wsl-crashes 2 MB" \
+    "the report should name the largest places, largest first"
+  assert_not_contains "$out" "small-task" "the report named a place too small to matter"
+  assert_equals 1 "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "the report must be exactly one line"
+  assert_present "$home/state/.disk-low" "the reported episode was not recorded"
+
+  # Still low, and lower: the same episode.
+  write_diskinfo "$home/diskinfo" 500000 400
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_equals "" "$out" "an episode already reported must not be reported again"
+
+  # Above the floor but inside the recovery margin, then back under: silence.
+  write_diskinfo "$home/diskinfo" 500000 22000
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_equals "" "$out" "a reading inside the recovery margin should be silent"
+  assert_present "$home/state/.disk-low" "the episode closed inside the recovery margin"
+  write_diskinfo "$home/diskinfo" 500000 15000
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_equals "" "$out" "a reading hovering at the floor woke firstmate a second time"
+
+  # Recovered past the floor plus a quarter: the next drop is news.
+  write_diskinfo "$home/diskinfo" 500000 26000
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_equals "" "$out" "recovery itself should be silent"
+  assert_absent "$home/state/.disk-low" "recovery did not close the episode"
+  write_diskinfo "$home/diskinfo" 500000 9000
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_contains "$out" "has 9000 MB free" "a new episode after recovery should be reported"
+
+  # The memory episode is a separate record: a low disk never opens it.
+  assert_absent "$home/state/.memory-low" "a low disk opened a memory episode"
+  printf 'alert_host_disk_free_mb=0\n' > "$home/config/memory-floor"
+  out=$(run_disk "$home" "$home/diskinfo" disk-check 2>&1)
+  assert_equals "" "$out" "an alert floor of 0 should turn the disk report off"
+  pass "disk-check reports a low-disk episode once with the largest places, stays silent until recovery past the margin, then reports the next one"
+}
+
+test_status_prints_the_disk_readings() {
+  local home out
+  home=$(make_home disk-status)
+  write_meminfo "$home/meminfo" 6000 3000
+  write_diskinfo "$home/diskinfo" 700000 15000
+  : > "$home/state/.disk-low"
+  out=$(FM_MEMINFO_PATH="$home/meminfo" run_disk "$home" "$home/diskinfo" status 2>&1)
+  assert_contains "$out" "disk: host disk ($home/host-disk) 15000 MB free, root disk 700000 MB free" \
+    "status should print the host and root readings"
+  assert_contains "$out" "disk floors: launch 10240 MB free on the host disk, alert 20480 MB free on the host disk" \
+    "status should print the disk floors"
+  assert_contains "$out" "a low-disk episode is open" "status should say a disk episode is open"
+  assert_not_contains "$out" "wsl crash dumps" "status named a crash-dump folder that does not exist"
+  pass "status prints the host and root disk readings, the disk floors, and an open disk episode"
+}
+
+test_arm_registers_the_disk_check_and_missing_never_rewrites() {
+  local home status=0 before
+  home=$(make_home disk-arm)
+  FM_HOME="$home" "$MEMORY" arm >/dev/null || status=$?
+  expect_code 0 "$status" "arm exit"
+  assert_present "$home/state/disk.check.sh" "arm did not write the disk check shim"
+  assert_present "$home/state/disk.check-trust" "arm did not register the disk check's bytes"
+  assert_grep 'disk-check' "$home/state/disk.check.sh" "the disk shim does not run the disk check"
+
+  # --missing leaves an existing check exactly as it is, even one somebody
+  # replaced with their own, and writes only what is absent.
+  printf '#!/usr/bin/env bash\n# my own check\n' > "$home/state/memory.check.sh"
+  before=$(cat "$home/state/memory.check.sh")
+  FM_HOME="$home" "$MEMORY" disarm >/dev/null || fail "disarm failed"
+  assert_absent "$home/state/disk.check.sh" "disarm left the disk check shim behind"
+  assert_absent "$home/state/disk.check-trust" "disarm left the disk trust binding behind"
+  printf '%s\n' "$before" > "$home/state/memory.check.sh"
+  FM_HOME="$home" "$MEMORY" arm --missing >/dev/null || fail "arm --missing failed"
+  assert_equals "$before" "$(cat "$home/state/memory.check.sh")" "arm --missing rewrote an existing check"
+  assert_absent "$home/state/memory.check-trust" "arm --missing registered a check it did not write"
+  assert_present "$home/state/disk.check.sh" "arm --missing did not arm the absent disk check"
+  assert_present "$home/state/disk.check-trust" "arm --missing did not register the disk check"
+  pass "arm registers the disk check, and arm --missing writes only an absent check and never rewrites an existing one"
+}
+
+test_armed_disk_check_wakes_the_watcher_once() {
+  local home out err status=0
+  home=$(make_home disk-wake)
+  write_diskinfo "$home/diskinfo" 500000 700
+  FM_HOME="$home" "$MEMORY" arm >/dev/null || fail "could not arm the checks"
+  out="$home/out.txt"
+  err="$home/err.txt"
+  env FM_HOME="$home" FM_DISKINFO_PATH="$home/diskinfo" FM_DISK_HOST_PATH="$home/host-disk" FM_CHECK_TIMEOUT=30 \
+    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=1 \
+    "$CHECKPOINT" --seconds 10 >"$out" 2>"$err" || status=$?
+  expect_code 0 "$status" "watcher checkpoint exit: $(cat "$err")"
+  assert_contains "$(cat "$out")" "check:" "the armed disk check did not reach the watcher as a check wake"
+  assert_contains "$(cat "$out")" "disk low: the host disk ($home/host-disk) has 700 MB free" \
+    "the wake did not carry the low-disk report"
+  assert_present "$home/state/.disk-low" "the watcher-run check did not record the episode"
+  pass "the armed disk check reaches the watcher as an ordinary check wake"
+}
+
+test_spawn_and_relaunch_refuse_under_the_disk_floor() {
+  local out status=0 meta_before
+  make_spawn_case spawn-disk-low ship-disk-a1
+  write_diskinfo "$HOME_DIR/diskinfo" 500000 482
+  out=$(FM_DISKINFO_PATH="$HOME_DIR/diskinfo" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" ship-disk-a1 "$PROJ_DIR" --mode no-mistakes --yolo off) \
+    || status=$?
+  expect_code 1 "$status" "a ship spawn under the disk floor"
+  assert_contains "$out" "launch refused" "the spawn should relay the refusal"
+  assert_contains "$out" "has 482 MB free" "the spawn refusal should state the reading"
+  assert_contains "$out" "10240 MB launch floor" "the spawn refusal should state the floor"
+  assert_absent "$HOME_DIR/state/ship-disk-a1.meta" "a refused spawn published a task record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused spawn still sent a launch command: $(cat "$LAUNCH_LOG")"
+
+  # The override launches, and says the floor was skipped.
+  status=0
+  out=$(FM_DISK_GUARD=off FM_DISKINFO_PATH="$HOME_DIR/diskinfo" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" ship-disk-a1 "$PROJ_DIR" --mode no-mistakes --yolo off) \
+    || status=$?
+  expect_code 0 "$status" "a ship spawn under the disk floor with the override: $out"
+  assert_contains "$out" "disk launch floor skipped" "the overridden spawn should say the floor was skipped"
+  [ -s "$LAUNCH_LOG" ] || fail "an overridden spawn sent no launch command"
+
+  # An unreadable disk reading warns and launches.
+  make_spawn_case spawn-disk-unreadable ship-disk-u1
+  printf 'HostAvailable: plenty kB\n' > "$HOME_DIR/diskinfo"
+  status=0
+  out=$(FM_DISKINFO_PATH="$HOME_DIR/diskinfo" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" ship-disk-u1 "$PROJ_DIR" --mode no-mistakes --yolo off) \
+    || status=$?
+  expect_code 0 "$status" "a ship spawn with an unreadable disk reading: $out"
+  assert_contains "$out" "disk space could not be read" "the spawn should warn about the unreadable disk reading"
+  [ -s "$LAUNCH_LOG" ] || fail "a spawn with an unreadable disk reading sent no launch command"
+
+  # A relaunch asks before the running agent is touched.
+  make_spawn_case relaunch-disk-low ship-disk-r1
+  out=$(FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" ship-disk-r1 "$PROJ_DIR" --mode no-mistakes --yolo off) \
+    || fail "relaunch setup spawn failed: $out"
+  meta_before=$(cat "$HOME_DIR/state/ship-disk-r1.meta")
+  : > "$LAUNCH_LOG"
+  write_diskinfo "$HOME_DIR/diskinfo" 500000 482
+  status=0
+  out=$(FM_ROOT_OVERRIDE='' FM_HOME="$HOME_DIR" HOME="$HOME_DIR/user-home" CLAUDE_CONFIG_DIR='' \
+    FM_STATE_OVERRIDE="$HOME_DIR/state" FM_DATA_OVERRIDE="$HOME_DIR/data" \
+    FM_PROJECTS_OVERRIDE="$HOME_DIR/projects" FM_CONFIG_OVERRIDE="$HOME_DIR/config" \
+    FM_FAKE_PANE_PATH="$WT_DIR" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" TMUX="${TMUX:-fake,1,0}" \
+    FM_DISKINFO_PATH="$HOME_DIR/diskinfo" PATH="$FAKEBIN_DIR:$PATH" \
+    "$ROOT/bin/fm-control.sh" ship-disk-r1 relaunch --note "carry on" 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a relaunch under the disk floor should refuse: $out"
+  assert_contains "$out" "under a launch floor" "the relaunch refusal should name the launch floor"
+  assert_contains "$out" "has 482 MB free" "the relaunch refusal should state the reading"
+  assert_contains "$out" "before its agent was touched" "the relaunch refusal should say nothing was stopped"
+  assert_equals "$meta_before" "$(cat "$HOME_DIR/state/ship-disk-r1.meta")" \
+    "a refused relaunch changed the task's durable record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused relaunch still sent a launch command"
+  pass "a spawn and a relaunch under the disk floor refuse before anything is created or stopped, launch under the override, and launch on an unreadable reading"
+}
+
 test_guard_allows_a_host_above_its_floors
 test_guard_refuses_under_the_available_floor
 test_guard_refuses_when_swap_is_nearly_gone
@@ -632,3 +970,14 @@ test_run_without_systemd_still_runs_and_says_it_is_uncapped
 test_run_with_a_zero_cap_runs_the_job_uncapped
 test_run_gives_the_job_the_callers_locale
 test_run_really_kills_a_job_that_outgrows_its_cap
+test_disk_guard_allows_above_and_refuses_under_the_host_floor
+test_disk_guard_reads_the_configured_floor
+test_disk_override_skips_only_the_disk_floor_and_says_so
+test_an_unreadable_disk_reading_warns_and_allows
+test_a_machine_without_a_host_disk_behaves_as_before
+test_a_wsl_machine_reads_its_host_disk_live
+test_disk_check_reports_once_per_episode
+test_status_prints_the_disk_readings
+test_arm_registers_the_disk_check_and_missing_never_rewrites
+test_armed_disk_check_wakes_the_watcher_once
+test_spawn_and_relaunch_refuse_under_the_disk_floor

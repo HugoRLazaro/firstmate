@@ -46,10 +46,10 @@
 #   holding the work: a Herdr shell that has drifted out of the recorded
 #   worktree is told once to return, and only a shell that will not go refuses.
 #   Every launch on this host, fresh or relaunch, first asks bin/fm-memory.sh
-#   guard whether the host is above its memory floor and refuses when it is
-#   not; that script owns the reading, config/memory-floor, and the
-#   FM_MEMORY_GUARD=off override. A remote secondmate launch is not judged by
-#   this host's memory.
+#   guard whether the host is above its memory and host-disk floors and
+#   refuses when it is not; that script owns the readings, config/memory-floor,
+#   and the FM_MEMORY_GUARD=off and FM_DISK_GUARD=off overrides. A remote
+#   secondmate launch is not judged by this host's memory or disk.
 #   --harness <name> is the explicit per-spawn harness/profile adapter. The old
 #   positional harness arg still works for back-compat.
 #   --model <name> and --effort <low|medium|high|xhigh|max|ultra> are concrete profile
@@ -1473,15 +1473,15 @@ if [ "$KIND" = secondmate ]; then
   fi
   [ "$remote_spawn_rc" -eq 3 ] || exit "$remote_spawn_rc"
 fi
-# Memory floor (bin/fm-memory.sh guard owns the reading, the floors, and the
-# FM_MEMORY_GUARD=off override): every launch on THIS host, fresh or relaunch,
-# refuses while the host is under its floor, before any endpoint, worktree, or
+# Launch floors (bin/fm-memory.sh guard owns the memory and host-disk readings,
+# the floors, and their overrides): every launch on THIS host, fresh or relaunch,
+# refuses while the host is under a floor, before any endpoint, worktree, or
 # record exists. A remote secondmate launches on another host and returned
 # above. A reading that cannot be taken warns and launches.
 "$SCRIPT_DIR/fm-memory.sh" guard || {
   spawn_memory_rc=$?
   [ "$spawn_memory_rc" -ne 3 ] || exit 1
-  echo "warning: the memory floor could not be evaluated (bin/fm-memory.sh guard exited $spawn_memory_rc); launching without it" >&2
+  echo "warning: the launch floors could not be evaluated (bin/fm-memory.sh guard exited $spawn_memory_rc); launching without them" >&2
 }
 # Backend selection (data/fm-backend-design-d7): explicit --backend, else
 # FM_BACKEND env, else config/backend, else runtime auto-detection, else

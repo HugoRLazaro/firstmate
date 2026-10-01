@@ -93,9 +93,9 @@
 #   FM_CONTROL_EXIT_WAIT         alive->dead wait after the exit command (30)
 #   FM_CONTROL_LAUNCH_WAIT       dead->alive wait after a relaunch (90)
 #   FM_CONTROL_EXIT_RETRIES      Enter retries for the exit command (3)
-# A relaunch asks bin/fm-memory.sh guard for this host's memory floor before
-# the old agent is stopped, and refuses with nothing changed when the host is
-# under it; that script owns the floor and its override. A remotely placed
+# A relaunch asks bin/fm-memory.sh guard for this host's memory and host-disk
+# floors before the old agent is stopped, and refuses with nothing changed when
+# the host is under one; that script owns the floors and their overrides. A remotely placed
 # secondmate never reaches this plane at all (it is refused above, because its
 # endpoint is not on this host), so every relaunch here launches here and is
 # judged by this host's floor.
@@ -835,7 +835,7 @@ do_relaunch() {
   else
     note_line="note=none"
   fi
-  # Ask for the memory floor before anything is stopped: bin/fm-spawn.sh
+  # Ask for the launch floors before anything is stopped: bin/fm-spawn.sh
   # --relaunch refuses under it, and a refusal after the old agent has exited
   # would leave the task with no agent at all. A remotely placed secondmate
   # never reaches here (it is refused above), so every task this plane can
@@ -843,7 +843,7 @@ do_relaunch() {
   memory_rc=0
   "$SCRIPT_DIR/fm-memory.sh" guard || memory_rc=$?
   [ "$memory_rc" -ne 3 ] \
-    || die "relaunch of $ID was refused before its agent was touched: this host is under its memory floor (bin/fm-memory.sh status)"
+    || die "relaunch of $ID was refused before its agent was touched: this host is under a launch floor (bin/fm-memory.sh status)"
   safe_checkpoint
   cp -p "$META" "$META_PRIOR" || die "could not preserve task $ID's durable record before relaunching"
   RELAUNCH_ACTIVE=1

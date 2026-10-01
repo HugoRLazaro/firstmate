@@ -101,6 +101,10 @@
 #          The `code-root <file>` variant is a detect-only local check that runs
 #          even in a read-only session; detect_code_root_backlog_fork owns what
 #          it reports.
+#          A locked local pass also arms the low-memory and low-disk
+#          notifications a primary home has not armed yet (bin/fm-memory.sh arm
+#          --missing owns which ones this host can read, and an existing check
+#          is never rewritten); detect-only and network-only runs never arm.
 #          Set FM_BOOTSTRAP_DETECT_ONLY=1 to skip the six MUTATING sweeps
 #          (backlog_record_reconcile, secondmate_sync,
 #          secondmate_liveness_sweep, secondmate_handoff_resume, x_mode_setup,
@@ -1381,6 +1385,21 @@ startup_memory_budget_setup() {
   fi
 }
 
+# Arm the low-memory and low-disk notifications this home has not armed yet, so
+# neither depends on a command nobody remembers to run. bin/fm-memory.sh arm
+# --missing owns which notifications this host has a reading for and never
+# rewrites a check that already exists. A secondmate home is left alone: the
+# primary reports the machine they share, and a home on another machine is
+# armed there with bin/fm-memory.sh arm.
+resource_alerts_arm() {
+  if [ -e "$FM_HOME/.fm-secondmate-home" ] || [ -L "$FM_HOME/.fm-secondmate-home" ]; then
+    return 0
+  fi
+  [ -d "$STATE" ] && [ ! -L "$STATE" ] || return 0
+  FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$SCRIPT_DIR/fm-memory.sh" arm --missing >/dev/null 2>&1 \
+    || echo "MISSING: low-memory and low-disk notification could not be armed (bin/fm-memory.sh arm); this home is not warned before the machine fills"
+}
+
 if [ "${1:-}" = "lavish-compatible" ]; then
   tool_version_at_least lavish-axi "$LAVISH_AXI_MIN"
   exit
@@ -1660,6 +1679,7 @@ if [ "${FM_BOOTSTRAP_DETECT_ONLY:-0}" != 1 ]; then
   fi
   # x_mode_setup writes local Relay artifacts only and never leaves the machine.
   local_phase && x_mode_setup
+  local_phase && resource_alerts_arm
   # Adopt existing durable contribution links without making a network call.
   # Detection-only startup must never publish a check registration.
   if local_phase && command -v jq >/dev/null 2>&1 \

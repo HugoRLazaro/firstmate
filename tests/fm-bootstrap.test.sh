@@ -911,6 +911,63 @@ test_routine_bootstrap_contract_runs_under_system_bash() {
   pass "bootstrap routine contract runs under system /bin/bash"
 }
 
+# Nobody ran `fm-memory.sh arm` by hand on the host that went down, so a locked
+# session start arms the low-memory and low-disk notifications itself - without
+# touching a check that already exists, and never from a read-only session.
+test_bootstrap_arms_the_resource_notifications() {
+  local case_dir fakebin home out own
+  case_dir="$TMP_ROOT/resource-alerts"
+  home="$case_dir/home"
+  mkdir -p "$home/config" "$home/state"
+  printf '%s\n' manual > "$home/config/backlog-backend"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  run_alert_bootstrap() {
+    PATH="$fakebin:$BASE_PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$home" \
+      FM_FAKE_TREEHOUSE_LEASE_HELP=1 FM_BOOTSTRAP_NETWORK=skip "$@" "$ROOT/bin/fm-bootstrap.sh"
+  }
+
+  # A read-only session mutates nothing.
+  out=$(run_alert_bootstrap env FM_BOOTSTRAP_DETECT_ONLY=1)
+  assert_absent "$home/state/memory.check.sh" "a read-only bootstrap armed the memory check"
+  assert_absent "$home/state/disk.check.sh" "a read-only bootstrap armed the disk check"
+
+  # The network-only half is not the local pass, so it does not arm either.
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 FM_BOOTSTRAP_NETWORK=only "$ROOT/bin/fm-bootstrap.sh")
+  assert_absent "$home/state/memory.check.sh" "the network half armed the memory check"
+
+  # One check already exists, written by somebody else: it is left exactly as
+  # it is, and only the absent one is armed.
+  own=$(printf '#!/usr/bin/env bash\n# an operator check\n')
+  printf '%s\n' "$own" > "$home/state/disk.check.sh"
+  out=$(run_alert_bootstrap env)
+  assert_not_contains "$out" "could not be armed" "a healthy bootstrap reported an arming failure"
+  assert_present "$home/state/memory.check.sh" "a locked bootstrap did not arm the memory check"
+  assert_present "$home/state/memory.check-trust" "a locked bootstrap did not register the memory check"
+  assert_equals "$own" "$(cat "$home/state/disk.check.sh")" "bootstrap rewrote an existing check"
+  assert_absent "$home/state/disk.check-trust" "bootstrap registered a check it did not write"
+
+  # With nothing in the way both are armed, and a second start is a no-op.
+  rm -f "$home/state/disk.check.sh"
+  out=$(run_alert_bootstrap env)
+  assert_present "$home/state/disk.check.sh" "a locked bootstrap did not arm the disk check"
+  assert_present "$home/state/disk.check-trust" "a locked bootstrap did not register the disk check"
+  own=$(cat "$home/state/disk.check.sh" "$home/state/disk.check-trust" "$home/state/memory.check.sh" "$home/state/memory.check-trust")
+  out=$(run_alert_bootstrap env)
+  assert_equals "$own" "$(cat "$home/state/disk.check.sh" "$home/state/disk.check-trust" "$home/state/memory.check.sh" "$home/state/memory.check-trust")" \
+    "a second bootstrap changed checks that were already armed"
+
+  # A secondmate home is not this machine's reporter.
+  mkdir -p "$case_dir/sm/config" "$case_dir/sm/state"
+  printf '%s\n' manual > "$case_dir/sm/config/backlog-backend"
+  printf 'sm\n' > "$case_dir/sm/.fm-secondmate-home"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/sm" FM_ROOT_OVERRIDE="$case_dir/sm" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 FM_BOOTSTRAP_NETWORK=skip "$ROOT/bin/fm-bootstrap.sh")
+  assert_absent "$case_dir/sm/state/memory.check.sh" "bootstrap armed the memory check in a secondmate home"
+  assert_absent "$case_dir/sm/state/disk.check.sh" "bootstrap armed the disk check in a secondmate home"
+  pass "bootstrap arms the missing low-memory and low-disk notifications on a locked local pass, never rewrites an existing check, and never arms from a read-only session or a secondmate home"
+}
+
 # FM_BOOTSTRAP_NETWORK splits one bootstrap run into its local and network
 # halves so a session start can compose its digest from the local half alone and
 # run the network half concurrently. The property that has to hold is that the
@@ -1275,6 +1332,7 @@ test_fleet_sync_timeout_empty_override_uses_default
 test_fleet_sync_timeout_is_computed_before_launch
 test_routine_bootstrap_confirmations_are_silent
 test_routine_bootstrap_contract_runs_under_system_bash
+test_bootstrap_arms_the_resource_notifications
 test_network_phase_partitions_the_run
 test_network_sweeps_recheck_lock_ownership
 test_network_phases_record_per_step_elapsed_times

@@ -825,7 +825,7 @@ test_ship_and_scout_teach_validation_round_pause() {
 # ship and scout brief must tell the worker to cap heavy jobs and to leave
 # nothing running, and the command it names must be one the worker can run.
 test_ship_and_scout_bound_heavy_jobs() {
-  local home kind id brief runner
+  local home kind id brief runner status_cmd
   home="$TMP_ROOT/heavy-jobs-home"
   mkdir -p "$home/data"
 
@@ -841,6 +841,22 @@ test_ship_and_scout_bound_heavy_jobs() {
       "$kind brief did not tell the worker to bound its heavy jobs"
     assert_grep "stop every process you started" "$brief" \
       "$kind brief did not tell the worker to leave no job running"
+    assert_grep "A node or vitest test suite is such a job" "$brief" \
+      "$kind brief did not tell the worker to cap a node or vitest test suite"
+    assert_grep "bound its" "$brief" \
+      "$kind brief did not tell the worker to bound the test suite's worker count"
+    assert_grep "Before a job that will write more than a few GB" "$brief" \
+      "$kind brief did not tell the worker to check free space before a job that writes many GB"
+    assert_grep "delete its intermediate data when it finishes" "$brief" \
+      "$kind brief did not tell the worker to delete intermediate data"
+    # shellcheck disable=SC2016  # A literal backtick opens the command in the brief.
+    status_cmd=$(grep -o '`[^` ]*/bin/fm-memory\.sh status`' "$brief" | head -1)
+    status_cmd=${status_cmd#\`}
+    status_cmd=${status_cmd% status\`}
+    [ -n "$status_cmd" ] && [ -x "$status_cmd" ] \
+      || fail "$kind brief names a free-space command the worker cannot run: '$status_cmd'"
+    "$status_cmd" --help | grep -q 'status' \
+      || fail "$kind brief names a command that does not offer the status it describes"
     # shellcheck disable=SC2016  # A literal backtick opens the command in the brief.
     runner=$(grep -o '`[^` ]*/bin/fm-memory\.sh run' "$brief" | head -1)
     runner=${runner#\`}
@@ -850,7 +866,7 @@ test_ship_and_scout_bound_heavy_jobs() {
     "$runner" --help | grep -q 'run \[--max-mb N\]' \
       || fail "$kind brief names a command that does not offer the bounded run it describes"
   done
-  pass "fm-brief.sh: ship and scout scaffolds tell workers to cap heavy jobs with a runnable command and leave none running"
+  pass "fm-brief.sh: ship and scout scaffolds tell workers to cap heavy jobs and test suites with a runnable command, check space before writing many GB, and leave nothing behind"
 }
 
 test_scout_and_secondmate_load_decision_hold_policy() {
