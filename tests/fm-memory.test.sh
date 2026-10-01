@@ -559,6 +559,7 @@ exec "$@"
 SH
   chmod +x "$fake"
   locale_job() {  # <systemd-run> <max-mb>
+    # shellcheck disable=SC2016 # the child shell, not this test shell, expands LC_ALL
     FM_MEMORY_SYSTEMD_RUN="$1" \
       run_memory "$home" "$home/meminfo" run --max-mb "$2" -- \
       sh -c 'printf "lc_all=<%s>\n" "${LC_ALL-unset}"' 2>&1
@@ -568,14 +569,17 @@ SH
   expect_code 0 "$status" "a scoped job with LC_ALL unset should run"
   assert_contains "$out" "lc_all=<unset>" "the wrapper leaked its forced LC_ALL into the scoped job"
 
+  # shellcheck disable=SC2030,SC2031 # the export must reach only this subshell's job
   out=$(export LC_ALL=POSIX; locale_job "$fake" 128) || status=$?
   expect_code 0 "$status" "a scoped job with a caller locale should run"
   assert_contains "$out" "lc_all=<POSIX>" "the scoped job did not keep the caller's LC_ALL"
 
+  # shellcheck disable=SC2030,SC2031 # the export must reach only this subshell's job
   out=$(export LC_ALL=POSIX; locale_job "$fake" 0) || status=$?
   expect_code 0 "$status" "an uncapped job with a caller locale should run"
   assert_contains "$out" "lc_all=<POSIX>" "the uncapped job did not keep the caller's LC_ALL"
 
+  # shellcheck disable=SC2030,SC2031 # the export must reach only this subshell's job
   out=$(export LC_ALL=POSIX; locale_job "$home/does-not-exist" 128) || status=$?
   expect_code 0 "$status" "a job without systemd should run"
   assert_contains "$out" "lc_all=<POSIX>" "the no-systemd job did not keep the caller's LC_ALL"
