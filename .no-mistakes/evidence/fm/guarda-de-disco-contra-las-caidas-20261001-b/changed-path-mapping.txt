@@ -1,0 +1,9 @@
+### bin/fm-test-run.sh --changed --base <base> --list (real selection for this whole diff)
+exit=0
+selected scripts: 221
+herdr-test-safety selected: 0
+fm-memory suite selected: 1
+fm-bootstrap suite selected: 2
+fm-brief suite selected: 1
+fm-teardown suite selected: 2
+--- error output:

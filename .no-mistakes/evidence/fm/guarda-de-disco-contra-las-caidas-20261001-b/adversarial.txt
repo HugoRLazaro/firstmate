@@ -1,0 +1,19 @@
+### FM_DISK_GUARD=off must not waive a low MEMORY floor
+error: launch refused - this host has 512 MB of memory available, under the 2048 MB launch floor (SwapFree 4096 MB of 4096 MB). Free memory first: bin/fm-memory.sh status shows what holds it. Floors: config/memory-floor; FM_MEMORY_GUARD=off launches anyway.
+exit=3
+
+### a malformed host reading (negative) is unreadable: warns, never refuses, never opens an episode
+fm-memory: warning: disk space could not be read (the disk reading reports HostAvailable as '-1'); launching without the disk floor
+exit=0
+disk-check out=[]
+
+### alert_host_disk_free_mb=0 turns the low-disk report off (silencing, not disarming)
+disk-check out=[]
+
+### a raised launch floor in config/memory-floor refuses a disk the default would allow
+error: launch refused - the host disk (/mnt/c) has 0 MB free, under the 30000 MB launch floor (root disk 781250 MB free). When that disk fills, this whole machine goes down. Free space on it first: bin/fm-memory.sh status shows both readings and the crash-dump folder. Floors: config/memory-floor; FM_DISK_GUARD=off launches anyway.
+exit=3
+
+### with the disk floor back at the default, the same reading passes
+error: launch refused - the host disk (/mnt/c) has 0 MB free, under the 10240 MB launch floor (root disk 781250 MB free). When that disk fills, this whole machine goes down. Free space on it first: bin/fm-memory.sh status shows both readings and the crash-dump folder. Floors: config/memory-floor; FM_DISK_GUARD=off launches anyway.
+exit=3

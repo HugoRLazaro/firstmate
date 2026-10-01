@@ -1,0 +1,9 @@
+### live watcher poll with the armed checks on this real host (host disk at ~10.7 GB free)
+checkpoint exit=0
+--- watcher output lines mentioning check/disk:
+1:check: /tmp/fm-live-watcher.P9l27y/home/state/disk.check.sh: disk low: the host disk (/mnt/c) has 10699 MB free, under the 20480 MB floor (root disk 802347 MB free); largest: /mnt/c/Users/Hugo/AppData/Local/Temp/wsl-crashes 712 MB; this machine goes down when that disk fills; see bin/fm-memory.sh status
+--- episode record written by the watcher-run check:
+1790886802
+disk low: the host disk (/mnt/c) has 10699 MB free, under the 20480 MB floor (root disk 802347 MB free); largest: /mnt/c/Users/Hugo/AppData/Local/Temp/wsl-crashes 712 MB; this machine goes down when that disk fills; see bin/fm-memory.sh status
+--- full watcher output:
+check: /tmp/fm-live-watcher.P9l27y/home/state/disk.check.sh: disk low: the host disk (/mnt/c) has 10699 MB free, under the 20480 MB floor (root disk 802347 MB free); largest: /mnt/c/Users/Hugo/AppData/Local/Temp/wsl-crashes 712 MB; this machine goes down when that disk fills; see bin/fm-memory.sh status

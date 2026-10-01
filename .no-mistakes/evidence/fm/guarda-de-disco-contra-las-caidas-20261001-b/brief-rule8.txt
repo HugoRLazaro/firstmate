@@ -1,0 +1,38 @@
+### emitted ship brief, rule 8 (the prompt actually handed to a worker):
+8. Bound your own heavy jobs: this host's memory and disk are shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3WHJTBQ4NAQR3PRNTB6GR4E/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   A node or vitest test suite is such a job: start it through that same command and bound its
+   worker count as well (for vitest, `--maxWorkers=2` or fewer), because each test worker can
+   grow to its own heap limit and a worker that aborts can leave a crash dump of that size on disk.
+   Before a job that will write more than a few GB, read the free space in
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3WHJTBQ4NAQR3PRNTB6GR4E/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
+
+
+### emitted scout brief, the added disk/test-suite sentences:
+62:   A node or vitest test suite is such a job: start it through that same command and bound its
+65:   Before a job that will write more than a few GB, read the free space in
+66:   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3WHJTBQ4NAQR3PRNTB6GR4E/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+67:   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+
+### the commands the brief names, run as the worker would:
+$ /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3WHJTBQ4NAQR3PRNTB6GR4E/bin/fm-memory.sh status | head -4
+memory: 9165 MB available, swap 3923 MB free of 4096 MB
+floors: launch 2048 MB available and 512 MB swap free, alert 1536 MB available, job cap 4096 MB
+disk: host disk (/mnt/c) 10705 MB free, root disk 798854 MB free
+disk floors: launch 10240 MB free on the host disk, alert 20480 MB free on the host disk
+
+$ /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3WHJTBQ4NAQR3PRNTB6GR4E/bin/fm-memory.sh --help | head -4
+Usage:
+  fm-memory.sh guard       exit 3 with a diagnostic when this host is under a launch floor
+  fm-memory.sh [check]     print one line when memory first drops under the alert floor
+  fm-memory.sh disk-check  print one line when the host disk first drops under its alert floor
+
+$ /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3WHJTBQ4NAQR3PRNTB6GR4E/bin/fm-memory.sh run -- bash -c 'echo capped job ran'
+capped job ran
+run exit=0

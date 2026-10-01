@@ -1,0 +1,17 @@
+### a kernel that is not WSL: nothing disk-related is judged, armed, or reported
+$ guard
+exit=0
+$ disk-check
+out=[]
+$ status
+memory: 11718 MB available, swap 4096 MB free of 4096 MB
+floors: launch 2048 MB available and 512 MB swap free, alert 1536 MB available, job cap 4096 MB
+disk: root disk 798853 MB free; this machine has no host disk to read
+outside any task (largest):
+$ arm
+armed: state/memory.check.sh
+memory.check-trust
+memory.check.sh
+memory: 11718 MB available, swap 4096 MB free of 4096 MB
+floors: launch 2048 MB available and 512 MB swap free, alert 1536 MB available, job cap 4096 MB
+disk: unreadable (the host disk at /tmp/fm-live-nonwsl.2lB9k5/unmounted-c did not answer df)

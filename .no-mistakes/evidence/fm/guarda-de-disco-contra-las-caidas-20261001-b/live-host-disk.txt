@@ -1,0 +1,40 @@
+### live host readings (2026-10-01T22:30:13+02:00)
+$ df -Pk /mnt/c
+Filesystem     1024-blocks      Used Available Capacity Mounted on
+C:\              999056380 988087948  10968432      99% /mnt/c
+
+$ df -Pk /
+Filesystem     1024-blocks      Used Available Capacity Mounted on
+/dev/sdd        1055762868 184133472 817925924      19% /
+
+### fm-memory.sh status (live reading, isolated home /tmp/fm-live-disk.3eFXnk/home)
+memory: 6886 MB available, swap 3923 MB free of 4096 MB
+floors: launch 2048 MB available and 512 MB swap free, alert 1536 MB available, job cap 4096 MB
+disk: host disk (/mnt/c) 10711 MB free, root disk 798755 MB free
+disk floors: launch 10240 MB free on the host disk, alert 20480 MB free on the host disk
+wsl crash dumps: 712 MB in /mnt/c/Users/Hugo/AppData/Local/Temp/wsl-crashes
+outside any task (largest):
+    2547 MB  pid 963534  next-server  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/316/licitaciones-platform/apps/web
+     401 MB  pid 2980636  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/322/licitaciones-platform
+     394 MB  pid 865909  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/317/licitaciones-platform
+     363 MB  pid 2527807  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/320/licitaciones-platform
+     358 MB  pid 841063  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/316/licitaciones-platform
+     347 MB  pid 3710338  claude  in /home/hugorl/.treehouse/firstmate-760978/6/firstmate
+     333 MB  pid 2762650  claude  in /home/hugorl/.treehouse/firstmate-760978/5/firstmate
+     330 MB  pid 961173  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/319/licitaciones-platform
+per task (resident memory of processes working inside the task):
+  no task records in this home
+
+### fm-memory.sh disk-check, first run (live host disk below the 20 GB alert floor)
+disk low: the host disk (/mnt/c) has 10711 MB free, under the 20480 MB floor (root disk 798755 MB free); largest: /mnt/c/Users/Hugo/AppData/Local/Temp/wsl-crashes 712 MB; this machine goes down when that disk fills; see bin/fm-memory.sh status
+exit=0
+
+### episode record:
+1790886614
+disk low: the host disk (/mnt/c) has 10711 MB free, under the 20480 MB floor (root disk 798755 MB free); largest: /mnt/c/Users/Hugo/AppData/Local/Temp/wsl-crashes 712 MB; this machine goes down when that disk fills; see bin/fm-memory.sh status
+
+### fm-memory.sh disk-check, second run (same episode, must be silent)
+stdout=[] exit=0
+
+### fm-memory.sh guard (live host disk above the 10 GB launch floor)
+exit=0

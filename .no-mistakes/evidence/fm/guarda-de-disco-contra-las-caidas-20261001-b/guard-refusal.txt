@@ -1,0 +1,23 @@
+### the measured incident reading: host disk 482 kB free
+$ fm-memory.sh guard   (FM_DISKINFO_PATH=<482 kB free>)
+error: launch refused - the host disk (/mnt/c) has 0 MB free, under the 10240 MB launch floor (root disk 789062 MB free). When that disk fills, this whole machine goes down. Free space on it first: bin/fm-memory.sh status shows both readings and the crash-dump folder. Floors: config/memory-floor; FM_DISK_GUARD=off launches anyway.
+exit=3
+
+$ FM_DISK_GUARD=off fm-memory.sh guard
+fm-memory: disk launch floor skipped (FM_DISK_GUARD=off)
+exit=0
+
+$ FM_MEMORY_GUARD=off fm-memory.sh guard   (memory override must NOT waive the disk floor)
+fm-memory: launch floor skipped (FM_MEMORY_GUARD=off)
+error: launch refused - the host disk (/mnt/c) has 0 MB free, under the 10240 MB launch floor (root disk 789062 MB free). When that disk fills, this whole machine goes down. Free space on it first: bin/fm-memory.sh status shows both readings and the crash-dump folder. Floors: config/memory-floor; FM_DISK_GUARD=off launches anyway.
+exit=3
+
+$ fm-memory.sh guard   (roamy host disk)
+exit=0
+
+### status under the incident reading
+memory: 7315 MB available, swap 3923 MB free of 4096 MB
+floors: launch 2048 MB available and 512 MB swap free, alert 1536 MB available, job cap 4096 MB
+disk: host disk (/mnt/c) 0 MB free, root disk 789062 MB free
+disk floors: launch 10240 MB free on the host disk, alert 20480 MB free on the host disk
+wsl crash dumps: 712 MB in /mnt/c/Users/Hugo/AppData/Local/Temp/wsl-crashes

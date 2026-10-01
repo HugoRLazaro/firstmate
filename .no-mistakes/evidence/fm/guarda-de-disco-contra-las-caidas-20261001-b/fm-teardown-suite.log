@@ -1,0 +1,6 @@
+ok - local-only worktree with HEAD on a fork remote is torn down and the home summary is refreshed
+tests/fm-teardown.test.sh: line 643: tasks-axi: command not found
+
+real	0m2.146s
+user	0m1.327s
+sys	0m0.907s
