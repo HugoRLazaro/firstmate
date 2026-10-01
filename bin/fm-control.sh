@@ -93,6 +93,9 @@
 #   FM_CONTROL_EXIT_WAIT         alive->dead wait after the exit command (30)
 #   FM_CONTROL_LAUNCH_WAIT       dead->alive wait after a relaunch (90)
 #   FM_CONTROL_EXIT_RETRIES      Enter retries for the exit command (3)
+# A ship or scout relaunch asks bin/fm-memory.sh guard for this host's memory
+# floor before the old agent is stopped, and refuses with nothing changed when
+# the host is under it; that script owns the floor and its override.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -800,7 +803,7 @@ record_note() {
 }
 
 do_relaunch() {
-  local exit_result state note_line
+  local exit_result state note_line memory_rc
   local -a spawn_args
 
   require_state_verified_backend relaunch
@@ -828,6 +831,16 @@ do_relaunch() {
     note_line="note_file=$NOTE_FILE"
   else
     note_line="note=none"
+  fi
+  # Ask for the memory floor before anything is stopped: bin/fm-spawn.sh
+  # --relaunch refuses under it, and a refusal after the old agent has exited
+  # would leave the task with no agent at all. A secondmate may launch on
+  # another host, so its floor is judged only by the launch itself.
+  if [ "$KIND" != secondmate ]; then
+    memory_rc=0
+    "$SCRIPT_DIR/fm-memory.sh" guard || memory_rc=$?
+    [ "$memory_rc" -ne 3 ] \
+      || die "relaunch of $ID was refused before its agent was touched: this host is under its memory floor (bin/fm-memory.sh status)"
   fi
   safe_checkpoint
   cp -p "$META" "$META_PRIOR" || die "could not preserve task $ID's durable record before relaunching"

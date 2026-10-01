@@ -821,6 +821,38 @@ test_ship_and_scout_teach_validation_round_pause() {
   pass "fm-brief.sh: ship and scout scaffolds teach validation-round pauses"
 }
 
+# A worker's detached job keeps its memory after the worker stops, so every
+# ship and scout brief must tell the worker to cap heavy jobs and to leave
+# nothing running, and the command it names must be one the worker can run.
+test_ship_and_scout_bound_heavy_jobs() {
+  local home kind id brief runner
+  home="$TMP_ROOT/heavy-jobs-home"
+  mkdir -p "$home/data"
+
+  for kind in ship scout; do
+    id="brief-heavy-jobs-$kind"
+    if [ "$kind" = scout ]; then
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --scout >/dev/null 2>&1
+    else
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --mode no-mistakes >/dev/null 2>&1
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_grep "8. Bound your own heavy jobs" "$brief" \
+      "$kind brief did not tell the worker to bound its heavy jobs"
+    assert_grep "stop every process you started" "$brief" \
+      "$kind brief did not tell the worker to leave no job running"
+    # shellcheck disable=SC2016  # A literal backtick opens the command in the brief.
+    runner=$(grep -o '`[^` ]*/bin/fm-memory\.sh run' "$brief" | head -1)
+    runner=${runner#\`}
+    runner=${runner% run}
+    [ -n "$runner" ] && [ -x "$runner" ] \
+      || fail "$kind brief names a bounded-job command the worker cannot run: '$runner'"
+    "$runner" --help | grep -q 'run \[--max-mb N\]' \
+      || fail "$kind brief names a command that does not offer the bounded run it describes"
+  done
+  pass "fm-brief.sh: ship and scout scaffolds tell workers to cap heavy jobs with a runnable command and leave none running"
+}
+
 test_scout_and_secondmate_load_decision_hold_policy() {
   local home scout charter
   home="$TMP_ROOT/decision-policy-home"
@@ -946,6 +978,7 @@ test_secondmate_marked_request_reporting_contract
 test_secondmate_directory_paths_are_absolute_and_output_is_stable
 test_pause_verb_override_renders_all_brief_scaffolds
 test_ship_and_scout_teach_validation_round_pause
+test_ship_and_scout_bound_heavy_jobs
 test_scout_and_secondmate_load_decision_hold_policy
 test_scout_and_secondmate_scaffold
 test_scout_lavish_line_follows_presentation_floor

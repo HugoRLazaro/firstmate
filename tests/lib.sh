@@ -68,6 +68,13 @@ unset TASKS_AXI_FILE TASKS_AXI_BACKEND TASKS_AXI_BIN
 # shellcheck disable=SC2034
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Pin the memory reading every launch consults (bin/fm-memory.sh guard) to a
+# fixed healthy one. bin/fm-spawn.sh and bin/fm-control.sh refuse to launch on a
+# host under its memory floor, so without this a suite that drives a real spawn
+# would pass or fail on how busy the machine running it happens to be.
+# tests/fm-memory.test.sh sets its own readings to verify the refusal.
+export FM_MEMINFO_PATH="$ROOT/tests/assets/meminfo-healthy"
+
 # --- reporters --------------------------------------------------------------
 
 fail() {

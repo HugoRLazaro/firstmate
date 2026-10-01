@@ -3522,6 +3522,81 @@ test_leaked_tasktmp_process_is_reaped() {
   pass "a leaked descendant process rooted under the task's per-task tasktmp is reaped by teardown too"
 }
 
+# The 2026-10-01 out-of-memory incident's shape: a worker started a detached
+# job (`setsid nohup`) from its data/<id>/ directory, in neither the worktree
+# nor the tasktmp, and it kept its memory after the task was closed.
+test_leaked_data_dir_job_is_reaped_and_named() {
+  local case_dir rc pid other_pid
+  case_dir=$(make_case leaked-data-dir-reap)
+  write_meta "$case_dir" no-mistakes ship
+  land_shippable_commit "$case_dir"
+  mkdir -p "$case_dir/data/task-x1/harness" "$case_dir/data/task-y2/harness"
+
+  ( cd "$case_dir/data/task-x1/harness" && exec setsid nohup sleep 300 >/dev/null 2>&1 ) &
+  pid=$!
+  disown
+  # Another task's job, working in that task's own data directory: it must
+  # outlive this teardown untouched.
+  ( cd "$case_dir/data/task-y2/harness" && exec setsid nohup sleep 300 >/dev/null 2>&1 ) &
+  other_pid=$!
+  disown
+  sleep 0.3
+  kill -0 "$pid" 2>/dev/null || fail "leaked-data-dir-reap: setup job did not start"
+  kill -0 "$other_pid" 2>/dev/null || fail "leaked-data-dir-reap: the other task's job did not start"
+
+  rc=0
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+
+  if ! kill -0 "$other_pid" 2>/dev/null; then
+    kill -KILL "$pid" 2>/dev/null || true
+    fail "leaked-data-dir-reap: teardown closed a job working in ANOTHER task's data directory"
+  fi
+  kill -KILL "$other_pid" 2>/dev/null || true
+  expect_code 0 "$rc" "leaked-data-dir-reap: teardown should still succeed"
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -KILL "$pid" 2>/dev/null || true
+    fail "leaked-data-dir-reap: a detached job working in the task's data directory survived teardown"
+  fi
+  assert_grep "reaping leaked worktree process" "$case_dir/stderr" \
+    "leaked-data-dir-reap: teardown did not report reaping the leaked job"
+  grep -Eq "pid $pid sleep holding [0-9]+ MB in " "$case_dir/stderr" \
+    || fail "leaked-data-dir-reap: teardown did not name the job it closed and the memory it held"
+  assert_grep "in $(cd "$case_dir/data/task-x1/harness" && pwd -P)" "$case_dir/stderr" \
+    "leaked-data-dir-reap: teardown did not say where the closed job was working"
+  assert_no_grep "pid $other_pid" "$case_dir/stderr" \
+    "leaked-data-dir-reap: teardown reported the other task's job"
+  pass "a detached job working in the task's own data directory is named and reaped, and another task's job is left alone"
+}
+
+# A teardown started from a shell that is itself working inside one of the
+# task's roots must not signal that shell: it is the one running the teardown.
+test_teardown_never_reaps_its_own_ancestors() {
+  local case_dir rc
+  case_dir=$(make_case own-ancestor-not-reaped)
+  write_meta "$case_dir" no-mistakes ship
+  land_shippable_commit "$case_dir"
+  mkdir -p "$case_dir/data/task-x1"
+
+  rc=0
+  (
+    cd "$case_dir/data/task-x1" || exit 97
+    # The child shell is the ancestor under test, so it needs the helper and
+    # the paths the helper reads.
+    export -f run_teardown
+    export ROOT TEARDOWN
+    bash -c 'run_teardown "$1"; rc=$?; echo "after=$rc" > "$1/after"' _ "$case_dir" \
+      > "$case_dir/stdout" 2> "$case_dir/stderr"
+  ) || rc=$?
+
+  assert_present "$case_dir/after" \
+    "own-ancestor-not-reaped: the shell running teardown was killed before it could finish"
+  assert_equals "after=0" "$(cat "$case_dir/after")" \
+    "own-ancestor-not-reaped: teardown did not succeed from inside the task's data directory"
+  assert_no_grep "REFUSED" "$case_dir/stderr" \
+    "own-ancestor-not-reaped: teardown refused over its own invoking shell"
+  pass "a teardown run from inside the task's data directory does not signal the shell running it"
+}
+
 test_lsof_absent_reaps_tmux_process_group() {
   local case_dir rc pid path_without_lsof
   case_dir=$(make_case lsof-absent-process-group-reap)
@@ -4144,6 +4219,8 @@ test_another_branchs_parked_run_is_never_touched
 test_own_autonomous_run_is_left_alone
 test_leaked_worktree_process_is_reaped
 test_leaked_tasktmp_process_is_reaped
+test_leaked_data_dir_job_is_reaped_and_named
+test_teardown_never_reaps_its_own_ancestors
 test_lsof_absent_reaps_tmux_process_group
 test_lsof_error_refuses_before_removal
 test_reused_pid_identity_is_not_force_killed

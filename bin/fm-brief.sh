@@ -413,6 +413,13 @@ The report is the only thing that survives, so anything worth keeping must be in
    going. A drive-call error, timeout, slow read, or generic unreachability is NOT a daemon error:
    the daemon accepts \`respond\` immediately and runs the round in the background, so a killed or
    timed-out call was only waiting for a read while the run kept working.
+8. Bound your own heavy jobs: this host's memory is shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   \`$FM_ROOT/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>\`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
 
 $INBOX_SECTION
 
@@ -502,6 +509,13 @@ $ASK_USER_BLOCK
    going. A drive-call error, timeout, slow read, or generic unreachability is NOT a daemon error:
    the daemon accepts \`respond\` immediately and runs the round in the background, so a killed or
    timed-out call was only waiting for a read while the run kept working.
+8. Bound your own heavy jobs: this host's memory is shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   \`$FM_ROOT/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>\`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
 
 $INBOX_SECTION
 
