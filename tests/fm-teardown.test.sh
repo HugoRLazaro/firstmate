@@ -783,6 +783,32 @@ test_local_only_merged_to_local_main_allows() {
   pass "local-only worktree with work merged into local main is torn down (no regression)"
 }
 
+# One task's data directory reached 98 GB and nothing said so when the task
+# closed. Cleanup still never removes it; it names the size and whose call
+# removing it is.
+test_teardown_reports_the_size_of_the_kept_data_directory() {
+  local case_dir rc wt_head
+  case_dir=$(make_case data-size)
+  write_meta "$case_dir" local-only ship
+  wt_commit "$case_dir" "merged work"
+  wt_head=$(git -C "$case_dir/wt" rev-parse HEAD)
+  git -C "$case_dir/project" update-ref refs/heads/main "$wt_head"
+  mkdir -p "$case_dir/data/task-x1/intermediate"
+  dd if=/dev/zero of="$case_dir/data/task-x1/intermediate/blob" bs=1024 count=3072 2>/dev/null
+
+  set +e
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "data-size: teardown should succeed: $(cat "$case_dir/stderr")"
+  assert_grep "teardown: data/task-x1 is kept and holds 3 MB; removing it is the captain's decision" \
+    "$case_dir/stderr" "data-size: teardown did not report the size of the kept data directory"
+  [ -s "$case_dir/data/task-x1/intermediate/blob" ] \
+    || fail "data-size: teardown removed data it must only report"
+  pass "teardown reports the size of the task's kept data directory and removes none of it"
+}
+
 test_no_mistakes_origin_remote_allows() {
   local case_dir rc
   case_dir=$(make_case nm-origin)
@@ -4234,3 +4260,4 @@ test_pool_prune_skipped_when_the_return_fails
 test_pool_prune_failure_does_not_fail_the_teardown
 test_pool_prune_absent_treehouse_does_not_fail_the_teardown
 test_pool_prune_real_treehouse_reclaims_only_the_returned_copy
+test_teardown_reports_the_size_of_the_kept_data_directory

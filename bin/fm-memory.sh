@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# fm-memory.sh - keep one machine's fleet inside its memory.
+# fm-memory.sh - keep one machine's fleet inside its memory and its disk.
 #
 # Usage:
-#   fm-memory.sh guard             refuse (exit 3) when this host is under the launch floor
+#   fm-memory.sh guard             refuse (exit 3) when this host is under a launch floor
 #   fm-memory.sh [check]           print one line when memory first drops under the alert floor
-#   fm-memory.sh arm               write and register state/memory.check.sh
-#   fm-memory.sh disarm            remove the check shim, its trust binding, and the episode record
-#   fm-memory.sh status            the reading, the floors, and memory held per task
+#   fm-memory.sh disk-check        print one line when the host disk first drops under its alert floor
+#   fm-memory.sh arm [--missing]   write and register state/memory.check.sh and state/disk.check.sh
+#   fm-memory.sh disarm            remove both check shims, their trust bindings, and the episode records
+#   fm-memory.sh status            the readings, the floors, and memory held per task
 #   fm-memory.sh run [--max-mb N] -- <command> [args...]
 #                                  run a heavy job inside its own memory-capped scope
 #   fm-memory.sh --help
@@ -33,12 +34,31 @@
 #   alert_available_mb   (1536)  `check` reports under this much MemAvailable
 #   job_max_mb           (4096)  `run`'s cap when --max-mb is not given; 0
 #                                runs the job with no cap
+#   spawn_host_disk_free_mb (10240)  `guard` refuses under this much free space
+#                                on the host disk
+#   alert_host_disk_free_mb (20480)  `disk-check` reports under this much free
+#                                space on the host disk
 # docs/configuration.md "Memory guard" owns how those defaults were sized and
 # the operating rules that go with them.
 #
+# The disk reading is free space, from df, of the root disk and of the host
+# disk. The host disk exists only where this machine is a virtual machine whose
+# own disk is a file on another machine's disk: under WSL, detected from the
+# kernel's own release string or its WSLInterop registration and never from a
+# machine name, it is the Windows drive mounted at /mnt/c (FM_DISK_HOST_PATH
+# replaces the mount). When that drive fills, the virtual disk cannot grow and
+# the whole machine goes down with every worker on it, whatever the memory
+# reading says. Only the host disk is judged; the root disk is reported.
+# Everywhere else there is no host disk, so nothing disk-related is judged,
+# armed, or reported as low. A host disk that should be there but cannot be read
+# never blocks anything, exactly like an unparseable memory reading.
+# FM_DISKINFO_PATH replaces the live reading with a file holding
+# `RootAvailable: <n> kB` and `HostAvailable: <n> kB` lines, mainly for tests.
+#
 # guard: exit 0 when a launch may proceed, exit 3 with one diagnostic line
-# naming the reading and the floor when it may not. FM_MEMORY_GUARD=off is the
-# explicit override: it exits 0 and says on stderr that the floor was skipped.
+# naming the reading and the floor when it may not. It judges memory, then the
+# host disk. FM_MEMORY_GUARD=off and FM_DISK_GUARD=off are the explicit
+# overrides, one per reading: each skips its own floor and says so on stderr.
 # bin/fm-spawn.sh calls this for every local launch and relaunch.
 #
 # check: the watcher state-check contract - one line when firstmate should
@@ -53,7 +73,19 @@
 # warning for a host filling over minutes, never a guarantee against a job that
 # takes everything in seconds; `run` is the bound for that.
 #
-# status: read-only. Sums resident memory of the processes whose working
+# disk-check: the same contract and the same episode mechanics for the host
+# disk, recorded in state/.disk-low. Its line names the free space, the floor,
+# and the three largest of the places it can size cheaply: the WSL crash-dump
+# folder and each data/<task-id>/ directory of this home.
+#
+# arm: registers one shim per notification this host has a reading for, so a
+# machine with no host disk gets no disk shim. --missing writes only a shim
+# that does not exist yet and never rewrites one that does, which is what
+# bin/fm-bootstrap.sh runs at every locked session start. A notification is
+# silenced by setting its alert floor to 0, not by disarming.
+#
+# status: read-only. Prints both readings, the floors, and the size of the WSL
+# crash-dump folder when there is one. Sums resident memory of the processes whose working
 # directory is inside each recorded task's local copy, scratch directory, or
 # data directory, and lists the largest processes that belong to no task.
 #
@@ -81,9 +113,11 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/memory-floor"
 MEMINFO="${FM_MEMINFO_PATH:-/proc/meminfo}"
 PROC_ROOT="${FM_PROC_ROOT_OVERRIDE:-/proc}"
 RECORD="$STATE/.memory-low"
-CHECK_ID=memory
-CHECK_SHIM="$STATE/$CHECK_ID.check.sh"
-CHECK_TRUST="$STATE/$CHECK_ID.check-trust"
+DISK_RECORD="$STATE/.disk-low"
+DISK_HOST_PATH="${FM_DISK_HOST_PATH:-/mnt/c}"
+DISKINFO="${FM_DISKINFO_PATH:-}"
+# Longest one sizing pass may take; the watcher allows a check 30 seconds.
+SIZE_TIMEOUT=15
 REGISTER_BIN="$SCRIPT_DIR/fm-check-register.sh"
 GUARD_REFUSE_EXIT=3
 
@@ -93,18 +127,22 @@ GUARD_REFUSE_EXIT=3
 usage() {
   cat <<'EOF'
 Usage:
-  fm-memory.sh guard       exit 3 with a diagnostic when this host is under the launch floor
+  fm-memory.sh guard       exit 3 with a diagnostic when this host is under a launch floor
   fm-memory.sh [check]     print one line when memory first drops under the alert floor
-  fm-memory.sh arm         write and register state/memory.check.sh
-  fm-memory.sh disarm      remove the check shim, its trust binding, and the episode record
-  fm-memory.sh status      the reading, the floors, and memory held per task
+  fm-memory.sh disk-check  print one line when the host disk first drops under its alert floor
+  fm-memory.sh arm [--missing]
+                           write and register state/memory.check.sh and state/disk.check.sh;
+                           --missing leaves an existing shim untouched
+  fm-memory.sh disarm      remove both check shims, their trust bindings, and the episode records
+  fm-memory.sh status      the readings, the floors, and memory held per task
   fm-memory.sh run [--max-mb N] -- <command> [args...]
                            run a heavy job inside its own memory-capped scope
   fm-memory.sh --help      print this help
 
 Floors: config/memory-floor, one key=<megabytes> per line.
-  spawn_available_mb (2048), spawn_swap_free_mb (512), alert_available_mb (1536), job_max_mb (4096)
-FM_MEMORY_GUARD=off skips the launch floor for one command.
+  spawn_available_mb (2048), spawn_swap_free_mb (512), alert_available_mb (1536), job_max_mb (4096),
+  spawn_host_disk_free_mb (10240), alert_host_disk_free_mb (20480)
+FM_MEMORY_GUARD=off skips the memory launch floor for one command; FM_DISK_GUARD=off skips the disk one.
 EOF
 }
 
@@ -120,6 +158,8 @@ SPAWN_AVAILABLE_MB=2048
 SPAWN_SWAP_FREE_MB=512
 ALERT_AVAILABLE_MB=1536
 JOB_MAX_MB=4096
+SPAWN_HOST_DISK_FREE_MB=10240
+ALERT_HOST_DISK_FREE_MB=20480
 
 floors_load() {
   local line key value
@@ -152,6 +192,8 @@ floors_load() {
     spawn_swap_free_mb) SPAWN_SWAP_FREE_MB=$value ;;
     alert_available_mb) ALERT_AVAILABLE_MB=$value ;;
     job_max_mb) JOB_MAX_MB=$value ;;
+    spawn_host_disk_free_mb) SPAWN_HOST_DISK_FREE_MB=$value ;;
+    alert_host_disk_free_mb) ALERT_HOST_DISK_FREE_MB=$value ;;
     *) printf 'fm-memory: warning: ignoring unknown key "%s" in %s\n' "$key" "$CONFIG" >&2 ;;
     esac
   done <"$CONFIG"
@@ -169,8 +211,14 @@ AVAILABLE_MB=
 SWAP_FREE_MB=
 SWAP_TOTAL_MB=
 
+# kb_field <label>: reads a meminfo-shaped text on stdin and prints
+# "<value>|<unit>|<times the label appeared>" for that label.
+kb_field() {
+  awk -v want="$1:" '$1 == want { v = $2; u = $3; n++ } END { printf "%s|%s|%d\n", v, u, n + 0 }' 2>/dev/null
+}
+
 reading_load() {
-  local fields available swap_free swap_total
+  local available swap_free swap_total au an fu fn tu tn
   READING=unreadable
   READING_PROBLEM=
   if [ ! -e "$MEMINFO" ]; then
@@ -185,14 +233,14 @@ reading_load() {
     READING_PROBLEM="$MEMINFO cannot be read"
     return 0
   fi
-  fields=$(awk '
-    $1 == "MemAvailable:" { a = $2; au = $3; an++ }
-    $1 == "SwapFree:" { f = $2; fu = $3; fn++ }
-    $1 == "SwapTotal:" { t = $2; tu = $3; tn++ }
-    END { printf "%s|%s|%s|%s|%s|%s|%s|%s|%s\n", a, au, an + 0, f, fu, fn + 0, t, tu, tn + 0 }
-  ' "$MEMINFO" 2>/dev/null) || fields=
-  IFS='|' read -r available au an swap_free fu fn swap_total tu tn <<EOF
-$fields
+  IFS='|' read -r available au an <<EOF
+$(kb_field MemAvailable <"$MEMINFO")
+EOF
+  IFS='|' read -r swap_free fu fn <<EOF
+$(kb_field SwapFree <"$MEMINFO")
+EOF
+  IFS='|' read -r swap_total tu tn <<EOF
+$(kb_field SwapTotal <"$MEMINFO")
 EOF
   if [ "${an:-0}" != 1 ] || [ "${au:-}" != kB ]; then
     READING_PROBLEM="$MEMINFO has no single MemAvailable line in kB"
@@ -229,16 +277,156 @@ EOF
   READING=ok
 }
 
+# --- disk reading -----------------------------------------------------------
+
+# True on a WSL machine, judged from the kernel's own identity.
+host_is_wsl() {
+  local release
+  [ ! -e "$PROC_ROOT/sys/fs/binfmt_misc/WSLInterop" ] || return 0
+  [ ! -e "$PROC_ROOT/sys/fs/binfmt_misc/WSLInterop-late" ] || return 0
+  release=$(cat "$PROC_ROOT/sys/kernel/osrelease" 2>/dev/null) || return 1
+  case "$release" in *[Mm]icrosoft* | *WSL*) return 0 ;; esac
+  return 1
+}
+
+# True where this machine has a host disk to read at all.
+host_disk_expected() {
+  [ -n "$DISKINFO" ] || host_is_wsl
+}
+
+# bounded <command...>: a filesystem walk must not outlast the watcher's check
+# timeout, so it is cut short where the host has `timeout`.
+bounded() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$SIZE_TIMEOUT" "$@"
+  else
+    "$@"
+  fi
+}
+
+df_available_kb() { # <path>
+  bounded df -Pk -- "$1" 2>/dev/null | awk 'NR == 2 { print $4 }'
+}
+
+# disk_reading_load sets DISK_READING to one of:
+#   ok           ROOT_FREE_MB and HOST_FREE_MB are set, either one empty when
+#                this machine has no such disk to read
+#   unreadable   a reading that should exist cannot be trusted;
+#                DISK_READING_PROBLEM says why
+DISK_READING=
+DISK_READING_PROBLEM=
+ROOT_FREE_MB=
+HOST_FREE_MB=
+
+disk_reading_load() {
+  local text root host ru rn hu hn kb
+  DISK_READING=unreadable
+  DISK_READING_PROBLEM=
+  ROOT_FREE_MB=
+  HOST_FREE_MB=
+  if [ -n "$DISKINFO" ]; then
+    if [ ! -f "$DISKINFO" ] || [ ! -r "$DISKINFO" ]; then
+      DISK_READING_PROBLEM="$DISKINFO cannot be read"
+      return 0
+    fi
+    text=$(cat "$DISKINFO" 2>/dev/null) || text=
+    [ -n "$text" ] || {
+      DISK_READING_PROBLEM="$DISKINFO is empty"
+      return 0
+    }
+  else
+    text=
+    kb=$(df_available_kb /)
+    [ -z "$kb" ] || text="RootAvailable: $kb kB"
+    if host_is_wsl; then
+      kb=$(df_available_kb "$DISK_HOST_PATH")
+      [ -n "$kb" ] || {
+        DISK_READING_PROBLEM="the host disk at $DISK_HOST_PATH did not answer df"
+        return 0
+      }
+      text="$text"$'\n'"HostAvailable: $kb kB"
+    fi
+  fi
+  IFS='|' read -r root ru rn <<EOF
+$(printf '%s\n' "$text" | kb_field RootAvailable)
+EOF
+  IFS='|' read -r host hu hn <<EOF
+$(printf '%s\n' "$text" | kb_field HostAvailable)
+EOF
+  if [ -n "$DISKINFO" ] && [ "${rn:-0}" = 0 ] && [ "${hn:-0}" = 0 ]; then
+    DISK_READING_PROBLEM="$DISKINFO has no RootAvailable or HostAvailable line"
+    return 0
+  fi
+  if [ "${rn:-0}" != 0 ]; then
+    if [ "$rn" != 1 ] || [ "${ru:-}" != kB ]; then
+      DISK_READING_PROBLEM="the disk reading has no single RootAvailable line in kB"
+      return 0
+    fi
+    case "$root" in '' | *[!0-9]*)
+      DISK_READING_PROBLEM="the disk reading reports RootAvailable as '$root'"
+      return 0
+      ;;
+    esac
+  fi
+  if [ "${hn:-0}" != 0 ]; then
+    if [ "$hn" != 1 ] || [ "${hu:-}" != kB ]; then
+      DISK_READING_PROBLEM="the disk reading has no single HostAvailable line in kB"
+      return 0
+    fi
+    case "$host" in '' | *[!0-9]*)
+      DISK_READING_PROBLEM="the disk reading reports HostAvailable as '$host'"
+      return 0
+      ;;
+    esac
+  fi
+  [ "${#root}" -le 15 ] && [ "${#host}" -le 15 ] || {
+    DISK_READING_PROBLEM="the disk reading reports a value too large to be a disk size"
+    return 0
+  }
+  [ "${rn:-0}" = 0 ] || ROOT_FREE_MB=$((10#$root / 1024))
+  [ "${hn:-0}" = 0 ] || HOST_FREE_MB=$((10#$host / 1024))
+  DISK_READING=ok
+}
+
 # --- guard ------------------------------------------------------------------
 
 action_guard() {
+  local rc=0
+  floors_load
+  memory_guard || rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
+  disk_guard
+}
+
+disk_guard() {
+  host_disk_expected || return 0
+  case "${FM_DISK_GUARD:-}" in
+  off)
+    printf 'fm-memory: disk launch floor skipped (FM_DISK_GUARD=off)\n' >&2
+    return 0
+    ;;
+  esac
+  disk_reading_load
+  if [ "$DISK_READING" != ok ]; then
+    printf 'fm-memory: warning: disk space could not be read (%s); launching without the disk floor\n' "$DISK_READING_PROBLEM" >&2
+    return 0
+  fi
+  [ -n "$HOST_FREE_MB" ] || return 0
+  if [ "$SPAWN_HOST_DISK_FREE_MB" -gt 0 ] && [ "$HOST_FREE_MB" -lt "$SPAWN_HOST_DISK_FREE_MB" ]; then
+    printf 'error: launch refused - the host disk (%s) has %s MB free, under the %s MB launch floor (root disk %s MB free). When that disk fills, this whole machine goes down. Free space on it first: bin/fm-memory.sh status shows both readings and the crash-dump folder. Floors: config/memory-floor; FM_DISK_GUARD=off launches anyway.\n' \
+      "$DISK_HOST_PATH" "$HOST_FREE_MB" "$SPAWN_HOST_DISK_FREE_MB" "${ROOT_FREE_MB:-unknown}" >&2
+    return "$GUARD_REFUSE_EXIT"
+  fi
+  return 0
+}
+
+memory_guard() {
   case "${FM_MEMORY_GUARD:-}" in
   off)
     printf 'fm-memory: launch floor skipped (FM_MEMORY_GUARD=off)\n' >&2
     return 0
     ;;
   esac
-  floors_load
   reading_load
   case "$READING" in
   unsupported) return 0 ;;
@@ -288,67 +476,177 @@ EOF
 
 # --- check ------------------------------------------------------------------
 
+# episode_opens <record> <reading> <floor>: exit 0 exactly when this reading
+# opens a new episode the caller must report. A floor of 0, or a reading back
+# at the floor plus a quarter, closes the episode; anything in between, or an
+# episode already on record, is silence.
+episode_opens() {
+  local record=$1 reading=$2 floor=$3
+  [ "$floor" -gt 0 ] || {
+    rm -f -- "${record:?}" 2>/dev/null || true
+    return 1
+  }
+  if [ "$reading" -ge $((floor + floor / 4)) ]; then
+    rm -f -- "${record:?}" 2>/dev/null || true
+    return 1
+  fi
+  [ "$reading" -lt "$floor" ] || return 1
+  # Already reported, and not yet recovered: the episode is still the same one.
+  [ ! -e "$record" ]
+}
+
+# episode_report <record> <line>: report before recording, because a run killed
+# between the two repeats the line once, where the other order would record an
+# episode nobody was told about.
+episode_report() {
+  local record=$1 line=$2 tmp
+  printf '%s\n' "$line"
+  [ -d "$STATE" ] && [ ! -L "$STATE" ] || return 0
+  tmp="${record:?}.$$"
+  (umask 077 && printf '%s\n%s\n' "$(date +%s)" "$line" >"$tmp" && mv -f -- "$tmp" "$record") 2>/dev/null \
+    || rm -f -- "${tmp:?}" 2>/dev/null || true
+  return 0
+}
+
 action_check() {
-  local recover line largest
+  local largest
   floors_load
   reading_load
   [ "$READING" = ok ] || return 0
-  [ "$ALERT_AVAILABLE_MB" -gt 0 ] || {
-    rm -f -- "$RECORD" 2>/dev/null || true
-    return 0
-  }
-  recover=$((ALERT_AVAILABLE_MB + ALERT_AVAILABLE_MB / 4))
-  if [ "$AVAILABLE_MB" -ge "$recover" ]; then
-    rm -f -- "$RECORD" 2>/dev/null || true
-    return 0
-  fi
-  [ "$AVAILABLE_MB" -lt "$ALERT_AVAILABLE_MB" ] || return 0
-  # Already reported, and not yet recovered: the episode is still the same one.
-  [ ! -e "$RECORD" ] || return 0
+  episode_opens "$RECORD" "$AVAILABLE_MB" "$ALERT_AVAILABLE_MB" || return 0
   largest=$(largest_summary 3)
-  line="memory low: $AVAILABLE_MB MB available, under the $ALERT_AVAILABLE_MB MB floor (SwapFree $SWAP_FREE_MB MB of $SWAP_TOTAL_MB MB)${largest:+; largest: $largest}; see bin/fm-memory.sh status"
-  # Report before recording: a run killed between the two repeats the line once,
-  # where the other order would record an episode nobody was told about.
-  printf '%s\n' "$line"
-  [ -d "$STATE" ] && [ ! -L "$STATE" ] || return 0
-  (umask 077 && printf '%s\n%s\n' "$(date +%s)" "$line" >"$RECORD.$$" && mv -f -- "$RECORD.$$" "$RECORD") 2>/dev/null \
-    || rm -f -- "$RECORD.$$" 2>/dev/null || true
-  return 0
+  episode_report "$RECORD" "memory low: $AVAILABLE_MB MB available, under the $ALERT_AVAILABLE_MB MB floor (SwapFree $SWAP_FREE_MB MB of $SWAP_TOTAL_MB MB)${largest:+; largest: $largest}; see bin/fm-memory.sh status"
+}
+
+# The WSL crash-dump folder on the host disk, when this machine has one: every
+# process that aborts under WSL is written there whole.
+crash_dump_dir() {
+  local dir
+  host_disk_expected || return 0
+  for dir in "$DISK_HOST_PATH"/Users/*/AppData/Local/Temp/wsl-crashes; do
+    [ -d "$dir" ] || continue
+    printf '%s\n' "$dir"
+    return 0
+  done
+}
+
+path_size_mb() { # <path>
+  local kb
+  kb=$(bounded du -sk -- "$1" 2>/dev/null | awk 'NR == 1 { print $1 }')
+  case "$kb" in '' | *[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$((kb / 1024))"
+}
+
+# The largest of the places that can be sized without walking a whole disk: the
+# crash-dump folder and this home's per-task data directories.
+disk_largest_summary() { # <count>
+  local crash dir
+  local -a places=()
+  crash=$(crash_dump_dir)
+  [ -z "$crash" ] || places+=("$crash")
+  for dir in "$DATA"/*/; do
+    [ -d "$dir" ] && [ ! -L "${dir%/}" ] || continue
+    places+=("${dir%/}")
+  done
+  [ "${#places[@]}" -gt 0 ] || return 0
+  bounded du -sk -- "${places[@]}" 2>/dev/null \
+    | sort -rn | awk -v count="$1" -F '\t' '
+      $1 ~ /^[0-9]+$/ && $1 >= 1024 && n < count {
+        out = out (n ? ", " : "") $2 " " int($1 / 1024) " MB"
+        n++
+      }
+      END { printf "%s", out }'
+}
+
+action_disk_check() {
+  local largest
+  floors_load
+  host_disk_expected || return 0
+  disk_reading_load
+  [ "$DISK_READING" = ok ] && [ -n "$HOST_FREE_MB" ] || return 0
+  episode_opens "$DISK_RECORD" "$HOST_FREE_MB" "$ALERT_HOST_DISK_FREE_MB" || return 0
+  largest=$(disk_largest_summary 3)
+  episode_report "$DISK_RECORD" "disk low: the host disk ($DISK_HOST_PATH) has $HOST_FREE_MB MB free, under the $ALERT_HOST_DISK_FREE_MB MB floor (root disk ${ROOT_FREE_MB:-unknown} MB free)${largest:+; largest: $largest}; this machine goes down when that disk fills; see bin/fm-memory.sh status"
 }
 
 # --- arm / disarm -----------------------------------------------------------
 
 # The home is embedded already resolved, because the watcher runs the shim from
 # its own working directory.
-shim_content() { # <home>
+shim_content() { # <home> <label> <action>
   printf '%s\n' \
     '#!/usr/bin/env bash' \
-    '# Auto-generated by fm-memory.sh - low-memory poll shim.' \
+    "# Auto-generated by fm-memory.sh - $2 poll shim." \
     '# The watcher validates these bytes, then dispatches the trusted check script.' \
     "export FM_HOME=$(printf '%q' "$1")" \
-    "exec $(printf '%q' "$SCRIPT_DIR/fm-memory.sh") check"
+    "exec $(printf '%q' "$SCRIPT_DIR/fm-memory.sh") $3"
 }
 
 ARM_TMP=
+ARM_ID=
 
 # An unregistered shim is not inert: the watcher rejects it on every cycle. So a
 # failed or interrupted arm leaves no shim at all, and the home is plainly not
 # armed.
 arm_rollback() {
-  [ -z "$ARM_TMP" ] || rm -f -- "$ARM_TMP"
+  [ -z "$ARM_TMP" ] || rm -f -- "${ARM_TMP:?}"
   ARM_TMP=
-  rm -f -- "$CHECK_SHIM" "$CHECK_TRUST"
+  [ -z "$ARM_ID" ] || rm -f -- "${STATE:?}/${ARM_ID:?}.check.sh" "${STATE:?}/${ARM_ID:?}.check-trust"
 }
 
-# shellcheck disable=SC2329  # Registered by action_arm's signal trap.
+# shellcheck disable=SC2329  # Registered by arm_one's signal trap.
 arm_interrupted() {
   arm_rollback
-  printf 'fm-memory: arming was interrupted, so state/%s.check.sh is not armed\n' "$CHECK_ID" >&2
+  printf 'fm-memory: arming was interrupted, so state/%s.check.sh is not armed\n' "$ARM_ID" >&2
   exit 1
 }
 
+arm_one() { # <check-id> <label> <action> <home> <missing-only>
+  local id=$1 label=$2 action=$3 home=$4 missing=$5 shim device want
+  shim="$STATE/$id.check.sh"
+  if [ "$missing" = 1 ] && { [ -e "$shim" ] || [ -L "$shim" ]; }; then
+    return 0
+  fi
+  device=$(fm_pr_file_device "$STATE") || return 1
+  fm_pr_regular_destination_on_device_or_absent "$shim" "$device" || {
+    printf 'fm-memory: %s is not a plain file this home owns\n' "$shim" >&2
+    return 1
+  }
+  want=$(shim_content "$home" "$label" "$action")
+  trap arm_interrupted HUP INT TERM
+  ARM_TMP=$(umask 077 && mktemp "$STATE/.fm-memory-check.XXXXXX" 2>/dev/null) || {
+    trap - HUP INT TERM
+    printf 'fm-memory: could not write %s\n' "$shim" >&2
+    return 1
+  }
+  ARM_ID=$id
+  if ! printf '%s\n' "$want" >"$ARM_TMP" || ! chmod 0700 "$ARM_TMP" || ! mv -f -- "$ARM_TMP" "$shim"; then
+    trap - HUP INT TERM
+    arm_rollback
+    ARM_ID=
+    printf 'fm-memory: could not write %s\n' "$shim" >&2
+    return 1
+  fi
+  ARM_TMP=
+  if ! FM_HOME="$home" FM_STATE_OVERRIDE="$STATE" "$REGISTER_BIN" "$id" >/dev/null; then
+    trap - HUP INT TERM
+    arm_rollback
+    ARM_ID=
+    printf 'fm-memory: could not register %s\n' "$shim" >&2
+    return 1
+  fi
+  trap - HUP INT TERM
+  ARM_ID=
+  printf 'armed: state/%s.check.sh\n' "$id"
+}
+
 action_arm() {
-  local home device want
+  local home missing=0 rc=0
+  case "${1:-}" in
+  '') ;;
+  --missing) missing=1 ;;
+  *) die_usage "arm: unknown option '$1'" ;;
+  esac
   mkdir -p "$STATE" || return 1
   [ -d "$STATE" ] && [ ! -L "$STATE" ] || {
     printf 'fm-memory: state directory %s is unavailable\n' "$STATE" >&2
@@ -358,44 +656,53 @@ action_arm() {
     printf 'fm-memory: cannot resolve FM_HOME %s\n' "$FM_HOME" >&2
     return 1
   }
-  device=$(fm_pr_file_device "$STATE") || return 1
-  fm_pr_regular_destination_on_device_or_absent "$CHECK_SHIM" "$device" || {
-    printf 'fm-memory: %s is not a plain file this home owns\n' "$CHECK_SHIM" >&2
-    return 1
-  }
-  want=$(shim_content "$home")
-  trap arm_interrupted HUP INT TERM
-  ARM_TMP=$(umask 077 && mktemp "$STATE/.fm-memory-check.XXXXXX" 2>/dev/null) || {
-    trap - HUP INT TERM
-    printf 'fm-memory: could not write %s\n' "$CHECK_SHIM" >&2
-    return 1
-  }
-  if ! printf '%s\n' "$want" >"$ARM_TMP" || ! chmod 0700 "$ARM_TMP" || ! mv -f -- "$ARM_TMP" "$CHECK_SHIM"; then
-    trap - HUP INT TERM
-    arm_rollback
-    printf 'fm-memory: could not write %s\n' "$CHECK_SHIM" >&2
-    return 1
+  # --missing arms only what this host can read; a plain arm keeps arming the
+  # memory check wherever it is asked to, as it always has.
+  if [ "$missing" = 0 ] || [ -e "$MEMINFO" ]; then
+    arm_one memory low-memory check "$home" "$missing" || rc=1
   fi
-  ARM_TMP=
-  if ! FM_HOME="$home" FM_STATE_OVERRIDE="$STATE" "$REGISTER_BIN" "$CHECK_ID" >/dev/null; then
-    trap - HUP INT TERM
-    arm_rollback
-    printf 'fm-memory: could not register %s\n' "$CHECK_SHIM" >&2
-    return 1
+  if host_disk_expected; then
+    arm_one disk low-disk disk-check "$home" "$missing" || rc=1
   fi
-  trap - HUP INT TERM
-  printf 'armed: state/%s.check.sh\n' "$CHECK_ID"
+  return "$rc"
 }
 
 action_disarm() {
-  rm -f -- "$CHECK_SHIM" "$CHECK_TRUST" "$RECORD"
-  printf 'disarmed: state/%s.check.sh\n' "$CHECK_ID"
+  rm -f -- "${STATE:?}/memory.check.sh" "${STATE:?}/memory.check-trust" "${RECORD:?}" \
+    "${STATE:?}/disk.check.sh" "${STATE:?}/disk.check-trust" "${DISK_RECORD:?}"
+  printf 'disarmed: state/memory.check.sh state/disk.check.sh\n'
 }
 
 # --- status -----------------------------------------------------------------
 
 meta_field() { # <meta> <key>
   grep "^$2=" "$1" 2>/dev/null | tail -1 | cut -d= -f2-
+}
+
+disk_status() {
+  local crash size
+  disk_reading_load
+  if [ "$DISK_READING" != ok ]; then
+    printf 'disk: unreadable (%s)\n' "$DISK_READING_PROBLEM"
+  elif [ -n "$HOST_FREE_MB" ]; then
+    printf 'disk: host disk (%s) %s MB free, root disk %s MB free\n' "$DISK_HOST_PATH" "$HOST_FREE_MB" "${ROOT_FREE_MB:-unknown}"
+  else
+    printf 'disk: root disk %s MB free; this machine has no host disk to read\n' "${ROOT_FREE_MB:-unknown}"
+    return 0
+  fi
+  printf 'disk floors: launch %s MB free on the host disk, alert %s MB free on the host disk\n' \
+    "$SPAWN_HOST_DISK_FREE_MB" "$ALERT_HOST_DISK_FREE_MB"
+  crash=$(crash_dump_dir)
+  if [ -n "$crash" ]; then
+    if size=$(path_size_mb "$crash"); then
+      printf 'wsl crash dumps: %s MB in %s\n' "$size" "$crash"
+    else
+      printf 'wsl crash dumps: %s could not be sized\n' "$crash"
+    fi
+  fi
+  if [ -e "$DISK_RECORD" ]; then
+    printf 'alert: a low-disk episode is open and already reported\n'
+  fi
 }
 
 action_status() {
@@ -418,6 +725,7 @@ action_status() {
   if [ -e "$RECORD" ]; then
     printf 'alert: a low-memory episode is open and already reported\n'
   fi
+  disk_status
   for meta in "$STATE"/*.meta; do
     [ -f "$meta" ] || continue
     id=$(basename "$meta" .meta)
@@ -524,7 +832,11 @@ action_run() {
 case "${1:-check}" in
 check) action_check ;;
 guard) action_guard ;;
-arm) action_arm ;;
+disk-check) action_disk_check ;;
+arm)
+  shift
+  action_arm "$@"
+  ;;
 disarm) action_disarm ;;
 status) action_status ;;
 run)

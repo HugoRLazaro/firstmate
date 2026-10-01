@@ -1623,9 +1623,9 @@ families_for_changed_path() {
           || printf '%s\n' "__unmapped__:$path"
       fi
       ;;
-    tests/assets/meminfo-healthy)
-      # The pinned memory reading tests/lib.sh and tests/herdr-test-safety.sh
-      # export to their suites, so it is selected by the suites that name
+    tests/assets/meminfo-healthy|tests/assets/diskinfo-healthy)
+      # The pinned memory and disk readings tests/lib.sh and tests/herdr-test-safety.sh
+      # export to their suites, so each is selected by the suites that name
       # either helper.
       families_for_test_reference lib.sh herdr-test-safety.sh \
         || printf '%s\n' "__unmapped__:$path"
