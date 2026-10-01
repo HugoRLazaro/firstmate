@@ -447,6 +447,18 @@ test_status_attributes_a_job_to_its_task() {
   pass "status prints the reading and the floors and attributes a job to the task whose directory it works in"
 }
 
+test_status_completes_on_a_home_with_no_task_records() {
+  local home out status=0
+  home=$(make_home status-empty)
+  write_meminfo "$home/meminfo" 6000 3000
+  out=$(run_memory "$home" "$home/meminfo" status 2>&1) || status=$?
+  expect_code 0 "$status" "status on a home with no task records"
+  assert_contains "$out" "memory: 6000 MB available" "status should print the reading"
+  assert_contains "$out" "no task records in this home" "status should say there are no task records"
+  assert_contains "$out" "per task" "status should still print the per-task section"
+  pass "status completes on a home with no task records"
+}
+
 # --- run --------------------------------------------------------------------
 
 test_run_starts_the_job_in_a_capped_scope() {
@@ -535,6 +547,41 @@ SH
   pass "run with job_max_mb=0 or --max-mb 0 starts the job uncapped and says so"
 }
 
+test_run_gives_the_job_the_callers_locale() {
+  local home fake out status=0
+  home=$(make_home run-locale)
+  fake="$home/fake-systemd-run"
+  cat > "$fake" <<'SH'
+#!/bin/sh
+while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
+shift
+exec "$@"
+SH
+  chmod +x "$fake"
+  locale_job() {  # <systemd-run> <max-mb>
+    FM_MEMORY_SYSTEMD_RUN="$1" \
+      run_memory "$home" "$home/meminfo" run --max-mb "$2" -- \
+      sh -c 'printf "lc_all=<%s>\n" "${LC_ALL-unset}"' 2>&1
+  }
+
+  out=$(unset LC_ALL; locale_job "$fake" 128) || status=$?
+  expect_code 0 "$status" "a scoped job with LC_ALL unset should run"
+  assert_contains "$out" "lc_all=<unset>" "the wrapper leaked its forced LC_ALL into the scoped job"
+
+  out=$(export LC_ALL=POSIX; locale_job "$fake" 128) || status=$?
+  expect_code 0 "$status" "a scoped job with a caller locale should run"
+  assert_contains "$out" "lc_all=<POSIX>" "the scoped job did not keep the caller's LC_ALL"
+
+  out=$(export LC_ALL=POSIX; locale_job "$fake" 0) || status=$?
+  expect_code 0 "$status" "an uncapped job with a caller locale should run"
+  assert_contains "$out" "lc_all=<POSIX>" "the uncapped job did not keep the caller's LC_ALL"
+
+  out=$(export LC_ALL=POSIX; locale_job "$home/does-not-exist" 128) || status=$?
+  expect_code 0 "$status" "a job without systemd should run"
+  assert_contains "$out" "lc_all=<POSIX>" "the no-systemd job did not keep the caller's LC_ALL"
+  pass "run gives the wrapped job the caller's own locale on every path"
+}
+
 # A real cap, where this host can enforce one: the job that outgrows it dies
 # alone and the suite keeps running.
 test_run_really_kills_a_job_that_outgrows_its_cap() {
@@ -575,7 +622,9 @@ test_arm_registers_the_check_and_disarm_removes_it
 test_arm_refuses_a_symlink_at_the_shim_path
 test_armed_check_wakes_the_watcher_once
 test_status_attributes_a_job_to_its_task
+test_status_completes_on_a_home_with_no_task_records
 test_run_starts_the_job_in_a_capped_scope
 test_run_without_systemd_still_runs_and_says_it_is_uncapped
 test_run_with_a_zero_cap_runs_the_job_uncapped
+test_run_gives_the_job_the_callers_locale
 test_run_really_kills_a_job_that_outgrows_its_cap

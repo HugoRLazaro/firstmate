@@ -1624,9 +1624,10 @@ families_for_changed_path() {
       fi
       ;;
     tests/assets/meminfo-healthy)
-      # The pinned memory reading tests/lib.sh exports to every suite, so it is
-      # selected by the suites that name that helper.
-      families_for_test_reference lib.sh \
+      # The pinned memory reading tests/lib.sh and tests/herdr-test-safety.sh
+      # export to their suites, so it is selected by the suites that name
+      # either helper.
+      families_for_test_reference lib.sh herdr-test-safety.sh \
         || printf '%s\n' "__unmapped__:$path"
       ;;
     tests/lib.sh|tests/*-helpers.sh|tests/fixtures.sh|tests/*-fixture.sh)

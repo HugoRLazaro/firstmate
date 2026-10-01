@@ -65,6 +65,12 @@
 # manager answers, the command still runs, uncapped, and stderr says so.
 # FM_MEMORY_SYSTEMD_RUN replaces the systemd-run executable.
 set -u
+# The job `run` wraps keeps the caller's own locale; the forced C below is for
+# this script's own parsing, so the caller's value is kept to restore around
+# the exec.
+CALLER_LC_ALL=${LC_ALL-}
+CALLER_LC_ALL_SET=0
+[ -z "${LC_ALL+x}" ] || CALLER_LC_ALL_SET=1
 export LC_ALL=C
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -432,7 +438,7 @@ action_status() {
     [ -n "$pid" ] || continue
     cwd=$(process_cwd "$pid")
     owner=
-    if [ -n "$cwd" ]; then
+    if [ -n "$cwd" ] && [ "${#ids[@]}" -gt 0 ]; then
       for i in "${!ids[@]}"; do
         while IFS= read -r root; do
           [ -n "$root" ] || continue
@@ -458,13 +464,27 @@ EOF
 $table
 EOF
   printf 'per task (resident memory of processes working inside the task):\n'
-  [ "${#ids[@]}" -gt 0 ] || printf '  no task records in this home\n'
-  for i in "${!ids[@]}"; do
-    printf '  %6s MB  %s process(es)  %s\n' "$((id_rss[i] / 1024))" "${id_count[i]}" "${ids[$i]}"
-  done
+  if [ "${#ids[@]}" -gt 0 ]; then
+    for i in "${!ids[@]}"; do
+      printf '  %6s MB  %s process(es)  %s\n' "$((id_rss[i] / 1024))" "${id_count[i]}" "${ids[$i]}"
+    done
+  else
+    printf '  no task records in this home\n'
+  fi
 }
 
 # --- run --------------------------------------------------------------------
+
+# The wrapped job gets the locale it would have had outside this wrapper: the
+# script's own C is only for the parsing above, which is done by now.
+exec_job() {
+  if [ "$CALLER_LC_ALL_SET" = 1 ]; then
+    export LC_ALL="$CALLER_LC_ALL"
+  else
+    unset LC_ALL
+  fi
+  exec "$@"
+}
 
 action_run() {
   local max="" systemd_run
@@ -489,16 +509,16 @@ action_run() {
   [ "${#max}" -le 9 ] || die_usage "run: --max-mb is megabytes"
   if [ "$max" -eq 0 ]; then
     printf 'fm-memory: warning: the job cap is 0, so this job runs with no memory cap\n' >&2
-    exec "$@"
+    exec_job "$@"
   fi
   systemd_run=${FM_MEMORY_SYSTEMD_RUN:-systemd-run}
   if command -v "$systemd_run" >/dev/null 2>&1 \
     && "$systemd_run" --user --scope --quiet --collect -- true >/dev/null 2>&1; then
-    exec "$systemd_run" --user --scope --quiet --collect \
+    exec_job "$systemd_run" --user --scope --quiet --collect \
       -p "MemoryMax=${max}M" -p MemorySwapMax=0 -- "$@"
   fi
   printf 'fm-memory: warning: no systemd user manager answered, so this job runs with no memory cap\n' >&2
-  exec "$@"
+  exec_job "$@"
 }
 
 case "${1:-check}" in
