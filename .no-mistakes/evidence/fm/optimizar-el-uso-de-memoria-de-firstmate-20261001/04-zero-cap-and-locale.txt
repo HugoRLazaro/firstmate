@@ -1,0 +1,24 @@
+=== --max-mb 0 runs the job with no cap and says so (real systemd present, so the message is about the configured cap, not a missing manager) ===
+fm-memory: warning: the job cap is 0, so this job runs with no memory cap
+job cgroup: 0::/user.slice/user-1000.slice/user@1000.service/app.slice/no-mistakes-daemon-e1af60cd.service
+ran
+wrapper exit=6 (the job own status 6)
+
+=== configured job_max_mb=0 does the same without --max-mb ===
+fm-memory: warning: the job cap is 0, so this job runs with no memory cap
+job cgroup: 0::/user.slice/user-1000.slice/user@1000.service/app.slice/no-mistakes-daemon-e1af60cd.service
+ran
+wrapper exit=5 (the job own status 5)
+
+=== capped run for contrast: the job reports its own run-*.scope ===
+job cgroup: 0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-r759abec5be1a4386adc29bbb118799ed.scope
+
+=== the wrapped job keeps the caller locale, capped and uncapped ===
+capped  LC_ALL=<unset>
+capped  LC_ALL=<POSIX>
+fm-memory: warning: the job cap is 0, so this job runs with no memory cap
+uncapped LC_ALL=<unset>
+fm-memory: warning: the job cap is 0, so this job runs with no memory cap
+uncapped LC_ALL=<POSIX>
+fm-memory: warning: no systemd user manager answered, so this job runs with no memory cap
+no-systemd LC_ALL=<POSIX>

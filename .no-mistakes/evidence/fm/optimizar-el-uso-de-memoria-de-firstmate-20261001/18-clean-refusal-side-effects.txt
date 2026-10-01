@@ -1,0 +1,9 @@
+=== a clean refused spawn on a fresh home: what exists afterwards? ===
+error: launch refused - this host has 878 MB of memory available, under the 2048 MB launch floor (SwapFree 2929 MB of 4096 MB). Free memory first: bin/fm-memory.sh status shows what holds it. Floors: config/memory-floor; FM_MEMORY_GUARD=off launches anyway.
+spawn exit=1
+
+state/ contents (a task record would be spawn-clean-a1.meta):
+treehouse home (a local worktree copy would appear here):
+  (absent - no worktree was created)
+tmux sessions (a window would appear here):
+no server running on /tmp/tmux-1000/default

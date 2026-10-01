@@ -1,0 +1,38 @@
+=== this host (the 2026-10-01 incident machine): 6.18.33.2-microsoft-standard-WSL2 ===
+MemTotal:       16374424 kB
+MemAvailable:    9212616 kB
+SwapTotal:       4194304 kB
+SwapFree:        2129332 kB
+
+=== bin/fm-memory.sh guard against the host's real reading (exit 0 = a launch may proceed) ===
+guard exit=0
+
+=== bin/fm-memory.sh status: the real reading, the floors, and what holds memory right now ===
+memory: 8975 MB available, swap 2079 MB free of 4096 MB
+floors: launch 2048 MB available and 512 MB swap free, alert 1536 MB available, job cap 4096 MB
+outside any task (largest):
+    1699 MB  pid 1699579  python  in /home/hugorl/firstmate/data/afinar-el-top5-a-fondo-y-probar-opciones-20260930/harness
+    1578 MB  pid 235187  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1403 MB  pid 235189  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1244 MB  pid 1970246  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1243 MB  pid 1970272  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1208 MB  pid 1970271  postgres  in /home/hugorl/ensayo-volcado/pgdata
+     339 MB  pid 3449106  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/310/licitaciones-platform
+     327 MB  pid 3847685  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/311/licitaciones-platform
+per task (resident memory of processes working inside the task):
+  no task records in this home
+
+=== the same status on a home with no task records (the empty-array shape) ===
+memory: 9117 MB available, swap 2078 MB free of 4096 MB
+floors: launch 2048 MB available and 512 MB swap free, alert 0 MB available, job cap 4096 MB
+outside any task (largest):
+    1578 MB  pid 235187  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1528 MB  pid 1699579  python  in /home/hugorl/firstmate/data/afinar-el-top5-a-fondo-y-probar-opciones-20260930/harness
+    1403 MB  pid 235189  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1271 MB  pid 1970272  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1262 MB  pid 1970246  postgres  in /home/hugorl/ensayo-volcado/pgdata
+    1240 MB  pid 1970271  postgres  in /home/hugorl/ensayo-volcado/pgdata
+     339 MB  pid 3449106  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/310/licitaciones-platform
+     327 MB  pid 3847685  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/311/licitaciones-platform
+per task (resident memory of processes working inside the task):
+  no task records in this home

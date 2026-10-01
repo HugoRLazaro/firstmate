@@ -1,0 +1,6 @@
+=== status attributes a real detached job to the task whose data/<id> it works in ===
+     297 MB  pid 169477  claude  in /home/hugorl/.treehouse/licitaciones-platform-2ffb89/285/licitaciones-platform
+per task (resident memory of processes working inside the task):
+       1 MB  1 process(es)  task-a1
+
+(job pid 1708650 was started with setsid nohup from data/task-a1/harness)

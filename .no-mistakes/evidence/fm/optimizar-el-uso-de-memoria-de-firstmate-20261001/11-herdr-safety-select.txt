@@ -1,0 +1,5 @@
+fm-backend-autodetect-smoke                   names lib.sh=0  names herdr-test-safety=2  selected=1
+fm-control-herdr-smoke                        names lib.sh=0  names herdr-test-safety=3  selected=1
+fm-backend-herdr-workspace-per-home-e2e       names lib.sh=0  names herdr-test-safety=4  selected=1
+fm-backend-herdr-launcher-workspace-e2e       names lib.sh=0  names herdr-test-safety=3  selected=1
+fm-backend-herdr-presentation-e2e             names lib.sh=3  names herdr-test-safety=2  selected=1

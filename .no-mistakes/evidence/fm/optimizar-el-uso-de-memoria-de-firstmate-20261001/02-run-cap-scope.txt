@@ -1,0 +1,8 @@
+=== systemd user manager present: /usr/bin/systemd-run ===
+
+=== A job that fits its cap, inside the real scope ===
+job cgroup: 0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-r1baf43b9d9d14a3b891f0b4c6b0eae7f.scope
+job memory.max: 268435456
+job memory.swap.max: 0
+fits
+wrapper exit=4 (the job own status 4)

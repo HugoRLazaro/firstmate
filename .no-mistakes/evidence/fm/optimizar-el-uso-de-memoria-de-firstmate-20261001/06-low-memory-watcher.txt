@@ -1,0 +1,22 @@
+=== arm the once-per-episode low-memory check on a real home ===
+armed: state/memory.check.sh
+-rw------- 1 hugorl hugorl  84 Oct  1 13:57 /tmp/fm-live/home5/state/memory.check-trust
+-rwx------ 1 hugorl hugorl 294 Oct  1 13:57 /tmp/fm-live/home5/state/memory.check.sh
+
+=== the host drops to 700 MB available: the REAL watcher polls and wakes firstmate once ===
+checkpoint exit=0
+check: /tmp/fm-live/home5/state/memory.check.sh: memory low: 700 MB available, under the 1536 MB floor (SwapFree 50 MB of 4096 MB); largest: python 3028 MB in /home/hugorl/firstmate/data/afinar-el-top5-a-fondo-y-probar-opciones-20260930/harness, postgres 1780 MB in /home/hugorl/ensayo-volcado/pgdata, postgres 1575 MB in /home/hugorl/ensayo-volcado/pgdata; see bin/fm-memory.sh status
+episode record: present
+
+=== a second poll while it is still low must stay silent ===
+checkpoint exit=0
+second poll wakes: 1
+
+=== memory recovers past the margin, then drops again: one new report, not silence ===
+recovery poll check wakes: 1; episode record now: present
+check: rearm-resurface
+
+=== disarm removes the shim, its trust binding, and the episode record ===
+disarmed: state/memory.check.sh
+  ls: cannot access '/tmp/fm-live/home5/state/memory.check.sh': No such file or directory
+  ls: cannot access '/tmp/fm-live/home5/state/memory.check-trust': No such file or directory

@@ -1,0 +1,13 @@
+=== a suite that sources tests/lib.sh never judges the host's own memory ===
+resolved pin: /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3VBT20XHB7P90Y1S19XFMNW/tests/assets/meminfo-healthy
+pinned MemAvailable: 12000000 kB
+real guard against the pin exits 0
+
+=== a suite that sources only tests/herdr-test-safety.sh gets the same pin ===
+resolved pin: /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3VBT20XHB7P90Y1S19XFMNW/tests/assets/meminfo-healthy
+pinned MemAvailable: 12000000 kB
+real guard against the pin exits 0
+
+=== control: the poisoned reading the helper replaced WOULD have refused a launch ===
+error: launch refused - this host has 97 MB of memory available, under the 2048 MB launch floor (SwapFree 0 MB of 4096 MB). Free memory first: bin/fm-memory.sh status shows what holds it. Floors: config/memory-floor; FM_MEMORY_GUARD=off launches anyway.
+guard exit=3

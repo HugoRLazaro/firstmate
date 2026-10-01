@@ -1,0 +1,18 @@
+Mutation check: the two relaunch tests against a copy of this change with ONLY the new
+pre-stop memory guard removed from bin/fm-control.sh (everything else identical).
+A test that pins the fix must fail here.
+
+=== ship relaunch ===
+not ok - the relaunch refusal should name the memory floor (missing: 'under its memory floor')
+--- output ---
+error: task ship-rel-a1's recorded endpoint is gone, so there is no agent to stop; reconcile the task before any further control action
+error: relaunch of ship-rel-a1 failed while stopping the old agent and its state is 'missing'; the durable record and progress note were retained for recovery
+
+=== local secondmate relaunch ===
+not ok - the secondmate relaunch refusal should name the memory floor (missing: 'under its memory floor')
+--- output ---
+error: task sm-rel-a1's recorded worktree /tmp/fm-memory.VAT1zx/relaunch-sm/secondmate-home is not a git worktree; refusing to relaunch without a checkout whose unlanded work can be accounted for
+
+=== the same two tests against the unmodified change (the worktree under test) ===
+ok - a relaunch under the memory floor refuses before the running agent is touched
+ok - a local secondmate relaunch under the memory floor refuses before the running agent is touched

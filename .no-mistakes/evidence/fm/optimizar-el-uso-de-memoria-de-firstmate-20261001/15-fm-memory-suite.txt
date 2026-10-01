@@ -1,0 +1,26 @@
+ok - guard is silent and allows the launch on a host above both floors
+ok - guard refuses under the available floor and names the reading, the floor, and the override
+ok - guard refuses when swap is nearly exhausted, and never on a host that has no swap
+ok - guard judges the reading against config/memory-floor, and 0 turns one floor off
+ok - a malformed floor is named, never refuses a launch by itself, and leaves the default in force
+ok - a missing, empty, malformed, or ambiguous reading warns and lets the launch continue
+ok - FM_MEMORY_GUARD=off launches under the floor and says the floor was skipped
+ok - a spawn under the memory floor refuses with the reading and the floor, before any record or launch exists
+ok - a spawn launches above the floor, and under it only with the explicit override
+ok - a spawn with an unreadable memory reading warns and still launches
+ok - scout and secondmate launches on this host are refused under the floor like a ship launch
+ok - a relaunch under the memory floor refuses before the running agent is touched
+ok - a local secondmate relaunch under the memory floor refuses before the running agent is touched
+ok - check reports a low-memory episode once, stays silent until it has recovered past the margin, then reports the next one
+ok - check stays silent, and opens no episode, when the reading cannot be trusted
+ok - check uses the configured alert floor, and 0 turns the report off
+ok - arm registers a trusted check and disarm removes every trace
+ok - arm refuses a symlink at the shim path instead of writing through it
+ok - the armed check reaches the watcher as an ordinary check wake
+ok - status prints the reading and the floors and attributes a job to the task whose directory it works in
+ok - status completes on a home with no task records
+ok - run starts the job in a user scope with a memory cap and no swap, in place, with its own exit status
+ok - run without a systemd user manager still runs the job and says it is uncapped, and refuses a malformed request
+ok - run with job_max_mb=0 or --max-mb 0 starts the job uncapped and says so
+ok - run gives the wrapped job the caller's own locale on every path
+ok - a job that outgrows its cap is killed by itself, and a job inside the cap runs normally

@@ -1,0 +1,17 @@
+host MemAvailable before: 7347820 kB
+
+=== 600 MB detached (setsid) job under --max-mb 128: it must die inside the scope ===
+/usr/bin/bash: line 8: 1706205 Killed                  setsid python3 -c "import time
+a = bytearray(600*1024*1024)
+print(\"detached job survived and holds 600 MB\", flush=True)
+time.sleep(60)" > /tmp/fm-live/detached.out 2>&1
+detached child exit status: 137 (137 = SIGKILL from the scope memory limit)
+wrapper exit=0
+
+RESULT: detached job 1706205 is gone; no orphan left holding memory
+detached job output: 
+host MemAvailable after: 6647180 kB
+
+=== Foreground job that outgrows --max-mb 128 ===
+/bin/bash: line 31: 1706348 Killed                  FM_HOME=/tmp/fm-live/home2 bin/fm-memory.sh run --max-mb 128 -- python3 -c 'a = bytearray(600*1024*1024); print("survived")'
+wrapper exit=137 (non-zero: the job was killed, the calling shell survived)

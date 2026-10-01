@@ -1,0 +1,2 @@
+ok - a detached job working in the task's own data directory is named and reaped, and another task's job is left alone
+ok - a teardown run from inside the task's data directory does not signal the shell running it

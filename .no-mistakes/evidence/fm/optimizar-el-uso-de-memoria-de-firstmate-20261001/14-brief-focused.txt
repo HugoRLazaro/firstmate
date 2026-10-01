@@ -1,0 +1,1 @@
+ok - fm-brief.sh: ship and scout scaffolds tell workers to cap heavy jobs with a runnable command and leave none running

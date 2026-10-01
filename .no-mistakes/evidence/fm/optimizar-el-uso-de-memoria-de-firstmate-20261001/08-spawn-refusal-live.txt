@@ -1,0 +1,16 @@
+=== real fm-spawn.sh (no stub launcher, no fake backend in PATH) on a host reading 900 MB available ===
+error: launch refused - this host has 878 MB of memory available, under the 2048 MB launch floor (SwapFree 2929 MB of 4096 MB). Free memory first: bin/fm-memory.sh status shows what holds it. Floors: config/memory-floor; FM_MEMORY_GUARD=off launches anyway.
+spawn exit=1 (1 = refused)
+task record created: no
+
+=== the same spawn with FM_MEMORY_GUARD=off: the floor is skipped and the refusal is not what stops it ===
+fm-memory: launch floor skipped (FM_MEMORY_GUARD=off)
+warning: /tmp/fm-live/home7/data/spawn-low-a1/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode local-only - confirm its definition of done matches
+notice: spawn-low-a1 ships mode=local-only while the standing posture for project7 is no-mistakes - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state
+spawned spawn-low-a1 harness=pi kind=ship mode=local-only yolo=off window=firstmate:fm-spawn-low-a1 worktree=/tmp/fm-live/home7/user-home/.treehouse/project7-bc8e45/1/project7
+(the spawn now proceeds past the memory guard into backend selection, which is as far as this sandbox can go)
+
+NOTE: the second invocation (FM_MEMORY_GUARD=off) proceeded past the floor and completed a
+real launch: a real tmux session `firstmate` was created and a real `pi` agent ran in window
+`fm-spawn-low-a1`. That agent was terminated immediately after the observation (window and
+session killed; pgrep confirmed no leftover pi process), so this run leaves no agent running.

@@ -1,0 +1,15 @@
+=== guard boundary drives (all with the launch decision visible) ===
+--- a reading that exists but cannot be parsed: warns and lets the launch continue ---
+fm-memory: warning: memory could not be read (/tmp/fm-live/home8/no-available has no single MemAvailable line in kB); launching without the memory floor
+exit=0
+--- a host with no swap lines at all: no floor to trip ---
+exit=0
+--- a mistyped floor: named and ignored, the default still in force (launch allowed here) ---
+fm-memory: warning: ignoring "spawn_available_mb=2GB" in /tmp/fm-live/home8/config/memory-floor; expected key=<whole megabytes>
+fm-memory: warning: ignoring unknown key "no_such_floor" in /tmp/fm-live/home8/config/memory-floor
+exit=0
+--- the same mistyped floor with a low reading: the default floor refuses, so the bad line did not disable it ---
+fm-memory: warning: ignoring "spawn_available_mb=2GB" in /tmp/fm-live/home8/config/memory-floor; expected key=<whole megabytes>
+fm-memory: warning: ignoring unknown key "no_such_floor" in /tmp/fm-live/home8/config/memory-floor
+error: launch refused - this host has 976 MB of memory available, under the 2048 MB launch floor (SwapFree 4096 MB of 4096 MB). Free memory first: bin/fm-memory.sh status shows what holds it. Floors: config/memory-floor; FM_MEMORY_GUARD=off launches anyway.
+exit=3
