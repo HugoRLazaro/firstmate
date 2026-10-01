@@ -31,7 +31,8 @@
 #   spawn_swap_free_mb   (512)   `guard` refuses under this much SwapFree, on a
 #                                host that has swap at all
 #   alert_available_mb   (1536)  `check` reports under this much MemAvailable
-#   job_max_mb           (4096)  `run`'s cap when --max-mb is not given
+#   job_max_mb           (4096)  `run`'s cap when --max-mb is not given; 0
+#                                runs the job with no cap
 # docs/configuration.md "Memory guard" owns how those defaults were sized and
 # the operating rules that go with them.
 #
@@ -484,8 +485,12 @@ action_run() {
   [ "$#" -gt 0 ] || die_usage "run needs a command after --"
   floors_load
   [ -n "$max" ] || max=$JOB_MAX_MB
-  case "$max" in '' | *[!0-9]* | 0) die_usage "run: --max-mb must be a whole number of megabytes above 0" ;; esac
+  case "$max" in '' | *[!0-9]*) die_usage "run: --max-mb must be a whole number of megabytes" ;; esac
   [ "${#max}" -le 9 ] || die_usage "run: --max-mb is megabytes"
+  if [ "$max" -eq 0 ]; then
+    printf 'fm-memory: warning: the job cap is 0, so this job runs with no memory cap\n' >&2
+    exec "$@"
+  fi
   systemd_run=${FM_MEMORY_SYSTEMD_RUN:-systemd-run}
   if command -v "$systemd_run" >/dev/null 2>&1 \
     && "$systemd_run" --user --scope --quiet --collect -- true >/dev/null 2>&1; then

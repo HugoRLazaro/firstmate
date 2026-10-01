@@ -499,6 +499,42 @@ test_run_without_systemd_still_runs_and_says_it_is_uncapped() {
   pass "run without a systemd user manager still runs the job and says it is uncapped, and refuses a malformed request"
 }
 
+test_run_with_a_zero_cap_runs_the_job_uncapped() {
+  local home fake out status=0
+  home=$(make_home run-nocap)
+  fake="$home/fake-systemd-run"
+  cat > "$fake" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_SYSTEMD_LOG"
+while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
+shift
+exec "$@"
+SH
+  chmod +x "$fake"
+  : > "$home/log"
+
+  # A configured job_max_mb=0 turns the cap off: the job runs in place with
+  # its own exit status and no scope is started for it.
+  printf 'job_max_mb=0\n' > "$home/config/memory-floor"
+  out=$(FAKE_SYSTEMD_LOG="$home/log" FM_MEMORY_SYSTEMD_RUN="$fake" \
+    run_memory "$home" "$home/meminfo" run -- sh -c 'echo ran; exit 5' 2>&1) || status=$?
+  expect_code 5 "$status" "job_max_mb=0 should keep the job's own exit status"
+  assert_contains "$out" "ran" "a job with job_max_mb=0 did not run"
+  assert_contains "$out" "runs with no memory cap" "job_max_mb=0 should say the job is uncapped"
+  [ ! -s "$home/log" ] || fail "job_max_mb=0 still started a capped scope: $(cat "$home/log")"
+
+  # An explicit --max-mb 0 does the same over a positive configured cap.
+  printf 'job_max_mb=4096\n' > "$home/config/memory-floor"
+  status=0
+  out=$(FAKE_SYSTEMD_LOG="$home/log" FM_MEMORY_SYSTEMD_RUN="$fake" \
+    run_memory "$home" "$home/meminfo" run --max-mb 0 -- sh -c 'echo ran; exit 6' 2>&1) || status=$?
+  expect_code 6 "$status" "--max-mb 0 should keep the job's own exit status"
+  assert_contains "$out" "ran" "a job with --max-mb 0 did not run"
+  assert_contains "$out" "runs with no memory cap" "--max-mb 0 should say the job is uncapped"
+  [ ! -s "$home/log" ] || fail "--max-mb 0 still started a capped scope: $(cat "$home/log")"
+  pass "run with job_max_mb=0 or --max-mb 0 starts the job uncapped and says so"
+}
+
 # A real cap, where this host can enforce one: the job that outgrows it dies
 # alone and the suite keeps running.
 test_run_really_kills_a_job_that_outgrows_its_cap() {
@@ -541,4 +577,5 @@ test_armed_check_wakes_the_watcher_once
 test_status_attributes_a_job_to_its_task
 test_run_starts_the_job_in_a_capped_scope
 test_run_without_systemd_still_runs_and_says_it_is_uncapped
+test_run_with_a_zero_cap_runs_the_job_uncapped
 test_run_really_kills_a_job_that_outgrows_its_cap
