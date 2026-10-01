@@ -566,6 +566,86 @@ The locked bootstrap inheritance pass uses the same placement-specific behavior;
 That live discovery starts from `state/*.meta` records with `kind=secondmate`; `data/secondmates.md` only backfills `home=` for older or incomplete meta records.
 Skipped items, such as a destination checkout that does not yet gitignore the item, are visible warnings but not hard failures.
 
+## Memory guard (config/memory-floor)
+
+A worker that finishes its work stays alive in its window with its whole conversation in memory, and a job it started keeps its memory after the worker stops, so a host can fill up while every task looks finished.
+[`bin/fm-memory.sh`](../bin/fm-memory.sh) bounds that in four ways: it refuses a launch on a host already under a memory floor, it tells firstmate once when memory drops, it shows which task holds the memory, and it runs a heavy job under a cap of its own.
+None of them changes a host setting, and every one reads the kernel's own numbers from `/proc/meminfo`: `MemAvailable`, the kernel's estimate of what can be claimed without swapping, and `SwapFree`.
+A host with no `/proc/meminfo` has no reading, so every action steps aside silently there.
+
+This section is the single owner of the floor schema and the operating rules.
+`bin/fm-memory.sh` owns the reading, the episode record, and every exact command.
+
+`config/memory-floor` is an optional local, gitignored file with one `key=<whole megabytes>` per line; blank lines and `#` comments are ignored.
+
+```text
+spawn_available_mb=2048
+spawn_swap_free_mb=512
+alert_available_mb=1536
+job_max_mb=4096
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `spawn_available_mb` | 2048 | A launch is refused while `MemAvailable` is under this. |
+| `spawn_swap_free_mb` | 512 | A launch is refused while `SwapFree` is under this, on a host that has swap at all. |
+| `alert_available_mb` | 1536 | Firstmate is told when `MemAvailable` drops under this. |
+| `job_max_mb` | 4096 | The cap `bin/fm-memory.sh run` applies when `--max-mb` is not given. |
+
+A missing file or key uses the default, and `0` turns that one floor off.
+A value that is not a whole number, or an unknown key, is named on stderr and ignored, so a mistyped floor never refuses a launch by itself.
+The file is read on every launch and every poll, so a change needs no restart or re-arming.
+It is not inherited by secondmate homes: the floors describe one host, and a home on another host keeps the defaults or its own file.
+
+### Launch floor
+
+`bin/fm-spawn.sh` asks `bin/fm-memory.sh guard` before every launch on this host - ship, scout, secondmate, and the relaunch behind `bin/fm-control.sh relaunch` - and refuses, before any window, local copy, or task record exists, when the host is under either launch floor.
+The refusal names the reading and the floor.
+A relaunch asks before the running worker is stopped, so a refused relaunch leaves that worker exactly as it was.
+A remote secondmate launches on another host and is not judged by this host's memory.
+A reading that exists but cannot be parsed warns and lets the launch continue; only a positive low reading refuses.
+`FM_MEMORY_GUARD=off` in the environment of one `fm-spawn.sh` or `fm-control.sh` command launches anyway and says on stderr that the floor was skipped.
+
+The defaults were sized from measurements on a 16 GB host on 2026-10-01.
+An idle worker held 210 to 330 MB resident plus 25 to 65 MB of swap, whichever of the two measured tools ran it, so one worker is budgeted at 0.4 GB.
+The 2048 MB launch floor is that worker, about 1 GB for the tests and builds it will run, and a margin.
+The swap floor is deliberately low: swapped-out pages stay out after memory recovers, so it refuses only when swap is nearly gone, which on that host preceded the kernel killing the whole session.
+
+### Low-memory notification
+
+Arm the check once per home with `bin/fm-memory.sh arm`.
+That writes `state/memory.check.sh` and binds its bytes with `bin/fm-check-register.sh`, so the existing watcher polls it on its normal cadence and turns its one line into a `check:` wake.
+The line names the reading, the floor, and the three largest processes with where they are working.
+It is reported once per episode: `state/.memory-low` records the episode, and nothing more is reported until `MemAvailable` has climbed back to the floor plus a quarter, so a reading hovering at the floor does not wake firstmate on every poll.
+Swap is named in the line but never opens or closes an episode.
+A reading that cannot be parsed reports nothing.
+`bin/fm-memory.sh disarm` removes the shim, its trust binding, and the episode record.
+The watcher polls every `FM_CHECK_INTERVAL` seconds (default 300), so this is an early warning for a host filling over minutes; a job that takes everything in seconds is bounded only by a cap on that job.
+
+### Operating rules
+
+- Memory available decides how many workers fit, not a worker count: budget 0.4 GB for each live worker, and expect the jobs workers start to be what fills a host.
+  On the measured night 14 workers held 3.3 GB while 34 job processes held 12.8 GB.
+- Finishing a task frees nothing; cleaning the task up does.
+  `bin/fm-teardown.sh` closes the worker and every process still working inside the task's local copy, its scratch directory, or its `data/<id>/` directory, naming each one with the memory it held.
+  A process working anywhere else is never touched, so a database or server a worker started from another directory outlives the task and has to be stopped by hand.
+- Stopping a worker with `bin/fm-control.sh exit` or `relaunch` deliberately leaves its jobs running, because the replacement worker may be waiting on them; `bin/fm-memory.sh status` shows what each task still holds.
+- A heavy job - a data build, a model run, a large test matrix - is started through `bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which puts the job and everything it starts, including a process detached with `setsid` or `nohup`, in its own scope with a memory cap and no swap.
+  A job that outgrows its cap is killed alone.
+  Keep the caps of the jobs running at once, plus 0.4 GB per live worker, under the host's memory minus the launch floor.
+  Every worker brief carries this rule.
+- On a low-memory notification, read `bin/fm-memory.sh status`, clean up finished tasks first, and only then decide whether a running job has to be stopped; stopping another task's job is that task's decision, routed through its worker.
+
+### Supported limits
+
+`bin/fm-memory.sh run` needs a systemd user manager with the memory controller delegated to it; where none answers, the job still runs, uncapped, and stderr says so.
+The whole worker is not placed in such a scope.
+Wrapping the launch command is mechanically possible, but the worker runtimes are recognised by what runs in the window, every supported runtime and window provider would need its own live proof with the wrapper in place, and a cap sized for a worker would also kill the worker and lose its conversation when one of its jobs grew, which is the failure this guard exists to avoid.
+Capping the job, and leaving the worker outside the cap, loses only the job.
+
+Nothing here changes the host.
+On WSL2 the virtual machine's memory and swap are set in the Windows-side `.wslconfig` (`memory=`, `swap=`), and a host that keeps reaching the alert floor with its jobs capped needs more of one of them rather than a lower floor.
+
 ## Watched tool updates (config/watched-tools.json)
 
 `config/watched-tools.json` is an optional local, gitignored list of the tools this home depends on.
@@ -1036,7 +1116,10 @@ FM_STATE_OVERRIDE=       # alternate state dir, mainly for tests
 FM_DATA_OVERRIDE=        # alternate data dir, mainly for tests
 FM_PROJECTS_OVERRIDE=    # alternate projects dir, mainly for tests
 FM_CONFIG_OVERRIDE=      # alternate config dir, mainly for tests
-FM_PROC_ROOT_OVERRIDE=   # alternate /proc root for Linux process-identity reads in fm-wake-lib.sh and fm-teardown.sh, mainly for tests
+FM_PROC_ROOT_OVERRIDE=   # alternate /proc root for Linux process-identity and working-directory reads in fm-wake-lib.sh, fm-cursor-lib.sh, fm-teardown.sh, and fm-memory.sh, mainly for tests
+FM_MEMINFO_PATH=         # alternate meminfo file for the reading bin/fm-memory.sh judges; unset means /proc/meminfo, mainly for tests (docs/configuration.md "Memory guard")
+FM_MEMORY_GUARD=         # unset enforces the memory launch floor; off skips it for one fm-spawn.sh or fm-control.sh command and reports the skip (docs/configuration.md "Memory guard")
+FM_MEMORY_SYSTEMD_RUN=   # test override for the systemd-run executable bin/fm-memory.sh run uses for a heavy job's memory-capped scope
 FM_BACKEND=             # optional runtime backend override for new spawns; tmux/herdr/zellij/orca/cmux support ship/scout spawns, codex-app is not accepted
 FM_TRACE_CONTEXT=       # optional trace-context override; see "Trace context propagation"
 FM_TASK_ID=             # internal task-worker marker fm-spawn.sh exports into ship and scout panes, never set by hand; bin/fm-test-run.sh refuses to execute in the repository primary checkout while it is set

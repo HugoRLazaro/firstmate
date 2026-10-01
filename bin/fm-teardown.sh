@@ -276,13 +276,20 @@
 #     two `go test` binaries, deadlines blown past by ~100x, pinning CPU for
 #     hours with no live task meta to attribute them to once teardown had
 #     already removed it). reap_task_worktree_processes finds every process
-#     whose CURRENT WORKING DIRECTORY is this task's own worktree or tasktmp
-#     root via `lsof -a -d cwd` (cheap: bounded by process count, not by
-#     walking the worktree's file tree) and sends TERM, then KILL after a short
-#     grace period to any survivor whose process identity still matches. Both
-#     roots are unique per task and never
-#     shared, so this can never reach another task's or the primary's
-#     processes. Idempotent: nothing left to find is a silent no-op.
+#     whose CURRENT WORKING DIRECTORY is this task's own worktree, tasktmp
+#     root, or data/<id> directory via `lsof -a -d cwd` (cheap: bounded by
+#     process count, not by walking the worktree's file tree) and sends TERM,
+#     then KILL after a short grace period to any survivor whose process
+#     identity still matches. The data directory is a root because a worker
+#     keeps its harness scripts and job output there, so a detached job started
+#     from it would otherwise outlive the task with all its memory (observed
+#     2026-10-01: a `setsid nohup` python job holding 2 GB whose working
+#     directory was data/<id>/harness, in neither other root). Every root is
+#     unique per task and never shared, so this can never reach another
+#     task's or the primary's processes, and teardown's own process and its
+#     ancestors are never signalled. Each process found is named on stderr with
+#     its command, resident memory, and working directory before it is closed.
+#     Idempotent: nothing left to find is a silent no-op.
 #   Fix 3 - sweep abandoned remote job workers. A remote job worker started
 #     from a worktree's own bin/ outlives that worktree's removal without
 #     being reachable by Fix 2, because its working directory is wherever it
@@ -2073,13 +2080,31 @@ conclude_task_no_mistakes_run() {  # <worktree>
 # Fix 2 (see script header): pids of every process whose CURRENT WORKING
 # DIRECTORY is exactly $1 or under it, from one bounded system-wide `lsof -a
 # -d cwd` scan (never the recursive +D file-tree walk, which lsof itself
-# documents as slow). Never $$ (this script's own pid). Empty output when
-# nothing matches; failure means the scan could not establish a safe result.
+# documents as slow). Never this script's own pid, its ancestors, or its own
+# children, so a teardown started from inside one of the roots cannot signal
+# the shell or agent that is running it or count its own scan as a leak. Empty output when nothing matches; failure means
+# the scan could not establish a safe result.
+TEARDOWN_OWN_PIDS=
+teardown_own_pids() {
+  local pid=$$ parent n=0
+  [ -z "$TEARDOWN_OWN_PIDS" ] || return 0
+  TEARDOWN_OWN_PIDS=$pid
+  while [ "$n" -lt 64 ]; do
+    parent=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d '[:space:]') || break
+    case "$parent" in ''|*[!0-9]*|0|1) break ;; esac
+    TEARDOWN_OWN_PIDS="$TEARDOWN_OWN_PIDS
+$parent"
+    pid=$parent
+    n=$((n + 1))
+  done
+}
+
 pids_with_cwd_under() {  # <dir>
-  local dir=$1 out pid path line
+  local dir=$1 out pid path line parents="" matches=""
+  teardown_own_pids
   [ -n "$dir" ] && [ -d "$dir" ] || return 0
   dir=$(cd "$dir" && pwd -P) || return 1
-  out=$(lsof -a -d cwd -Fpn 2>/dev/null) || return 1
+  out=$(lsof -a -d cwd -FpRn 2>/dev/null) || return 1
   [ -n "$out" ] || return 0
   pid=
   while IFS= read -r line; do
@@ -2088,14 +2113,19 @@ pids_with_cwd_under() {  # <dir>
         pid=${line#p}
         case "$pid" in ''|*[!0-9]*) return 1 ;; esac
         ;;
+      R*)
+        [ -n "$pid" ] || return 1
+        case "${line#R}" in ''|*[!0-9]*) return 1 ;; esac
+        parents="$parents$pid ${line#R}
+"
+        ;;
       fcwd) [ -n "$pid" ] || return 1 ;;
       n*)
         [ -n "$pid" ] || return 1
         path=${line#n}
         case "$path" in
-          "$dir"|"$dir"/*)
-            [ -n "$pid" ] && [ "$pid" != "$$" ] && printf '%s\n' "$pid"
-            ;;
+          "$dir"|"$dir"/*) matches="$matches$pid
+" ;;
         esac
         ;;
       '') ;;
@@ -2104,6 +2134,25 @@ pids_with_cwd_under() {  # <dir>
   done <<EOF
 $out
 EOF
+  [ -n "$matches" ] || return 0
+  # Drop teardown itself and its ancestors by pid, and its own children by the
+  # parent chain the same scan reported: the scan runs in a subshell sharing
+  # teardown's working directory, and so does the lsof it starts. A job started
+  # by the shell that started teardown is a sibling and stays listed.
+  printf 'own\n%s\nparents\n%smatches\n%s' "$TEARDOWN_OWN_PIDS" "$parents" "$matches" | awk -v self="$$" '
+    $1 == "own" || $1 == "parents" || $1 == "matches" { mode = $1; next }
+    mode == "own" { own[$1] = 1; next }
+    mode == "parents" { parent[$1] = $2; next }
+    mode == "matches" && $1 != "" {
+      if ($1 in own) next
+      p = $1; mine = 0
+      for (n = 0; n < 64 && (p in parent); n++) {
+        p = parent[p]
+        if (p == self) { mine = 1; break }
+      }
+      if (!mine) print $1
+    }
+  '
 }
 
 task_process_identity() {  # <pid>
@@ -2196,8 +2245,21 @@ reap_task_backend_process_group() {  # <label>
   fi
 }
 
-# Reap every process rooted (by cwd) under this task's own worktree or tasktmp
-# - both unique per task and never shared - before either is removed. TERM
+# One stderr line naming a process about to be closed: what it is, how much
+# resident memory it holds, and where it was working. Best effort and purely
+# descriptive - a process that has already gone is described by its pid alone.
+describe_leaked_process() {  # <pid>
+  local pid=$1 line rss comm cwd
+  line=$(ps -o rss=,comm= -p "$pid" 2>/dev/null || true)
+  read -r rss comm <<< "$line" || true
+  cwd=$(readlink "${FM_PROC_ROOT_OVERRIDE:-/proc}/$pid/cwd" 2>/dev/null || true)
+  case "$rss" in ''|*[!0-9]*) rss= ;; esac
+  echo "teardown:   pid $pid${comm:+ $comm}${rss:+ holding $((rss / 1024)) MB}${cwd:+ in $cwd}" >&2
+}
+
+# Reap every process rooted (by cwd) under this task's own worktree, tasktmp, or
+# data directory - each unique per task and never shared - before the worktree
+# and tasktmp are removed. TERM
 # first, then KILL after a short grace period for anything still alive; a
 # process that exits on its own between the two passes is simply absent from
 # the recheck. A missing lsof uses the backend process-group fallback; an lsof
@@ -2247,6 +2309,9 @@ EOF
     fi
     current_pids=$TASK_PIDS
     echo "teardown: reaping leaked $label process(es) for $ID: $(printf '%s' "$pids" | tr '\n' ' ')" >&2
+    for pid in "${tracked_pids[@]}"; do
+      describe_leaked_process "$pid"
+    done
     for i in "${!tracked_pids[@]}"; do
       pid=${tracked_pids[$i]}
       identity=${tracked_identities[$i]}
@@ -3574,9 +3639,9 @@ fi
 # not by task-worktree cleanup.
 if [ "$KIND" != secondmate ] && teardown_owns_worktree; then
   conclude_task_no_mistakes_run "$WT"
-  reap_task_worktree_processes worktree "$WT" "$TASK_TMP"
+  reap_task_worktree_processes worktree "$WT" "$TASK_TMP" "$DATA/$ID"
 elif [ "$KIND" != secondmate ]; then
-  reap_task_worktree_processes tasktmp "$TASK_TMP"
+  reap_task_worktree_processes tasktmp "$TASK_TMP" "$DATA/$ID"
 fi
 
 # Fix 3 (see script header): sweep remote job workers abandoned by an already
