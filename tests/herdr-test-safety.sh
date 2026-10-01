@@ -14,6 +14,13 @@ set -u
 export FM_GATE_REFUSE_BYPASS=1
 
 HERDR_TEST_SAFETY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Herdr backend tests drive the real fm-spawn/fm-teardown, and the launch floor
+# reads the host's memory, so pin that reading to a fixed healthy one exactly as
+# tests/lib.sh does for the suites that source it: a launch must never be
+# refused or allowed by how busy the machine running the suite happens to be.
+export FM_MEMINFO_PATH="$HERDR_TEST_SAFETY_DIR/tests/assets/meminfo-healthy"
+
 # shellcheck source=/dev/null
 . "$HERDR_TEST_SAFETY_DIR/bin/fm-herdr-lab.sh"
 
