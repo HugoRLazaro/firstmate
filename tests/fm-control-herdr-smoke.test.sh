@@ -23,6 +23,11 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Pin the memory reading every launch consults (bin/fm-memory.sh guard) to a
+# fixed healthy one, so the real spawns below never depend on how busy this
+# host is.
+export FM_MEMINFO_PATH="$ROOT/tests/assets/meminfo-healthy"
+
 fail() { printf 'not ok - %s\n' "$1" >&2; cleanup_all; exit 1; }
 pass() { printf 'ok - %s\n' "$1"; }
 

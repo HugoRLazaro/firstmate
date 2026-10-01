@@ -274,6 +274,39 @@ test_relaunch_refuses_under_the_floor_before_touching_the_agent() {
   pass "a relaunch under the memory floor refuses before the running agent is touched"
 }
 
+test_local_secondmate_relaunch_refuses_under_the_floor_before_touching_the_agent() {
+  local out status=0 meta_before sm
+  make_spawn_case relaunch-sm sm-rel-a1
+  write_meminfo "$HOME_DIR/meminfo" 6000 3000
+  sm="$TMP_ROOT/relaunch-sm/secondmate-home"
+  mkdir -p "$sm/bin" "$sm/data"
+  printf '# Firstmate\n' > "$sm/AGENTS.md"
+  printf 'sm-rel-a1\n' > "$sm/.fm-secondmate-home"
+  printf 'charter for sm-rel-a1\n' > "$sm/data/charter.md"
+  out=$(FM_MEMINFO_PATH="$HOME_DIR/meminfo" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
+    fm_test_run_spawn "$HOME_DIR" "$sm" "$FAKEBIN_DIR" sm-rel-a1 "$sm" --secondmate) \
+    || fail "local secondmate relaunch setup spawn failed: $out"
+  assert_contains "$out" "spawned sm-rel-a1" "the local secondmate should spawn above the floor"
+  meta_before=$(cat "$HOME_DIR/state/sm-rel-a1.meta")
+  : > "$LAUNCH_LOG"
+
+  write_meminfo "$HOME_DIR/meminfo" 900 3000
+  out=$(FM_ROOT_OVERRIDE='' FM_HOME="$HOME_DIR" HOME="$HOME_DIR/user-home" CLAUDE_CONFIG_DIR='' \
+    FM_STATE_OVERRIDE="$HOME_DIR/state" FM_DATA_OVERRIDE="$HOME_DIR/data" \
+    FM_PROJECTS_OVERRIDE="$HOME_DIR/projects" FM_CONFIG_OVERRIDE="$HOME_DIR/config" \
+    FM_FAKE_PANE_PATH="$sm" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" TMUX="${TMUX:-fake,1,0}" \
+    FM_MEMINFO_PATH="$HOME_DIR/meminfo" PATH="$FAKEBIN_DIR:$PATH" \
+    "$ROOT/bin/fm-control.sh" sm-rel-a1 relaunch 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a local secondmate relaunch under the memory floor should refuse: $out"
+  assert_contains "$out" "under its memory floor" "the secondmate relaunch refusal should name the memory floor"
+  assert_contains "$out" "900 MB of memory available" "the secondmate relaunch refusal should state the reading"
+  assert_contains "$out" "before its agent was touched" "the secondmate relaunch refusal should say nothing was stopped"
+  assert_equals "$meta_before" "$(cat "$HOME_DIR/state/sm-rel-a1.meta")" \
+    "a refused secondmate relaunch changed the task's durable record"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused secondmate relaunch still sent a launch command"
+  pass "a local secondmate relaunch under the memory floor refuses before the running agent is touched"
+}
+
 # --- check ------------------------------------------------------------------
 
 test_check_reports_once_per_episode() {
@@ -498,6 +531,7 @@ test_spawn_launches_above_the_floor_and_under_the_override
 test_spawn_launches_when_the_reading_is_unreadable
 test_scout_and_secondmate_spawns_are_guarded_too
 test_relaunch_refuses_under_the_floor_before_touching_the_agent
+test_local_secondmate_relaunch_refuses_under_the_floor_before_touching_the_agent
 test_check_reports_once_per_episode
 test_check_is_silent_on_an_unreadable_reading
 test_check_honours_the_configured_alert_floor
