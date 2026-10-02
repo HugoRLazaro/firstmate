@@ -67,6 +67,7 @@ import sys
 import threading
 import time
 import tomllib
+import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -275,15 +276,40 @@ LEGADO_ESTADO = re.compile(
     r"^\s*(?:done:|needs-decision:|blocked:|failed:|PR ready|checks green|ready in branch|merged)",
     re.IGNORECASE,
 )
+TOKEN_CORR = re.compile(r"corr=[0-9A-Fa-f]{16}")
+CLAVE_ANTES = re.compile(r"\[key=[^\]]*\]")
+CLAVE_EN_NOTA = re.compile(r"^\[key=[A-Za-z0-9._-]+\]")
+
+
+def _verbo_de(cabeza: str) -> str:
+    """El verbo de la línea, sin el token de correlación que lleva detrás."""
+    cabeza = cabeza.split("[", 1)[0].strip()
+    if "corr=" not in cabeza:
+        return cabeza.lower()
+    trozos = cabeza.split()
+    if not trozos:
+        return ""
+    limpios = [trozos[0]]
+    limpios.extend(trozo for trozo in trozos[1:] if not TOKEN_CORR.fullmatch(trozo))
+    return " ".join(limpios).lower()
+
+
+def _nota_de(cabeza: str, nota: str) -> str:
+    """La nota, sin su clave cuando esta va al principio y no antes del colon."""
+    nota = nota.strip()
+    if CLAVE_ANTES.search(cabeza):
+        return nota
+    m = CLAVE_EN_NOTA.match(nota)
+    return nota[m.end():].lstrip() if m else nota
 
 
 def _evento_de(linea: str) -> dict | None:
     """El verbo y la nota de una línea de estado, o None si no es un aviso."""
     cabeza, sep, nota = linea.partition(":")
     if sep:
-        verbo = cabeza.split("[", 1)[0].strip().lower()
+        verbo = _verbo_de(cabeza)
         if verbo in VERBOS_ESTADO and verbo not in VERBOS_CONTABLES:
-            return {"estado": verbo, "nota": nota.strip()}
+            return {"estado": verbo, "nota": _nota_de(cabeza, nota)}
     if LEGADO_ESTADO.match(linea):
         return {"estado": "", "nota": linea}
     return None
@@ -619,7 +645,8 @@ def leer_conversacion(home: Path) -> list[dict]:
 
 def nuevo_mensaje_id() -> str:
     """El identificador de un mensaje antes de escribirlo, para poder nombrarlo en la nota."""
-    return f"m{int(datetime.now(timezone.utc).timestamp() * 1000)}-{os.getpid()}"
+    return (f"m{int(datetime.now(timezone.utc).timestamp() * 1000)}-{os.getpid()}"
+            f"-{uuid.uuid4().hex[:8]}")
 
 
 def anadir_mensaje(home: Path, de: str, texto: str, tipo: str = "mensaje",

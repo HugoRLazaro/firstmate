@@ -185,6 +185,18 @@ print(json.dumps({"columnas": d["columnas"], "cuenta": d["cuenta"]}, ensure_asci
 '
 }
 
+# El identificador se compone fuera del cerrojo, así que dos peticiones en el
+# mismo milisegundo no pueden compartirlo.
+IDS_MENSAJE=$(python3 - "$ROOT/bin/fm-tablero.py" <<'PY'
+import runpy, sys
+mod = runpy.run_path(sys.argv[1])
+ids = [mod["nuevo_mensaje_id"]() for _ in range(20000)]
+print("ok" if len(set(ids)) == len(ids) else "colision")
+PY
+)
+assert_equals "ok" "$IDS_MENSAJE" "los identificadores de mensaje no colisionan"
+pass "los identificadores de mensaje no colisionan"
+
 # ------------------------------------------------- escenario: las cinco columnas
 
 HOME_A=$(nuevo_home columnas)
@@ -203,7 +215,7 @@ backlog_de "$HOME_A" '# Backlog
   local main'
 printf 'working [key=paso]: paso 2 en marcha\n' > "$HOME_A/state/tarea-ahora.status"
 printf 'window=default:w1:p1\nharness=pi\n' > "$HOME_A/state/tarea-ahora.meta"
-printf 'done: ready in branch fm/tarea-subir\ncaptain-held [key=route]: tracked by tarea-subir-decision\n' > "$HOME_A/state/tarea-subir.status"
+printf 'done corr=0123456789abcdef: ready in branch fm/tarea-subir\ncaptain-held [key=route]: tracked by tarea-subir-decision\n' > "$HOME_A/state/tarea-subir.status"
 printf 'window=default:w1:p2\nharness=pi\n' > "$HOME_A/state/tarea-subir.meta"
 
 PUERTO_A=$(puerto_libre)
@@ -284,6 +296,24 @@ assert tarjeta["quien"] == "Un ayudante de firstmate", tarjeta["quien"]
 assert tarjeta["detalle"] == "paso 2 en marcha", tarjeta["detalle"]
 assert tarjeta["desde"].startswith("Último aviso"), tarjeta["desde"]
 '
+
+printf 'needs-decision: [key=api-shape] elige A o B\n' > "$HOME_A/state/tarea-ahora.status"
+comprobar "$PUERTO_A" "la clave al principio de la nota es metadato y no se enseña" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-ahora"][0]
+assert tarjeta["detalle"] == "elige A o B", tarjeta["detalle"]
+print("nota limpia")
+'
+printf 'working [key=paso]: [key=otro] no se recorta\n' > "$HOME_A/state/tarea-ahora.status"
+comprobar "$PUERTO_A" "con la clave antes del colon, el token de la nota se queda" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-ahora"][0]
+assert tarjeta["detalle"] == "[key=otro] no se recorta", tarjeta["detalle"]
+print("sin recorte")
+'
+printf 'working [key=paso]: paso 2 en marcha\n' > "$HOME_A/state/tarea-ahora.status"
 
 comprobar "$PUERTO_A" "el ausente se anuncia solo cuando hay modo ausencia" '
 import json, sys
