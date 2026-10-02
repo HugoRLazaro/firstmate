@@ -1,0 +1,129 @@
+Rule 8 (process-stopping rule) as emitted by bin/fm-brief.sh for every crewmate scaffold
+generated live from /home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-brief.sh at commit acac1d64c0f34c1fa31621aea7c14d7de19465fa
+
+==================================================================
+VARIANT: live-no-mistakes
+occurrences of the prohibition sentence in whole brief: 1
+------------------------------------------------------------------
+8. Bound your own heavy jobs: this host's memory and disk are shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   A node or vitest test suite is such a job: start it through that same command and bound its
+   worker count as well (for vitest, `--maxWorkers=2` or fewer), because each test worker can
+   grow to its own heap limit and a worker that aborts can leave a crash dump of that size on disk.
+   Before a job that will write more than a few GB, read the free space in
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   `pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host.
+
+
+==================================================================
+VARIANT: live-direct-PR
+occurrences of the prohibition sentence in whole brief: 1
+------------------------------------------------------------------
+8. Bound your own heavy jobs: this host's memory and disk are shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   A node or vitest test suite is such a job: start it through that same command and bound its
+   worker count as well (for vitest, `--maxWorkers=2` or fewer), because each test worker can
+   grow to its own heap limit and a worker that aborts can leave a crash dump of that size on disk.
+   Before a job that will write more than a few GB, read the free space in
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   `pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host.
+
+
+==================================================================
+VARIANT: live-local-only
+occurrences of the prohibition sentence in whole brief: 1
+------------------------------------------------------------------
+8. Bound your own heavy jobs: this host's memory and disk are shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   A node or vitest test suite is such a job: start it through that same command and bound its
+   worker count as well (for vitest, `--maxWorkers=2` or fewer), because each test worker can
+   grow to its own heap limit and a worker that aborts can leave a crash dump of that size on disk.
+   Before a job that will write more than a few GB, read the free space in
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   `pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host.
+
+
+==================================================================
+VARIANT: live-scout
+occurrences of the prohibition sentence in whole brief: 1
+------------------------------------------------------------------
+8. Bound your own heavy jobs: this host's memory and disk are shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   A node or vitest test suite is such a job: start it through that same command and bound its
+   worker count as well (for vitest, `--maxWorkers=2` or fewer), because each test worker can
+   grow to its own heap limit and a worker that aborts can leave a crash dump of that size on disk.
+   Before a job that will write more than a few GB, read the free space in
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   `pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host.
+
+
+==================================================================
+VARIANT: live-herdr-ship
+occurrences of the prohibition sentence in whole brief: 1
+------------------------------------------------------------------
+8. Bound your own heavy jobs: this host's memory and disk are shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   A node or vitest test suite is such a job: start it through that same command and bound its
+   worker count as well (for vitest, `--maxWorkers=2` or fewer), because each test worker can
+   grow to its own heap limit and a worker that aborts can leave a crash dump of that size on disk.
+   Before a job that will write more than a few GB, read the free space in
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   `pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host.
+
+
+==================================================================
+VARIANT: live-herdr-scout
+occurrences of the prohibition sentence in whole brief: 1
+------------------------------------------------------------------
+8. Bound your own heavy jobs: this host's memory and disk are shared with every other worker.
+   Start any job that may hold more than about 1 GB - a data build, a model run, a bulk
+   download, a large test matrix - through
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+   alone if it outgrows its cap instead of letting it exhaust the host.
+   A node or vitest test suite is such a job: start it through that same command and bound its
+   worker count as well (for vitest, `--maxWorkers=2` or fewer), because each test worker can
+   grow to its own heap limit and a worker that aborts can leave a crash dump of that size on disk.
+   Before a job that will write more than a few GB, read the free space in
+   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh status` and do not start it if it would take a disk under the
+   floors printed there; delete its intermediate data when it finishes, keeping only the result.
+   Before you report a terminal state, stop every process you started that the result does not
+   need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   `pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host.
+
+

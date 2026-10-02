@@ -1,0 +1,80 @@
+# Live validation transcript: broad process kills forbidden in worker briefs
+# Date: 2026-10-02T13:08:27Z
+# Repo commit under test: acac1d64c0f34c1fa31621aea7c14d7de19465fa
+# Product under test: bin/fm-brief.sh (the worker-instruction generator)
+# Live run: generated real briefs into a scratch FM_HOME, no mocks of the generator.
+
+== Scenario 1/2/3: every crewmate scaffold emits the written prohibition, exactly once, inside the process-stopping rule ==
+$ for variant in no-mistakes direct-PR local-only; do FM_HOME=$HOME_DIR bin/fm-brief.sh live-$variant firstmate --mode $variant; done
+$ FM_HOME=$HOME_DIR bin/fm-brief.sh live-scout firstmate --scout
+$ FM_HOME=$HOME_DIR bin/fm-brief.sh live-herdr-ship firstmate --mode no-mistakes --herdr-lab
+$ FM_HOME=$HOME_DIR bin/fm-brief.sh live-herdr-scout firstmate --scout --herdr-lab
+
+live-no-mistakes   prohibition occurrences=1  inside rule 8=1  full sentence=1  kill tokens:[ 1 killall 1 pkill ] -> PASS
+live-direct-PR     prohibition occurrences=1  inside rule 8=1  full sentence=1  kill tokens:[ 1 killall 1 pkill ] -> PASS
+live-local-only    prohibition occurrences=1  inside rule 8=1  full sentence=1  kill tokens:[ 1 killall 1 pkill ] -> PASS
+live-scout         prohibition occurrences=1  inside rule 8=1  full sentence=1  kill tokens:[ 1 killall 1 pkill ] -> PASS
+live-herdr-ship    prohibition occurrences=1  inside rule 8=1  full sentence=1  kill tokens:[ 1 killall 1 pkill ] -> PASS
+live-herdr-scout   prohibition occurrences=1  inside rule 8=1  full sentence=1  kill tokens:[ 1 killall 1 pkill ] -> PASS
+
+== Scenario 4 (adversarial): no other instruction in the emitted brief licenses a broad kill ==
+All kill/process mentions in the emitted no-mistakes ship brief:
+  30:   `echo "{state}: {one short line}" >> '/tmp/fm-broad-kill.KoWDbT/home/state/live-no-mistakes.status'`
+  48:   For a no-mistakes ask-user gate specifically, escalate all ask-user findings as one event plus one snapshot file, using that same shape even when the gate holds only a single ask-user finding: write only the ask-user findings, verbatim and unparaphrased (id, severity, file, line, description, authority), to `/tmp/fm-broad-kill.KoWDbT/home/data/live-no-mistakes/nm-<run>-findings.txt`, then report the gate with
+  49:   `needs-decision [key=nm-<run>-<step>]: ask-user findings=<id1>,<id2>,... file=/tmp/fm-broad-kill.KoWDbT/home/data/live-no-mistakes/nm-<run>-findings.txt`
+  54:   every lane/home, so restarting it kills other lanes' in-flight pipeline runs; only firstmate
+  63:   the daemon accepts `respond` immediately and runs the round in the background, so a killed or
+  68:   `/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3YB931B4ACXW323J2W4406S/bin/fm-memory.sh run [--max-mb <megabytes>] -- <command>`, which kills that job
+  79:   `pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host.
+  82:Firstmate steers you through durable message files in '/tmp/fm-broad-kill.KoWDbT/home/state/live-no-mistakes.inbox'.
+  83:When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list '/tmp/fm-broad-kill.KoWDbT/home/state/live-no-mistakes.inbox'/*.msg, read and act on each message in numeric order, then acknowledge each handled message by moving it: `mv '/tmp/fm-broad-kill.KoWDbT/home/state/live-no-mistakes.inbox'/NNN.msg '/tmp/fm-broad-kill.KoWDbT/home/state/live-no-mistakes.inbox'/handled/`.
+  108:This replaces the no-mistakes skill's advice to enrich `--intent` with decisions and tradeoffs; that advice does not apply to Firstmate-dispatched work.
+  111:One drive call blocks until the next gate or outcome, which routinely outlives what your harness lets a single command run: Claude Code kills a command at ten minutes maximum, while one fix round is capped around thirty minutes and up to three rounds chain.
+  112:So background the drive call and poll `no-mistakes axi status` from a separate call instead of sitting in one blocking hold your harness will kill.
+  114:A killed or timed-out call is never evidence the daemon died: the daemon accepts your response immediately and runs the round in the background, so the call was only ever waiting for a read while the run kept working.
+Interpretation: the only instruction that stops processes is rule 8; it forbids broad pkill/killall/name patterns.
+The no-mistakes-daemon rule (rule 7) forbids stopping the shared daemon, which is consistent with, not a loophole in, the prohibition.
+
+== Scenario 5 (regression reproduction): pre-fix generator output has no prohibition ==
+$ git show f1a3a095c3c566347b969b26d74b4caf6ea71207:bin/fm-brief.sh > $BASE/bin/fm-brief.sh; FM_HOME=$BASE/home $BASE/bin/fm-brief.sh ...
+base commit base-no-mistakes prohibition occurrences=0
+base commit base-scout       prohibition occurrences=0
+
+== Scenario 5b: the check in tests/fm-brief.test.sh fails against the pre-fix generator and passes against the fixed one ==
+$ (same assertion body, GEN_ROOT=$BASE pre-fix)
+not ok - no-mistakes brief did not tell the worker to stop only its own pid or worktree-anchored pattern
+  exit=1
+$ (same assertion body, GEN_ROOT=$WT fixed)
+ok - fm-brief.sh: every ship mode and the scout scaffold forbid broad process kills, once
+  exit=0
+
+== Targeted test suite for the changed file ==
+$ tests/fm-brief.test.sh
+ok - fm-brief: scaffolds leave the worker role scope to the launch boundary and keep the secondmate contract
+ok - fm-brief.sh: bash -n succeeds
+/tmp/fm-brief.tK90LR/heredoc-in-substitution.sh:2
+ok - fm-brief.sh: no heredoc is nested inside a command substitution (Bash 3.2 parse-safe)
+ok - fm-brief.sh: --help renders the complete header
+ok - fm-brief.sh: no-mistakes/direct-PR/local-only briefs generate cleanly
+ok - fm-brief.sh: ship --mode is required and closed-set validated
+ok - fm-brief.sh: the explicit ship mode wins over the registered posture
+ok - fm-brief.sh: --yolo and scout/secondmate --mode are refused, never silently dropped
+ok - fm-brief.sh: faster paths use configured authority without stacked review
+ok - fm-brief.sh: no-mistakes DOD keeps its apostrophe prose and bans --yes outright
+ok - fm-brief.sh: no-mistakes ask-user findings use one event plus a verbatim snapshot
+ok - fm-brief.sh: ship project-memory wording carries the AGENTS.md authoring bar
+ok - fm-brief.sh: --herdr-lab emits the complete hard safety contract
+ok - fm-brief.sh: --herdr-lab uses its quoted Firstmate-owned helper path
+ok - fm-brief.sh: ship and scout scaffolds make omitted Herdr intent fail-visible
+ok - fm-brief.sh: the documented {TASK} and {FIRSTMATE_SPEC} fills cannot corrupt the Herdr safety gate
+ok - fm-brief.sh: Herdr lab contract covers scouts and rejects secondmate misuse
+ok - fm-brief.sh: --no-projects scaffolds a project-less charter and guards misuse
+ok - fm-brief.sh: marked requests avoid generic acknowledgements and preserve material reporting
+ok - fm-brief.sh: relative directory inputs ignore CDPATH, render stable absolute charter paths, or fail loudly
+ok - fm-brief.sh: custom pause verb renders in every scaffold
+ok - fm-brief.sh: ship and scout scaffolds teach validation-round pauses
+ok - fm-brief.sh: ship and scout scaffolds tell workers to cap heavy jobs and test suites with a runnable command, check space before writing many GB, and leave nothing behind
+ok - fm-brief.sh: every ship mode and the scout scaffold forbid broad process kills, once
+ok - fm-brief.sh: investigation and visual-review completions load the shared decision policy
+ok - fm-brief: scout and secondmate code paths still scaffold well-formed briefs
+ok - fm-brief.sh: scout Lavish hosting follows the bootstrap lavish-axi floor
