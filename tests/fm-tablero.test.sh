@@ -150,12 +150,13 @@ SH
   printf '%s\n' "$home"
 }
 
-# arrancar <home> <puerto> [bind] [estado]: start through the shipped command and
-# remember the pid; `estado` sets FM_STATE_OVERRIDE for alternate-state cases.
-arrancar() {  # <home> <puerto> [bind] [estado]
-  local home=$1 puerto=$2 bind=${3:-127.0.0.1} estado=${4:-} salida
+# arrancar <home> <puerto> [bind] [estado] [datos]: start through the shipped
+# command and remember the pid; the last two set the alternate state/data roots.
+arrancar() {  # <home> <puerto> [bind] [estado] [datos]
+  local home=$1 puerto=$2 bind=${3:-127.0.0.1} estado=${4:-} datos=${5:-} salida
   local -a entorno=(FM_HOME="$home" FM_TABLERO_BIND="$bind" FM_TABLERO_PORT="$puerto")
   [ -n "$estado" ] && entorno+=(FM_STATE_OVERRIDE="$estado")
+  [ -n "$datos" ] && entorno+=(FM_DATA_OVERRIDE="$datos")
   salida=$(env "${entorno[@]}" "$TABLERO" start 2>&1) || fail "arrancar el tablero: $salida"
   assert_contains "$salida" "Tablero arrancado" "start dice que quedó arrancado"
   local raiz="${estado:-$home/state}"
@@ -200,9 +201,9 @@ backlog_de "$HOME_A" '# Backlog
 ## Done
 - [x] tarea-hecha - Algo ya publicado (repo: firstmate) (kind: ship) (done 2026-09-25) (merged 2026-07-06)
   local main'
-printf 'working: paso 2 en marcha\n' > "$HOME_A/state/tarea-ahora.status"
+printf 'working [key=paso]: paso 2 en marcha\n' > "$HOME_A/state/tarea-ahora.status"
 printf 'window=default:w1:p1\nharness=pi\n' > "$HOME_A/state/tarea-ahora.meta"
-printf 'done: ready in branch fm/tarea-subir\n' > "$HOME_A/state/tarea-subir.status"
+printf 'done: ready in branch fm/tarea-subir\ncaptain-held [key=route]: tracked by tarea-subir-decision\n' > "$HOME_A/state/tarea-subir.status"
 printf 'window=default:w1:p2\nharness=pi\n' > "$HOME_A/state/tarea-subir.meta"
 
 PUERTO_A=$(puerto_libre)
@@ -264,12 +265,14 @@ assert "tarea-ahora" in tarjeta["bloquea"], tarjeta["bloquea"]
 print("bloqueada")
 '
 
-comprobar "$PUERTO_A" "el trabajo terminado trae lo que dijo su ayudante al acabar" '
+comprobar "$PUERTO_A" "el último aviso del ayudante manda aunque firstmate apunte después su contabilidad" '
 import json, sys
 d = json.load(sys.stdin)
 tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-subir"][0]
-assert "ready in branch fm/tarea-subir" in tarjeta["detalle"], tarjeta["detalle"]
+assert tarjeta["etapa"] == "subir", tarjeta["etapa"]
+assert tarjeta["detalle"] == "ready in branch fm/tarea-subir", tarjeta["detalle"]
 assert tarjeta["puede_responder"] is False, tarjeta
+print("done limpio")
 '
 
 comprobar "$PUERTO_A" "el trabajo en marcha dice quién está con él y sin inventarse nada" '
@@ -278,7 +281,7 @@ d = json.load(sys.stdin)
 tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-ahora"][0]
 assert tarjeta["area"] == "firstmate", tarjeta["area"]
 assert tarjeta["quien"] == "Un ayudante de firstmate", tarjeta["quien"]
-assert "paso 2 en marcha" in tarjeta["detalle"], tarjeta["detalle"]
+assert tarjeta["detalle"] == "paso 2 en marcha", tarjeta["detalle"]
 assert tarjeta["desde"].startswith("Último aviso"), tarjeta["desde"]
 '
 
@@ -684,6 +687,31 @@ assert_present "$ESTADO_G/tablero/decision-tarea-override.txt" "la decisión se 
 assert_absent "$HOME_G/state/tablero/decision-tarea-override.txt" "la decisión no se escribe en el home"
 pass "responder con estado alterno escribe la decisión y lee el meta donde manda el override"
 FM_HOME="$HOME_G" FM_STATE_OVERRIDE="$ESTADO_G" "$TABLERO" stop >/dev/null
+
+# ------------------------------- escenario: FM_DATA_OVERRIDE manda en el backlog
+
+HOME_H=$(nuevo_home datos-override)
+DATOS_H="$TMP_ROOT/datos-override-alt/data"
+mkdir -p "$DATOS_H"
+cp "$ROOT/.tasks.toml" "$TMP_ROOT/datos-override-alt/.tasks.toml"
+backlog_de "$HOME_H" '# Backlog
+
+## Queued
+- [ ] tarea-del-home - Una tarea del home (repo: firstmate) (kind: ship)'
+printf '# Backlog\n\n## Queued\n- [ ] tarea-de-datos - Una tarea del directorio de datos (repo: firstmate) (kind: ship)\n' \
+  > "$DATOS_H/backlog.md"
+PUERTO_H=$(puerto_libre)
+arrancar "$HOME_H" "$PUERTO_H" 127.0.0.1 "" "$DATOS_H"
+comprobar "$PUERTO_H" "el backlog sale de FM_DATA_OVERRIDE y no del home" '
+import json, sys
+d = json.load(sys.stdin)
+ids = {t["id"] for c in d["columnas"] for t in c["tarjetas"]}
+assert "tarea-de-datos" in ids, ids
+assert "tarea-del-home" not in ids, ids
+print("datos")
+'
+FM_HOME="$HOME_H" FM_DATA_OVERRIDE="$DATOS_H" "$TABLERO" stop >/dev/null
+pass "el tablero resuelve el backlog desde FM_DATA_OVERRIDE"
 
 # ------------------------------------------- escenario: arrancar, parar, estado
 

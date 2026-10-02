@@ -50,7 +50,6 @@ note, and no action ever writes two.
 Usage:
   fm-tablero.py serve --home <home> [--host <addr>]... [--port <n>]
   fm-tablero.py reply --home <home> [--reply-to <id>] [<texto>...]
-  fm-tablero.py pairs --home <home>
   fm-tablero.py --help
 """
 
@@ -265,30 +264,69 @@ def leer_meta(ruta: Path) -> dict:
     return datos
 
 
+# Verbos que bin/fm-classify-lib.sh reconoce en state/<id>.status. Los dos últimos
+# son la contabilidad de decisiones de firstmate, no un aviso del ayudante.
+VERBOS_ESTADO = (
+    "working", "needs-decision", "blocked", "done", "failed", "note", "paused",
+    "resolved", "captain-held",
+)
+VERBOS_CONTABLES = ("resolved", "captain-held")
+LEGADO_ESTADO = re.compile(
+    r"^\s*(?:done:|needs-decision:|blocked:|failed:|PR ready|checks green|ready in branch|merged)",
+    re.IGNORECASE,
+)
+
+
+def _evento_de(linea: str) -> dict | None:
+    """El verbo y la nota de una línea de estado, o None si no es un aviso."""
+    cabeza, sep, nota = linea.partition(":")
+    if sep:
+        verbo = cabeza.split("[", 1)[0].strip().lower()
+        if verbo in VERBOS_ESTADO and verbo not in VERBOS_CONTABLES:
+            return {"estado": verbo, "nota": nota.strip()}
+    if LEGADO_ESTADO.match(linea):
+        return {"estado": "", "nota": linea}
+    return None
+
+
+def _ultimo_evento(crudo: str) -> dict | None:
+    evento = None
+    for linea in crudo.splitlines():
+        limpia = linea.strip()
+        if not limpia:
+            continue
+        posible = _evento_de(limpia)
+        if posible:
+            evento = posible
+    return evento
+
+
 def leer_novedad(state_dir: Path, tarea_id: str) -> dict | None:
-    """Último evento escrito en state/<id>.status, leyendo solo la cola."""
+    """Último aviso del ayudante en state/<id>.status, leyendo la cola y, si hace falta, todo."""
     ruta = state_dir / f"{tarea_id}.status"
     try:
+        mtime = ruta.stat().st_mtime
         with ruta.open("rb") as fh:
             fh.seek(0, os.SEEK_END)
             tam = fh.tell()
             fh.seek(max(0, tam - 4096))
             crudo = fh.read().decode("utf-8", errors="replace")
-        mtime = ruta.stat().st_mtime
     except OSError:
         return None
-    ultima = ""
-    for linea in crudo.splitlines():
-        if linea.strip():
-            ultima = linea.strip()
-    if not ultima:
+    novedad = _ultimo_evento(crudo)
+    if novedad is None:
+        try:
+            novedad = _ultimo_evento(ruta.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            return None
+    if novedad is None:
+        for linea in reversed(crudo.splitlines()):
+            if linea.strip():
+                novedad = {"estado": "", "nota": linea.strip()}
+                break
+    if novedad is None:
         return None
-    m = re.match(r"^([a-zA-Z][a-zA-Z_-]*):\s*(.*)$", ultima)
-    return {
-        "estado": (m.group(1).lower() if m else ""),
-        "nota": (m.group(2) if m else ultima),
-        "mtime": mtime,
-    }
+    return {**novedad, "mtime": mtime}
 
 
 def _estado_dir(home: Path) -> Path:
@@ -308,9 +346,16 @@ def leer_ausencia(home: Path) -> dict | None:
     return {"hasta": hasta, "texto": f"Estás en modo ausencia hasta el {hasta}. Lo que llegue aquí se guarda y firstmate lo verá cuando vuelvas."}
 
 
+def _data_dir(home: Path) -> Path:
+    """El directorio de datos, resuelto como lo resuelven los scripts de la casa."""
+    override = os.environ.get("FM_DATA_OVERRIDE")
+    return Path(override) if override else home / "data"
+
+
 def ruta_backlog(home: Path) -> tuple[Path | None, str | None]:
     """El backlog del home, resuelto como lo resuelve tasks-axi."""
-    config = home / ".tasks.toml"
+    data = _data_dir(home)
+    config = data.parent / ".tasks.toml"
     if config.exists():
         try:
             datos = tomllib.loads(config.read_text(encoding="utf-8"))
@@ -319,9 +364,11 @@ def ruta_backlog(home: Path) -> tuple[Path | None, str | None]:
         if (datos.get("backend") or "markdown") != "markdown":
             return None, ("Este home guarda el backlog en «" + str(datos.get("backend"))
                           + "», y el tablero sabe leer el backlog de markdown.")
-        ruta = datos.get("markdown", {}).get("path") or "data/backlog.md"
-        return home / ruta, None
-    return home / "data" / "backlog.md", None
+        ruta = datos.get("markdown", {}).get("path")
+        if ruta:
+            return data.parent / ruta, None
+        return data / "backlog.md", None
+    return data / "backlog.md", None
 
 
 # --------------------------------------------------------------- clasificación
@@ -339,7 +386,7 @@ def _bloquea_de(tarea: dict, retenida: bool, tiene_encargado: bool) -> str:
     return "Lo que depende de esto está parado hasta que decidas."
 
 
-def modo_de_respuesta(tarea: dict, tiene_encargado: bool) -> str:
+def modo_de_respuesta(tiene_encargado: bool) -> str:
     """Cómo se cierra la llamada al capitán desde el tablero.
 
     Un encargado en marcha esperando la respuesta es trabajo que sigue: la
@@ -403,9 +450,7 @@ def clasificar(tarea: dict, novedad: dict | None, tiene_encargado: bool) -> dict
         desde = _desde_retencion(tarea)
         tarjeta["desde"] = ("Espera desde el " + desde[:10]) if desde else ""
         tarjeta["puede_responder"] = True
-        modo = modo_de_respuesta(tarea, tiene_encargado)
-        tarjeta["respuesta_modo"] = modo
-        tarjeta["respuesta_accion"] = ACCION_TEXTO[modo]
+        tarjeta["respuesta_accion"] = ACCION_TEXTO[modo_de_respuesta(tiene_encargado)]
     elif etapa == "ahora":
         tarjeta["necesita"] = "Nada por ahora: te aviso al terminar."
         tarjeta["detalle"] = nota
@@ -512,9 +557,7 @@ def tablero(home: Path, ahora: datetime | None = None) -> dict:
     preguntan = sum(1 for t in tarjetas if t["etapa"] == "espera")
     bloquean = sum(1 for t in tarjetas if t["etapa"] == "espera" and t["tipo"] == "bloquea")
     return {
-        "generado": ahora.astimezone(timezone.utc).isoformat(timespec="seconds"),
         "generado_texto": _texto_generado(ahora),
-        "home": str(home),
         "aviso": aviso,
         "ausencia": leer_ausencia(home),
         "cuenta": {
@@ -654,11 +697,7 @@ def preguntas_de_tarjeta(mensajes: list[dict]) -> dict[str, dict]:
         if mensaje.get("tipo") == "peticion":
             continue
         respuestas = mensaje.get("respuestas") or []
-        estado[tarea] = {
-            "estado": "contestada" if respuestas else "espera",
-            "mensaje": mensaje["id"],
-            "ts": mensaje.get("ts", ""),
-        }
+        estado[tarea] = {"estado": "contestada" if respuestas else "espera"}
     return estado
 
 
@@ -694,10 +733,9 @@ def responder_decision(home: Path, tarea: str, texto: str) -> dict:
     con_encargado = (_estado_dir(home) / f"{tarea}.meta").exists()
     comando = [str(home / "bin" / "fm-captain-hold.sh"), "answer", tarea,
                "--decision-file", str(decision)]
-    modo = "cerrar"
+    modo = modo_de_respuesta(con_encargado)
     if con_encargado:
         comando.append("--release")
-        modo = "soltar"
     codigo, salida, error = _ejecutar(comando)
     if codigo != 0:
         return {"ok": False, "error": (error or salida or "No se pudo cerrar la decisión.").strip()[:600]}
@@ -1020,8 +1058,6 @@ def main(argv: list[str] | None = None) -> int:
     p_responder.add_argument("--reply-to", default="", help="id del mensaje del capitán al que contesta")
     p_responder.add_argument("texto", nargs="*")
 
-    con_home(sub.add_parser("pairs", help="imprimir la conversación ya emparejada"))
-
     args = parser.parse_args(argv)
     home = _resolver_home(getattr(args, "home", None))
 
@@ -1037,10 +1073,6 @@ def main(argv: list[str] | None = None) -> int:
         registro = anadir_mensaje(home, "firstmate", texto.strip(),
                                   responde_a=args.reply_to)
         print(f"guardado {registro['id']}" + (f" como respuesta a {args.reply_to}" if args.reply_to else ""))
-        return 0
-
-    if args.orden == "pairs":
-        print(json.dumps(emparejar(leer_conversacion(home)), ensure_ascii=False, indent=2))
         return 0
 
     parser.print_help()

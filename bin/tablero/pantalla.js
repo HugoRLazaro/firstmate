@@ -50,8 +50,6 @@ let vista = "etapas";
 let abiertas = new Set();
 let plegadas = new Set();
 let borradores = {};
-let menuDe = null;
-let menuEtapa = null;
 let arrastrando = null;
 let tareaQuitar = null;
 let temporizadorToast = 0;
@@ -466,7 +464,6 @@ function pintarFila(t) {
 /* ------------------------------------------------------------------- menú mover */
 
 function abrirMenu(t, ancla) {
-  menuDe = t;
   menu.replaceChildren();
   menu.appendChild(el("div", "menu-title", "Pedir que se mueva a…"));
   (estado ? estado.columnas : []).forEach((col) => {
@@ -491,8 +488,6 @@ function abrirMenu(t, ancla) {
 
 function cerrarMenu() {
   menu.classList.remove("show");
-  menuDe = null;
-  menuEtapa = null;
 }
 
 /* ------------------------------------------------------------- camino de vuelta */
