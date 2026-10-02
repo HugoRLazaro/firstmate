@@ -869,6 +869,34 @@ test_ship_and_scout_bound_heavy_jobs() {
   pass "fm-brief.sh: ship and scout scaffolds tell workers to cap heavy jobs and test suites with a runnable command, check space before writing many GB, and leave nothing behind"
 }
 
+# Every worker shares one host and one user with the others, so a broad kill
+# that stops a worker's own suite also stops the suites of other worktrees:
+# every ship mode and the scout brief must forbid it, exactly once.
+test_ship_and_scout_forbid_broad_process_kills() {
+  local home variant id brief count
+  home="$TMP_ROOT/broad-kill-home"
+  mkdir -p "$home/data"
+
+  for variant in no-mistakes direct-PR local-only scout; do
+    id="brief-broad-kill-$variant"
+    if [ "$variant" = scout ]; then
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --scout >/dev/null 2>&1
+    else
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" firstmate --mode "$variant" >/dev/null 2>&1
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_grep "Stop only that job's own pid, or a pattern anchored to this worktree's path" "$brief" \
+      "$variant brief did not tell the worker to stop only its own pid or worktree-anchored pattern"
+    # shellcheck disable=SC2016  # Literal backticks quote the commands in the brief.
+    assert_grep '`pkill`, `killall`, or name pattern, which also kills the jobs of every other worker on this host' "$brief" \
+      "$variant brief did not forbid a broad process kill"
+    count=$(grep -c "never a broad" "$brief")
+    [ "$count" -eq 1 ] \
+      || fail "$variant brief states the broad-kill prohibition $count times, expected once"
+  done
+  pass "fm-brief.sh: every ship mode and the scout scaffold forbid broad process kills, once"
+}
+
 test_scout_and_secondmate_load_decision_hold_policy() {
   local home scout charter
   home="$TMP_ROOT/decision-policy-home"
@@ -995,6 +1023,7 @@ test_secondmate_directory_paths_are_absolute_and_output_is_stable
 test_pause_verb_override_renders_all_brief_scaffolds
 test_ship_and_scout_teach_validation_round_pause
 test_ship_and_scout_bound_heavy_jobs
+test_ship_and_scout_forbid_broad_process_kills
 test_scout_and_secondmate_load_decision_hold_policy
 test_scout_and_secondmate_scaffold
 test_scout_lavish_line_follows_presentation_floor
