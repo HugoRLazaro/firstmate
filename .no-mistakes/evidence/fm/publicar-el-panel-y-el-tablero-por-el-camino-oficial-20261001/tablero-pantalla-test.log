@@ -1,0 +1,39 @@
+ok - el modo ausencia se avisa aunque el tablero no traiga otro aviso que enseñar
+ok - el kanban tiene las cinco columnas con su nombre
+ok - las tarjetas llevan el título real de la tarea
+ok - cada tarjeta que espera dice qué necesita del capitán
+ok - ningún título arrastra las anotaciones internas del registro
+ok - soltar una tarjeta en su propia columna no pide moverla
+ok - soltar una tarjeta en otra columna sí pide moverla
+ok - la pantalla dice que mover y quitar sólo se piden
+ok - a 1560 de ancho no hay scroll lateral
+ok - a 1280 de ancho no hay scroll lateral
+ok - la vista de lista agrupa por etapa
+ok - la lista a 1560 tampoco desborda
+ok - la lista a 1280 tampoco desborda
+ok - el refresco no se lleva lo que estás escribiendo en una tarjeta
+ok - un cambio solo del reloj no repinta ni le quita el foco a la tarjeta
+ok - responder desde la tarjeta cierra la decisión y la saca de las que te esperan
+ok - la tarjeta dice que lo escrito en ella espera la respuesta de firstmate
+ok - una pregunta ya contestada se ve contestada en su tarjeta
+ok - el chat vive en su propia pestaña
+ok - la conversación pinta el registro durable
+ok - los mensajes sin respuesta se ven esperando
+ok - las respuestas de firstmate se emparejan con su mensaje
+ok - el mensaje respondido dice a qué hora se le contestó, no sólo que se le contestó
+ok - el refresco no se lleva lo que estás escribiendo en el chat
+ok - el mensaje libre llega y se queda esperando respuesta
+ok - el compositor se vacía después de enviar
+ok - la conversación tiene material para desplazarse
+ok - con la lista subida, un mensaje nuevo conserva el sitio del lector
+ok - con la lista al final, un mensaje nuevo la deja pegada abajo
+ok - el repintado del tablero no pisa el contador de la pestaña de conversación
+ok - el chat en el móvil no desborda
+ok - el kanban en el móvil no desborda
+ok - en el móvil se siguen viendo las cinco columnas
+ok - la consola no tiene ni un error ni un aviso
+ok - la página no pide nada fuera del propio tablero
+ok - el tablero se refresca solo por sondeo
+ok - todo comprobado, 36 comprobaciones
+ok - la pantalla se comporta en un navegador de verdad, sin errores en la consola
+ok - lo escrito en la página llega al backlog y al buzón de firstmate

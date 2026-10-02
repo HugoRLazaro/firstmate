@@ -1,0 +1,59 @@
+ok - dos identificadores del mismo milisegundo no colisionan
+ok - cada tarjeta cae en su columna según el estado real (5/5)
+ok - la cabecera cuenta lo que espera al capitán y lo que tiene parado ({"preguntan": 1, "bloquean": 0, "ahora": 1, "subir": 1, "plan": 1, "hecho": 1})
+ok - la tarjeta que espera enseña la pregunta y se puede responder
+ok - una fila ya aterrizada con merged al final se lee sin arrastrar anotaciones (merged)
+ok - una fila bloqueada recorta el marcador y dice a quién espera (bloqueada)
+ok - el último aviso del ayudante manda aunque firstmate apunte después su contabilidad (done limpio)
+ok - el trabajo en marcha dice quién está con él y sin inventarse nada
+ok - la clave al principio de la nota es metadato y no se enseña (nota limpia)
+ok - con la clave antes del colon, el token de la nota se queda (sin recorte)
+ok - el ausente se anuncia solo cuando hay modo ausencia
+ok - el modo ausencia sale del contrato del home
+ok - sin backlog el tablero lo dice en vez de inventarse tarjetas
+ok - las palabras del capitán llegan al mecanismo de decisión tal cual, con acentos y saltos de línea
+ok - el tablero confirma que la decisión queda cerrada
+ok - la conversación durable y su carpeta se guardan con permisos de dueño
+ok - con un ayudante en marcha la respuesta suelta el trabajo en vez de cerrarlo
+ok - una respuesta vacía no llega al mecanismo de decisión
+ok - una tarea inválida se rechaza limpiamente y no escribe nada
+ok - cada envío desde una tarjeta deja exactamente una nota, sin duplicarla
+ok - la nota de la tarjeta nombra la tarea y lleva las palabras del capitán tal cual
+ok - la nota de la tarjeta dice cómo contestar emparejado y qué hizo el tablero
+ok - lo escrito en una tarjeta con trabajo en marcha también llega al buzón
+ok - responder cierra de verdad la decisión: el backlog queda cerrado con las palabras del capitán
+ok - la pregunta escrita en una tarjeta deja su nota durable en el buzón y despierta a firstmate
+ok - la nota de la tarjeta dice cómo contestar emparejado y qué hizo el tablero
+ok - la conversación guarda la referencia de la nota que dejó la tarjeta
+ok - la tarjeta dice que su pregunta espera la respuesta de firstmate (espera)
+ok - la respuesta de firstmate se empareja con la pregunta hecha en la tarjeta (emparejado)
+ok - la tarjeta pasa a contestada en cuanto firstmate responde (contestada)
+ok - la tarjeta deja una sola nota aunque el tablero cierre la decisión
+ok - una tarjeta sin nada que cerrar guarda y avisa igual la pregunta del capitán
+ok - el mensaje libre deja su nota durable en el buzón y despierta a firstmate
+ok - la conversación guarda el mensaje del capitán sin respuesta todavía (1 esperando)
+ok - la respuesta de firstmate se empareja con el mensaje que la esperaba (emparejado)
+ok - --reply-to contesta al mensaje que se le dice, no al más viejo (dirigido)
+ok - la conversación sobrevive a un reinicio del servidor (4 mensajes)
+ok - mover y quitar no tocan el backlog ni cambian ninguna columna: sólo lo piden
+ok - mover y quitar dejan su encargo en el buzón, con la confirmación del borrado pedida
+ok - el chat y las peticiones de mover y quitar siguen dejando una nota cada uno
+ok - las dos peticiones quedan en la conversación como lo que son (2 peticiones)
+ok - la propia página servida como localhost puede escribir: el alias de loopback no se rechaza
+ok - una página ajena sigue rechazada aunque el alias local se acepte
+ok - la conversación durable se guarda en FM_STATE_OVERRIDE, no en el home
+ok - el modo ausencia sale del estado alterno
+ok - responder con estado alterno escribe la decisión y lee el meta donde manda el override
+ok - el backlog sale de FM_DATA_OVERRIDE y no del home (datos)
+ok - el tablero resuelve el backlog desde FM_DATA_OVERRIDE
+ok - una llamada con fecha futura no espera tu respuesta y enseña su fecha (aplazada)
+ok - una llamada con la fecha pasada vuelve a ser una llamada viva (viva)
+ok - la fecha futura aplaza la llamada y la pasada la deja viva
+ok - el verbo de pausa del home se lee como aviso (pausa)
+ok - el token de capitán del home se lee como aviso (capitan)
+ok - el tablero honra el vocabulario de estado documentado
+ok - status dice que está arrancado
+ok - con un bind sin loopback el tablero arranca y anuncia la dirección que escucha
+ok - stop lo para de verdad y deja de escuchar
+ok - la ayuda nombra start, stop, status, url y reply
+ok - no se abre el tablero a toda la máquina: sólo a Tailscale y a esta máquina

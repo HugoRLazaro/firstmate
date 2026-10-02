@@ -1,0 +1,27 @@
+{
+  "home": "/home/hugorl/firstmate",
+  "lineas_backlog": 108,
+  "tarjetas_api": 108,
+  "faltan": [],
+  "sobran": [],
+  "cuenta": {
+    "preguntan": 61,
+    "bloquean": 42,
+    "ahora": 4,
+    "subir": 1,
+    "plan": 32,
+    "hecho": 10
+  }
+}
+ok - el tablero sirve una tarjeta por cada tarea del backlog real
+ok - la cabecera cuenta lo que dice el registro real
+ok - todas las tareas con retención del backlog real salen en «Espera tu respuesta»
+ok - las tareas con un ayudante en marcha (state/<id>.meta) salen en «Ahora mismo»
+ok - las cinco columnas del registro real se pintan
+ok - la tarjeta de esta misma tarea está en la pantalla con su título real
+ok - ningún título arrastra las anotaciones internas del backlog real
+ok - la columna de espera enseña la pregunta real del capitán
+ok - la pantalla dice de qué home está leyendo y cuándo se actualizó
+ok - la conversación durable real del home se pinta
+ok - la consola del tablero real queda limpia
+ok - la página no escribe nada al leer el home

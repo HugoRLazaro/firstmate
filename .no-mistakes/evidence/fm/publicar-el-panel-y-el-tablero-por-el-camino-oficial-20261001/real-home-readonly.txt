@@ -1,0 +1,9 @@
+# Read-only drive against the captain's real home (/home/hugorl/firstmate)
+
+$ find /home/hugorl/firstmate/state /home/hugorl/firstmate/data -type f -printf '%p %s %T@\n' | sort  # antes
+$ diff antes despues  # despues de servir el tablero y abrirlo en Chromium
+
+(sin diferencias: el home real no cambió)
+
+El servidor se arrancó sin el envoltorio fm-tablero.sh (que escribe pid/log) y sólo se leyeron GET:
+  python3 bin/fm-tablero.py serve --home /home/hugorl/firstmate --host 127.0.0.1 --port 60819

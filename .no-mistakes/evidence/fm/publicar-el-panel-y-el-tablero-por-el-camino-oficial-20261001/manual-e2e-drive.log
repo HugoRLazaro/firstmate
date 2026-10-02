@@ -1,0 +1,38 @@
+== home: /tmp/fm-manual-home.bdfLpT  puerto: 46269
+Tablero arrancado (pid 561009), leyendo /tmp/fm-manual-home.bdfLpT.
+  Desde el móvil:  
+  Desde aquí:      http://127.0.0.1:46269
+  Para pararlo:    bin/fm-tablero.sh stop
+ok - una llamada con fecha futura no está en «Espera tu respuesta»
+ok - una llamada con fecha futura sigue a la vista en su columna
+ok - la llamada aplazada enseña su fecha a la vista
+ok - una llamada con la fecha ya pasada vuelve a ser viva
+ok - el contador de la cabecera no suma la llamada aplazada
+ok - la tarjeta que espera decisión está en «Espera tu respuesta»
+ok - la pantalla confirma que la pregunta se envió
+ok - la lista de la conversación es la que se desplaza, no la página entera
+ok - con la lista subida, un mensaje nuevo conserva el sitio del lector
+ok - con la lista al final, un mensaje nuevo la deja pegada abajo
+ok - la conversación durable guarda la pregunta escrita en la tarjeta
+ok - la pregunta de la tarjeta guarda la referencia de la nota que dejó en el buzón
+ok - la consola del tablero queda limpia
+== lo que quedó en el home real del tablero ==
+== nota del buzón (/tmp/fm-manual-home.bdfLpT/state/inbox/1790939627-aCdGcr.note) ==
+id=1790939627-aCdGcr
+at=2026-10-02T11:13:47Z
+source=text
+--
+[Tablero] El capitán escribe en la tarjeta de la tarea decision-panel («Decidir la pregunta de la tarjeta»):
+¿Aplico el cambio A o el B? Pregunta escrita en la tarjeta.
+
+La decisión queda cerrada con estas palabras.
+
+Contesta en el tablero con: bin/fm-tablero.sh reply --reply-to m1790939627029-561009-988cabf6 "<texto>"
+ok - la nota nombra la tarea
+ok - la nota lleva la pregunta tal cual
+ok - la nota dice cómo contestar emparejado con el mensaje m1790939627029-561009-988cabf6
+ok - la nota dice que la decisión se cerró
+ok - la pregunta despertó a firstmate (.wake-queue)
+ok - la decisión quedó cerrada en el backlog
+== resumen ==
+driver ok
