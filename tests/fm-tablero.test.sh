@@ -150,14 +150,17 @@ SH
   printf '%s\n' "$home"
 }
 
-# arrancar <home> <puerto>: start through the shipped command and remember the pid.
-arrancar() {  # <home> <puerto> [bind]
-  local home=$1 puerto=$2 bind=${3:-127.0.0.1} salida
-  salida=$(FM_HOME="$home" FM_TABLERO_BIND="$bind" FM_TABLERO_PORT="$puerto" \
-    "$TABLERO" start 2>&1) || fail "arrancar el tablero: $salida"
+# arrancar <home> <puerto> [bind] [estado]: start through the shipped command and
+# remember the pid; `estado` sets FM_STATE_OVERRIDE for alternate-state cases.
+arrancar() {  # <home> <puerto> [bind] [estado]
+  local home=$1 puerto=$2 bind=${3:-127.0.0.1} estado=${4:-} salida
+  local -a entorno=(FM_HOME="$home" FM_TABLERO_BIND="$bind" FM_TABLERO_PORT="$puerto")
+  [ -n "$estado" ] && entorno+=(FM_STATE_OVERRIDE="$estado")
+  salida=$(env "${entorno[@]}" "$TABLERO" start 2>&1) || fail "arrancar el tablero: $salida"
   assert_contains "$salida" "Tablero arrancado" "start dice que quedó arrancado"
-  if [ -s "$home/state/tablero/servidor.pid" ]; then
-    SERVIDORES+=("$(cat "$home/state/tablero/servidor.pid")")
+  local raiz="${estado:-$home/state}"
+  if [ -s "$raiz/tablero/servidor.pid" ]; then
+    SERVIDORES+=("$(cat "$raiz/tablero/servidor.pid")")
   fi
   local intento
   for ((intento = 0; intento < 40; intento++)); do
@@ -187,13 +190,13 @@ HOME_A=$(nuevo_home columnas)
 backlog_de "$HOME_A" '# Backlog
 
 ## In flight
-- [ ] tarea-ahora - Un trabajo en marcha (repo: firstmate) (kind: ship) (since 2026-09-25)
+- [ ] tarea-ahora - Un trabajo en marcha (repo: firstmate, since 2026-09-25) (kind: ship)
 - [ ] tarea-subir - Un trabajo terminado (repo: firstmate) (kind: ship) (since 2026-09-25)
   Deliverable of the finished work: report data/tarea-subir/report.md
 ## Queued
-- [ ] tarea-espera - Una decision que espera (repo: licitaciones-platform) (kind: captain) (since 2026-09-24) (hold: Se midio el asunto el 24-sep. Decision: dime si sigo con la opcion A o con la B. Sin respuesta no se toca nada.) (hold-kind: captain)
+- [ ] tarea-espera - Una decision que espera (repo: licitaciones-platform) (kind: captain) (since 2026-09-24) (hold: Se midio el asunto el 24-sep, con 8 de 14 casos. Decision: dime si sigo con la opcion A o con la B. Sin respuesta no se toca nada.) (hold-kind: captain)
   Captain hold set: 2026-09-24T10:00:00Z
-- [ ] tarea-plan - Un trabajo previsto (repo: firstmate) (kind: ship) (since 2026-09-25)
+- [ ] tarea-plan - Un trabajo previsto (repo: firstmate) (kind: ship) (since 2026-09-25) blocked-by: tarea-ahora - espera a que acabe
 ## Done
 - [x] tarea-hecha - Algo ya publicado (repo: firstmate) (kind: ship) (done 2026-09-25) (merged 2026-07-06)
   local main'
@@ -233,6 +236,7 @@ import json, sys
 d = json.load(sys.stdin)
 tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-espera"][0]
 assert "opcion A o con la B" in tarjeta["necesita"], tarjeta["necesita"]
+assert "8 de 14" in tarjeta["detalle"], tarjeta["detalle"]
 assert tarjeta["puede_responder"] is True, tarjeta
 assert tarjeta["bloquea"], tarjeta
 assert "cerrada" in tarjeta["respuesta_accion"], tarjeta["respuesta_accion"]
@@ -250,6 +254,16 @@ assert tarjeta["titulo"] == "Algo ya publicado", tarjeta["titulo"]
 print("merged")
 '
 
+comprobar "$PUERTO_A" "una fila bloqueada recorta el marcador y dice a quién espera" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-plan"][0]
+assert tarjeta["titulo"] == "Un trabajo previsto", tarjeta["titulo"]
+assert tarjeta["area"] == "firstmate", tarjeta["area"]
+assert "tarea-ahora" in tarjeta["bloquea"], tarjeta["bloquea"]
+print("bloqueada")
+'
+
 comprobar "$PUERTO_A" "el trabajo terminado trae lo que dijo su ayudante al acabar" '
 import json, sys
 d = json.load(sys.stdin)
@@ -262,6 +276,7 @@ comprobar "$PUERTO_A" "el trabajo en marcha dice quién está con él y sin inve
 import json, sys
 d = json.load(sys.stdin)
 tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-ahora"][0]
+assert tarjeta["area"] == "firstmate", tarjeta["area"]
 assert tarjeta["quien"] == "Un ayudante de firstmate", tarjeta["quien"]
 assert "paso 2 en marcha" in tarjeta["detalle"], tarjeta["detalle"]
 assert tarjeta["desde"].startswith("Último aviso"), tarjeta["desde"]
@@ -633,6 +648,42 @@ assert_contains "$(pide POST "http://127.0.0.1:$PUERTO_D/api/mensaje" \
   '{"texto":"Esto viene de otra página."}' "http://otra-pagina.example")" \
   '"ok": false' "una página ajena sigue sin poder escribir en el tablero"
 pass "una página ajena sigue rechazada aunque el alias local se acepte"
+
+# ------------------------- escenario: FM_STATE_OVERRIDE manda en todo el estado
+
+HOME_G=$(nuevo_home estado-override)
+ESTADO_G="$TMP_ROOT/estado-override-alt"
+mkdir -p "$ESTADO_G"
+backlog_de "$HOME_G" '# Backlog
+
+## Queued
+- [ ] tarea-override - Una decision en el estado alterno (repo: firstmate) (kind: captain) (since 2026-09-24) (hold: Decision: dime si sigo con A o con B) (hold-kind: captain)
+  Captain hold set: 2026-09-24T10:00:00Z'
+printf 'window=default:w9:p1\nharness=pi\n' > "$ESTADO_G/tarea-override.meta"
+printf 'entered: 2026-09-25T10:00:00Z\nexpected_return: 2026-09-26\n' > "$ESTADO_G/.afk-contract"
+
+FM_HOME="$HOME_G" FM_STATE_OVERRIDE="$ESTADO_G" "$TABLERO" reply "Guardado en el estado alterno." >/dev/null
+assert_present "$ESTADO_G/tablero/conversacion.jsonl" "la conversación respeta FM_STATE_OVERRIDE"
+assert_absent "$HOME_G/state/tablero/conversacion.jsonl" "la conversación no se escribe en el home con override"
+pass "la conversación durable se guarda en FM_STATE_OVERRIDE, no en el home"
+
+PUERTO_G=$(puerto_libre)
+arrancar "$HOME_G" "$PUERTO_G" 127.0.0.1 "$ESTADO_G"
+comprobar "$PUERTO_G" "el modo ausencia sale del estado alterno" '
+import json, sys
+d = json.load(sys.stdin)
+assert d["ausencia"] and "2026-09-26" in d["ausencia"]["texto"], d["ausencia"]
+'
+CUERPO_G=$(python3 -c 'import json; print(json.dumps({"tarea":"tarea-override","texto":"Sigo con A."}))')
+RESPUESTA_G=$(pide POST "http://127.0.0.1:$PUERTO_G/api/responder" "$CUERPO_G")
+assert_contains "$RESPUESTA_G" '"ok": true' "responder con estado alterno contesta que sí"
+assert_equals "answer tarea-override --decision-file $ESTADO_G/tablero/decision-tarea-override.txt --release" \
+  "$(tail -n 1 "$HOME_G/recorder-hold-argv.txt")" \
+  "el fichero de decisión y el meta con encargado salen del estado alterno"
+assert_present "$ESTADO_G/tablero/decision-tarea-override.txt" "la decisión se escribe en el estado alterno"
+assert_absent "$HOME_G/state/tablero/decision-tarea-override.txt" "la decisión no se escribe en el home"
+pass "responder con estado alterno escribe la decisión y lee el meta donde manda el override"
+FM_HOME="$HOME_G" FM_STATE_OVERRIDE="$ESTADO_G" "$TABLERO" stop >/dev/null
 
 # ------------------------------------------- escenario: arrancar, parar, estado
 

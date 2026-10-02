@@ -176,7 +176,6 @@ function pintar(datos) {
     pill.hidden = true;
   }
 
-  subEl.textContent = datos.generado_texto ? "Actualizado el " + datos.generado_texto + "." : "";
   aviso(textoAviso(datos));
 }
 
@@ -721,7 +720,8 @@ async function cargar(urgente) {
     aviso("No se pudo leer el estado: " + e.message);
     return;
   }
-  const huella = JSON.stringify({ c: datos.columnas, n: datos.cuenta, g: datos.generado_texto, a: datos.aviso, u: datos.ausencia });
+  subEl.textContent = datos.generado_texto ? "Actualizado el " + datos.generado_texto + "." : "";
+  const huella = JSON.stringify({ c: datos.columnas, n: datos.cuenta, a: datos.aviso, u: datos.ausencia });
   if (!urgente && huella === huellaEstado) return;
   huellaEstado = huella;
   estado = datos;

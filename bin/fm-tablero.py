@@ -19,6 +19,14 @@ Serves, over HTTP on loopback and the machine's Tailscale address only:
   POST /api/mensaje         {"texto"}                    -> bin/fm-inbox.sh note
   POST /api/peticion        {"tarea","accion","destino"} -> bin/fm-inbox.sh note
 
+Anyone on the captain's own machine or in his private Tailscale network is
+trusted to read the board and act as the captain; that machine and network are
+the trust boundary, which is why the server listens only on 127.0.0.1 and the
+machine's Tailscale address and refuses 0.0.0.0. The private file permissions
+under the state directory's `tablero/` are defense in depth, not the boundary,
+and no credential is built while the captain does not ask for one as a separate
+piece.
+
 Every source of truth is read, never written, except the three commands above:
 
   <home>/data/backlog.md      tasks, states, captain holds, blocked_by (the path
@@ -93,9 +101,12 @@ ETAPA_POR_ID = {e["id"]: e for e in ETAPAS}
 # Claves que el backlog escribe entre paréntesis al final de la línea de una tarea.
 CLAVES_ANOTACION = (
     "repo", "kind", "since", "done", "merged", "reported", "hold", "hold-kind", "hold-until",
-    "blocks", "deps", "priority", "deadline", "closed", "link", "links",
+    "deps", "priority", "deadline", "closed", "link", "links",
     "delivery-state", "blocked-by", "delivery", "origin", "until",
 )
+
+# El backend markdown escribe el bloqueo suelto en la fila: `blocked-by: <id> [- <motivo>]`.
+BLOQUEO = re.compile(r"blocked-by:\s*([^\s)]+)")
 
 SECCION_ESTADO = {
     "in flight": "in_flight",
@@ -126,11 +137,16 @@ def _cabeza_y_valor(dentro: str) -> tuple[str, str]:
     """Parte `clave: valor` o `clave valor`, que son las dos formas del backlog."""
     cabeza, sep, valor = dentro.partition(":")
     if sep:
-        return cabeza.strip().lower(), valor.strip()
-    trozos = dentro.split(None, 1)
-    if len(trozos) == 2:
-        return trozos[0].strip().lower(), trozos[1].strip()
-    return dentro.strip().lower(), ""
+        cabeza, valor = cabeza.strip().lower(), valor.strip()
+    else:
+        trozos = dentro.split(None, 1)
+        if len(trozos) == 2:
+            cabeza, valor = trozos[0].strip().lower(), trozos[1].strip()
+        else:
+            cabeza, valor = dentro.strip().lower(), ""
+    if cabeza != "hold":
+        valor = valor.split(",", 1)[0].strip()
+    return cabeza, valor
 
 
 def _anotaciones(resto: str) -> tuple[str, dict]:
@@ -152,6 +168,15 @@ def _anotaciones(resto: str) -> tuple[str, dict]:
     return resto, datos
 
 
+def _bloqueos_de(texto: str) -> tuple[str, list[str]]:
+    """Recorta los marcadores sueltos `blocked-by: <id> [- <motivo>]`."""
+    bloqueos = BLOQUEO.findall(texto)
+    if not bloqueos:
+        return texto, []
+    limpio = re.sub(r"\s*blocked-by:\s*[^\s)]+(?:\s+-\s+.*)?", "", texto)
+    return limpio.strip(), bloqueos
+
+
 def parsear_backlog(texto: str) -> list[dict]:
     """Devuelve las tareas del backlog en el orden en que están escritas."""
     tareas: list[dict] = []
@@ -165,6 +190,11 @@ def parsear_backlog(texto: str) -> list[dict]:
         m = re.match(r"^- \[( |x)\] (\S+) - (.*)$", linea)
         if m:
             titulo, anot = _anotaciones(m.group(3))
+            titulo, bloqueos = _bloqueos_de(titulo)
+            titulo, despues = _anotaciones(titulo)
+            anot.update(despues)
+            if bloqueos and not anot.get("blocked-by"):
+                anot["blocked-by"] = ", ".join(bloqueos)
             actual = {
                 "id": m.group(2),
                 "titulo": titulo.strip(),
@@ -261,8 +291,14 @@ def leer_novedad(state_dir: Path, tarea_id: str) -> dict | None:
     }
 
 
+def _estado_dir(home: Path) -> Path:
+    """El directorio de estado, resuelto como lo resuelve bin/fm-tablero.sh."""
+    override = os.environ.get("FM_STATE_OVERRIDE")
+    return Path(override) if override else home / "state"
+
+
 def leer_ausencia(home: Path) -> dict | None:
-    contrato = home / "state" / ".afk-contract"
+    contrato = _estado_dir(home) / ".afk-contract"
     if not contrato.exists():
         return None
     datos = leer_meta(contrato)
@@ -294,8 +330,6 @@ def ruta_backlog(home: Path) -> tuple[Path | None, str | None]:
 def _bloquea_de(tarea: dict, retenida: bool, tiene_encargado: bool) -> str:
     """Lo que la tarjeta tiene parado, sin inventarlo: retenida siempre para algo."""
     anot = tarea["anotaciones"]
-    if anot.get("blocks"):
-        return "Bloquea: " + _recorta(anot["blocks"], 90)
     if anot.get("blocked-by") and anot["blocked-by"] not in ("-", "none"):
         return "Espera a que termine: " + _recorta(anot["blocked-by"], 90)
     if not retenida:
@@ -446,7 +480,7 @@ def _texto_generado(ahora: datetime) -> str:
 def tablero(home: Path, ahora: datetime | None = None) -> dict:
     """El payload de /api/estado: lo que la pantalla pinta, tal cual sale del home."""
     ahora = ahora or datetime.now()
-    state_dir = home / "state"
+    state_dir = _estado_dir(home)
     aviso = None
     ruta, problema = ruta_backlog(home)
     if problema:
@@ -499,12 +533,12 @@ def tablero(home: Path, ahora: datetime | None = None) -> dict:
 
 
 def _rutas_conversacion(home: Path) -> tuple[Path, Path]:
-    directorio = home / "state" / "tablero"
+    directorio = _estado_dir(home) / "tablero"
     return directorio / "conversacion.jsonl", directorio / "conversacion.lock"
 
 
 def _carpeta_privada(home: Path) -> Path:
-    carpeta = home / "state" / "tablero"
+    carpeta = _estado_dir(home) / "tablero"
     carpeta.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(carpeta, 0o700)
     return carpeta
@@ -657,7 +691,7 @@ def responder_decision(home: Path, tarea: str, texto: str) -> dict:
     with _abrir_privado(decision, "w", os.O_WRONLY | os.O_CREAT | os.O_TRUNC) as fh:
         fh.write(limpio + "\n")
 
-    con_encargado = (home / "state" / f"{tarea}.meta").exists()
+    con_encargado = (_estado_dir(home) / f"{tarea}.meta").exists()
     comando = [str(home / "bin" / "fm-captain-hold.sh"), "answer", tarea,
                "--decision-file", str(decision)]
     modo = "cerrar"

@@ -33,6 +33,7 @@ The captain's work board is a small local server that serves one page and its AP
 `bin/fm-tablero.py` derives the five stages, owns that conversation, and turns every captain action into exactly one note in `bin/fm-inbox.sh`: writing in a card also closes or releases its decision through `bin/fm-captain-hold.sh answer` first, while a chat message or a move/remove request is that note on its own, so a question or an answer written in a card reaches firstmate exactly like one written in the chat.
 It never changes a task's state on its own, so moving or removing a card only asks.
 `config/tablero-port` (`FM_TABLERO_PORT`, default 8787) and `config/tablero-bind` (`FM_TABLERO_BIND`, space-separated, default the machine's Tailscale address plus `127.0.0.1`) are the local operating choices; the board refuses to listen on `0.0.0.0` and is reachable only from the captain's own private network.
+The captain's own machine and his private Tailscale network are the trust boundary: anyone already on them is trusted to read the board and act as the captain, the private permissions under `state/tablero/` are defense in depth rather than that boundary, and no credential is built while the captain does not ask for one as a separate piece.
 An absent server means no board, which is an acceptable state.
 
 ## Calm preference (config/calm)

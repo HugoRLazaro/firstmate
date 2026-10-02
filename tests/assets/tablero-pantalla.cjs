@@ -191,6 +191,13 @@ await pagina.waitForSelector(".board .col");
 
 let idRespondida = null;
 {
+  // El sello de actualización cambia cada minuto, pero un cambio solo del reloj no
+  // puede repintar el tablero ni quitarle el foco al textarea que el capitán tiene abierto.
+  await pagina.route("**/api/estado", async (ruta) => {
+    const cuerpo = await (await ruta.fetch()).json();
+    cuerpo.generado_texto = "1 de enero, 00:00";
+    await ruta.fulfill({ json: cuerpo });
+  });
   const pendientesAntes = Number(await pagina.textContent("#waitN"));
   const tarjeta = pagina.locator(".col:nth-child(2) .card").first();
   await pagina.setViewportSize({ width: 1280, height: 960 });
@@ -202,6 +209,13 @@ let idRespondida = null;
   await esperarSondeos(sondeos + 2);
   const conservado = await tarjeta.locator("textarea").inputValue();
   comprobar("el refresco no se lleva lo que estás escribiendo en una tarjeta", conservado === "Sí, adelante con lo recomendado.", JSON.stringify(conservado));
+  await pagina.waitForFunction(
+    () => (document.getElementById("sub") || {}).textContent.includes("1 de enero"),
+    null,
+    { timeout: 15000 }
+  );
+  const enfocado = await pagina.evaluate(() => (document.activeElement || {}).tagName || "");
+  comprobar("un cambio solo del reloj no repinta ni le quita el foco a la tarjeta", enfocado === "TEXTAREA", enfocado);
 
   await captura("tarjeta-responder-1280");
 
