@@ -150,13 +150,15 @@ SH
   printf '%s\n' "$home"
 }
 
-# arrancar <home> <puerto> [bind] [estado] [datos]: start through the shipped
-# command and remember the pid; the last two set the alternate state/data roots.
-arrancar() {  # <home> <puerto> [bind] [estado] [datos]
+# arrancar <home> <puerto> [bind] [estado] [datos] [VAR=valor ...]: start through
+# the shipped command and remember the pid; the two named roots set the alternate
+# state/data directories and the rest goes to the server environment.
+arrancar() {  # <home> <puerto> [bind] [estado] [datos] [VAR=valor ...]
   local home=$1 puerto=$2 bind=${3:-127.0.0.1} estado=${4:-} datos=${5:-} salida
   local -a entorno=(FM_HOME="$home" FM_TABLERO_BIND="$bind" FM_TABLERO_PORT="$puerto")
   [ -n "$estado" ] && entorno+=(FM_STATE_OVERRIDE="$estado")
   [ -n "$datos" ] && entorno+=(FM_DATA_OVERRIDE="$datos")
+  entorno+=("${@:6}")
   salida=$(env "${entorno[@]}" "$TABLERO" start 2>&1) || fail "arrancar el tablero: $salida"
   assert_contains "$salida" "Tablero arrancado" "start dice que quedó arrancado"
   local raiz="${estado:-$home/state}"
@@ -186,16 +188,24 @@ print(json.dumps({"columnas": d["columnas"], "cuenta": d["cuenta"]}, ensure_asci
 }
 
 # El identificador se compone fuera del cerrojo, así que dos peticiones en el
-# mismo milisegundo no pueden compartirlo.
+# mismo milisegundo no pueden compartirlo: con el reloj congelado, dos
+# identificadores del mismo instante tienen que ser distintos.
 IDS_MENSAJE=$(python3 - "$ROOT/bin/fm-tablero.py" <<'PY'
+import datetime
 import runpy, sys
 mod = runpy.run_path(sys.argv[1])
-ids = [mod["nuevo_mensaje_id"]() for _ in range(20000)]
-print("ok" if len(set(ids)) == len(ids) else "colision")
+
+class RelojFijo:
+    @staticmethod
+    def now(tz=None):
+        return datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+
+mod["datetime"] = RelojFijo
+print("ok" if mod["nuevo_mensaje_id"]() != mod["nuevo_mensaje_id"]() else "colision")
 PY
 )
-assert_equals "ok" "$IDS_MENSAJE" "los identificadores de mensaje no colisionan"
-pass "los identificadores de mensaje no colisionan"
+assert_equals "ok" "$IDS_MENSAJE" "dos identificadores del mismo milisegundo no colisionan"
+pass "dos identificadores del mismo milisegundo no colisionan"
 
 # ------------------------------------------------- escenario: las cinco columnas
 
@@ -742,6 +752,71 @@ print("datos")
 '
 FM_HOME="$HOME_H" FM_DATA_OVERRIDE="$DATOS_H" "$TABLERO" stop >/dev/null
 pass "el tablero resuelve el backlog desde FM_DATA_OVERRIDE"
+
+# --------------------- escenario: llamadas aplazadas y vocabulario del estado
+
+HOME_I=$(nuevo_home aplazadas)
+backlog_de "$HOME_I" '# Backlog
+
+## Queued
+- [ ] tarea-aplazada - Una llamada que espera a su fecha (repo: firstmate) (kind: captain) (since 2026-09-24) (hold: Decision: dime si sigo con A o con B) (hold-kind: captain) (hold-until: 2099-12-31)
+  Captain hold set: 2026-09-24T10:00:00Z
+- [ ] tarea-vencida - Una llamada que ya toca (repo: firstmate) (kind: captain) (since 2026-09-24) (hold: Decision: dime si subo el cambio) (hold-kind: captain) (hold-until: 2000-01-01)
+  Captain hold set: 2026-09-24T10:00:00Z'
+PUERTO_I=$(puerto_libre)
+arrancar "$HOME_I" "$PUERTO_I"
+comprobar "$PUERTO_I" "una llamada con fecha futura no espera tu respuesta y enseña su fecha" '
+import json, sys
+d = json.load(sys.stdin)
+etapas = {c["id"]: [t["id"] for t in c["tarjetas"]] for c in d["columnas"]}
+tarjetas = {t["id"]: t for c in d["columnas"] for t in c["tarjetas"]}
+assert "tarea-aplazada" not in etapas["espera"], etapas
+assert "tarea-aplazada" in etapas["plan"], etapas
+assert tarjetas["tarea-aplazada"]["puede_responder"] is False, tarjetas["tarea-aplazada"]["puede_responder"]
+assert "2099-12-31" in tarjetas["tarea-aplazada"]["necesita"], tarjetas["tarea-aplazada"]["necesita"]
+assert d["cuenta"]["preguntan"] == 1, d["cuenta"]
+print("aplazada")
+'
+comprobar "$PUERTO_I" "una llamada con la fecha pasada vuelve a ser una llamada viva" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-vencida"][0]
+assert tarjeta["etapa"] == "espera", tarjeta["etapa"]
+assert tarjeta["puede_responder"] is True, tarjeta["puede_responder"]
+print("viva")
+'
+FM_HOME="$HOME_I" "$TABLERO" stop >/dev/null
+pass "la fecha futura aplaza la llamada y la pasada la deja viva"
+
+HOME_J=$(nuevo_home vocabulario)
+backlog_de "$HOME_J" '# Backlog
+
+## In flight
+- [ ] tarea-pausada - Un trabajo que espera fuera (repo: firstmate) (kind: ship) (since 2026-09-25)'
+printf 'working: paso 1\nawaiting: espero al juzgado\n' > "$HOME_J/state/tarea-pausada.status"
+PUERTO_J=$(puerto_libre)
+arrancar "$HOME_J" "$PUERTO_J" 127.0.0.1 "" "" FM_CLASSIFY_PAUSED_VERB=awaiting
+comprobar "$PUERTO_J" "el verbo de pausa del home se lee como aviso" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-pausada"][0]
+assert tarjeta["detalle"] == "espero al juzgado", tarjeta["detalle"]
+print("pausa")
+'
+FM_HOME="$HOME_J" "$TABLERO" stop >/dev/null
+
+printf 'working: paso 1\nrevisado-a-fondo\n' > "$HOME_J/state/tarea-pausada.status"
+PUERTO_K=$(puerto_libre)
+arrancar "$HOME_J" "$PUERTO_K" 127.0.0.1 "" "" FM_CAPTAIN_RE=revisado-a-fondo
+comprobar "$PUERTO_K" "el token de capitán del home se lee como aviso" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-pausada"][0]
+assert tarjeta["detalle"] == "revisado-a-fondo", tarjeta["detalle"]
+print("capitan")
+'
+FM_HOME="$HOME_J" "$TABLERO" stop >/dev/null
+pass "el tablero honra el vocabulario de estado documentado"
 
 # ------------------------------------------- escenario: arrancar, parar, estado
 

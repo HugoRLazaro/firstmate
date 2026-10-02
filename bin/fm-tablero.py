@@ -107,6 +107,7 @@ CLAVES_ANOTACION = (
 
 # El backend markdown escribe el bloqueo suelto en la fila: `blocked-by: <id> [- <motivo>]`.
 BLOQUEO = re.compile(r"blocked-by:\s*([^\s)]+)")
+FECHA_ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 SECCION_ESTADO = {
     "in flight": "in_flight",
@@ -223,6 +224,14 @@ def _desde_retencion(tarea: dict) -> str | None:
     return None
 
 
+def _fecha_aplazada(tarea: dict) -> str:
+    """La fecha con la que la fila deja la llamada para más tarde, si la trae."""
+    if not _retenida(tarea):
+        return ""
+    fecha = (tarea["anotaciones"].get("hold-until") or "").strip()
+    return fecha if FECHA_ISO.fullmatch(fecha) else ""
+
+
 def _entregable(tarea: dict) -> str | None:
     for linea in tarea["cuerpo"]:
         bajo = linea.lower()
@@ -265,17 +274,27 @@ def leer_meta(ruta: Path) -> dict:
     return datos
 
 
-# Verbos que bin/fm-classify-lib.sh reconoce en state/<id>.status. Los dos últimos
-# son la contabilidad de decisiones de firstmate, no un aviso del ayudante.
+# Verbos que bin/fm-classify-lib.sh reconoce en state/<id>.status, más los ajustes
+# documentados que esa librería honra (FM_CLASSIFY_PAUSED_VERB y FM_CAPTAIN_RE).
+# Los dos últimos son la contabilidad de decisiones de firstmate, no un aviso del
+# ayudante.
+VERBO_PAUSADO_DEFECTO = "paused"
+CAPITAN_RE_DEFECTO = (
+    r"done:|needs-decision:|blocked:|failed:|PR ready|checks green|ready in branch|merged"
+)
 VERBOS_ESTADO = (
-    "working", "needs-decision", "blocked", "done", "failed", "note", "paused",
+    "working", "needs-decision", "blocked", "done", "failed", "note",
+    os.environ.get("FM_CLASSIFY_PAUSED_VERB") or VERBO_PAUSADO_DEFECTO,
     "resolved", "captain-held",
 )
 VERBOS_CONTABLES = ("resolved", "captain-held")
-LEGADO_ESTADO = re.compile(
-    r"^\s*(?:done:|needs-decision:|blocked:|failed:|PR ready|checks green|ready in branch|merged)",
-    re.IGNORECASE,
-)
+try:
+    LEGADO_ESTADO = re.compile(
+        r"^\s*(?:" + (os.environ.get("FM_CAPTAIN_RE") or CAPITAN_RE_DEFECTO) + r")",
+        re.IGNORECASE,
+    )
+except re.error:
+    LEGADO_ESTADO = re.compile(r"^\s*(?:" + CAPITAN_RE_DEFECTO + r")", re.IGNORECASE)
 TOKEN_CORR = re.compile(r"corr=[0-9A-Fa-f]{16}")
 CLAVE_ANTES = re.compile(r"\[key=[^\]]*\]")
 CLAVE_EN_NOTA = re.compile(r"^\[key=[A-Za-z0-9._-]+\]")
@@ -430,9 +449,12 @@ ACCION_TEXTO = {
 }
 
 
-def clasificar(tarea: dict, novedad: dict | None, tiene_encargado: bool) -> dict:
+def clasificar(tarea: dict, novedad: dict | None, tiene_encargado: bool, hoy: str) -> dict:
     """Etapa, tipo de etiqueta y textos de una tarjeta, a partir del registro real."""
     retenida = _retenida(tarea)
+    aplazada = _fecha_aplazada(tarea)
+    if aplazada and aplazada <= hoy:
+        aplazada = ""
     estado = tarea["estado"]
     tipo_tarea = tarea["anotaciones"].get("kind", tarea["anotaciones"].get("hold-kind", ""))
     tarea["tipo"] = tipo_tarea
@@ -441,6 +463,8 @@ def clasificar(tarea: dict, novedad: dict | None, tiene_encargado: bool) -> dict
 
     if estado == "done":
         etapa, tipo = "hecho", "hecho"
+    elif retenida and aplazada:
+        etapa, tipo = "plan", "plan"
     elif retenida:
         etapa = "espera"
         tipo = "bloquea" if tipo_tarea in ("ship", "scout") else "confirma"
@@ -488,8 +512,12 @@ def clasificar(tarea: dict, novedad: dict | None, tiene_encargado: bool) -> dict
         tarjeta["quien"] = "Un ayudante de firstmate"
         tarjeta["desde"] = ("Terminado a las " + _hora(novedad["mtime"])) if novedad else ""
     elif etapa == "plan":
-        tarjeta["necesita"] = "Nada por ahora."
-        tarjeta["detalle"] = ""
+        if aplazada:
+            tarjeta["necesita"] = "Aplazada hasta el " + aplazada + "."
+            tarjeta["detalle"] = tarea["anotaciones"].get("hold", "")
+        else:
+            tarjeta["necesita"] = "Nada por ahora."
+            tarjeta["detalle"] = ""
     else:
         entrega = _entregable(tarea)
         tarjeta["necesita"] = "Nada."
@@ -568,10 +596,11 @@ def tablero(home: Path, ahora: datetime | None = None) -> dict:
         nuevas[tarea["id"]] = leer_novedad(state_dir, tarea["id"])
 
     charla = preguntas_de_tarjeta(emparejar(leer_conversacion(home)))
+    hoy = ahora.date().isoformat()
     tarjetas = []
     for tarea in tareas:
         encargado = (state_dir / f"{tarea['id']}.meta").exists()
-        tarjeta = clasificar(tarea, nuevas.get(tarea["id"]), encargado)
+        tarjeta = clasificar(tarea, nuevas.get(tarea["id"]), encargado, hoy)
         tarjeta["pregunta"] = charla.get(tarjeta["id"], {})
         tarjetas.append(tarjeta)
 

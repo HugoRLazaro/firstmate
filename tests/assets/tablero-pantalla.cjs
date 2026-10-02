@@ -316,6 +316,78 @@ if (MUTAR) {
   comprobar("el compositor se vacía después de enviar", vacio === "", JSON.stringify(vacio));
 }
 
+// La conversación se desplaza por sí sola y conserva el sitio del lector: con
+// la lista subida, un sondeo con mensaje nuevo no lleva al final; con la lista
+// al final, el mensaje nuevo la deja pegada abajo.
+if (MUTAR) {
+  await pagina.setViewportSize({ width: 1280, height: 960 });
+  for (let i = 1; i <= 8; i += 1) {
+    await pagina.evaluate(async (texto) => {
+      await fetch("/api/mensaje", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto })
+      });
+    }, "Relleno número " + i + ". " + "Esto es material para que la conversación tenga que desplazarse. ".repeat(4));
+  }
+  await pagina.waitForFunction(
+    () => [...document.querySelectorAll(".chat-log .msg.me .bubble")].some((n) => n.textContent.includes("Relleno número 8.")),
+    null,
+    { timeout: 30000 }
+  );
+  const capacidad = await pagina.evaluate(() => {
+    const log = document.getElementById("chatLog");
+    return { alto: log.scrollHeight, caja: log.clientHeight };
+  });
+  comprobar("la conversación tiene material para desplazarse", capacidad.alto > capacidad.caja + 200, JSON.stringify(capacidad));
+
+  const subida = await pagina.evaluate(() => {
+    const log = document.getElementById("chatLog");
+    log.scrollTop = 40;
+    return log.scrollTop;
+  });
+  await pagina.evaluate(async () => {
+    await fetch("/api/mensaje", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: "Con la lista subida, esto no debe llevarme al final." })
+    });
+  });
+  await pagina.waitForFunction(
+    () => [...document.querySelectorAll(".chat-log .msg.me .bubble")].some((n) => n.textContent.includes("no debe llevarme al final")),
+    null,
+    { timeout: 30000 }
+  );
+  const sigueSubida = await pagina.evaluate(() => document.getElementById("chatLog").scrollTop);
+  comprobar(
+    "con la lista subida, un mensaje nuevo conserva el sitio del lector",
+    Math.abs(sigueSubida - subida) <= 2,
+    JSON.stringify({ subida, sigueSubida })
+  );
+
+  await pagina.evaluate(() => {
+    const log = document.getElementById("chatLog");
+    log.scrollTop = log.scrollHeight;
+  });
+  await pagina.evaluate(async () => {
+    await fetch("/api/mensaje", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto: "Con la lista al final, esto debe dejarla abajo." })
+    });
+  });
+  await pagina.waitForFunction(
+    () => [...document.querySelectorAll(".chat-log .msg.me .bubble")].some((n) => n.textContent.includes("debe dejarla abajo")),
+    null,
+    { timeout: 30000 }
+  );
+  const abajo = await pagina.evaluate(() => {
+    const log = document.getElementById("chatLog");
+    return { top: log.scrollTop, fondo: log.scrollHeight - log.clientHeight };
+  });
+  comprobar("con la lista al final, un mensaje nuevo la deja pegada abajo", abajo.fondo - abajo.top <= 2, JSON.stringify(abajo));
+}
+
 // ------------------------------------------------- contador de la pestaña
 
 // El contador de la pestaña de conversación cuenta los mensajes sin contestar.

@@ -24,7 +24,6 @@ const ICONO = {
 const TIPOS = {
   bloquea: { label: "Bloquea trabajo", cls: "k-bloquea" },
   confirma: { label: "Espera tu decisión", cls: "k-confirma" },
-  sinprisa: { label: "Sin prisa", cls: "k-sinprisa" },
   subir: { label: "Listo para subir", cls: "k-subir" },
   ahora: { label: "En marcha", cls: "k-ahora" },
   plan: { label: "Sin empezar", cls: "k-plan" },

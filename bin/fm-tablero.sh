@@ -37,6 +37,8 @@
 #   state/tablero/servidor.json    con qué direcciones quedó arrancado
 #   state/tablero/servidor.log     lo que el servidor escribe
 #   state/tablero/conversacion.jsonl   la conversación, durable
+#   state/tablero/conversacion.lock    el cerrojo que serializa sus escrituras
+#   state/tablero/decision-<tarea>.txt las palabras del capitán, para su mecanismo
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
