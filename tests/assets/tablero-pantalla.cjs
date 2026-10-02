@@ -271,6 +271,28 @@ if (MUTAR) {
   comprobar("el compositor se vacía después de enviar", vacio === "", JSON.stringify(vacio));
 }
 
+// ------------------------------------------------- contador de la pestaña
+
+// El contador de la pestaña de conversación cuenta los mensajes sin contestar.
+// El tablero cuenta otra cosa (tareas que esperan tu decisión) y su repintado no
+// puede pisarlo. Un clic en una columna repinta el tablero sin tocar la red.
+await esperarSondeos(sondeos + 1);
+const sinContestar = await pagina.$$eval(".chat-log .state.wait", (n) => n.length);
+await pagina.click("#tabTablero");
+await pagina.waitForSelector(".board .col");
+await pagina.click(".col:nth-child(5) .fold");
+const enPestana = await pagina.textContent("#chatPend");
+const enTablero = Number(await pagina.textContent("#waitN"));
+comprobar(
+  "el repintado del tablero no pisa el contador de la pestaña de conversación",
+  enPestana === String(sinContestar) && enTablero !== sinContestar,
+  JSON.stringify({ enPestana, sinContestar, enTablero })
+);
+await pagina.click(".col:nth-child(5) .fold");
+await pagina.waitForTimeout(350);
+await pagina.click("#tabChat");
+await pagina.waitForSelector("#panelChat:not([hidden])");
+
 // ------------------------------------------------------------- ventana estrecha
 
 await pagina.setViewportSize({ width: ESTRECHO.ancho, height: ESTRECHO.alto });

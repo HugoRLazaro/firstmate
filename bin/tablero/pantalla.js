@@ -176,11 +176,6 @@ function pintar(datos) {
     pill.hidden = true;
   }
 
-  const pend = datos.cuenta.preguntan || 0;
-  const globo = document.getElementById("chatPend");
-  globo.textContent = String(pend);
-  globo.hidden = pend === 0;
-
   subEl.textContent = datos.generado_texto ? "Actualizado el " + datos.generado_texto + "." : "";
   aviso(datos.aviso);
 }

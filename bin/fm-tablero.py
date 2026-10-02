@@ -74,19 +74,18 @@ MESES = (
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 )
 
-# Las cinco etapas. `orden` es el del kanban, de izquierda a derecha; `orden_lista`
-# pone delante lo que le toca al capitán, que es como se lee la lista.
+# Las cinco etapas, en el orden del kanban de izquierda a derecha.
 ETAPAS = (
     {"id": "ahora", "nombre": "Ahora mismo", "motivo": "En marcha en este momento",
-     "color": "#1d4ed8", "orden": 0, "orden_lista": 2},
+     "color": "#1d4ed8"},
     {"id": "espera", "nombre": "Espera tu respuesta", "motivo": "Necesita que decidas algo",
-     "color": "#b42318", "orden": 1, "orden_lista": 0},
+     "color": "#b42318"},
     {"id": "subir", "nombre": "Terminado, espera subir", "motivo": "Hecho y probado. Falta tu visto bueno",
-     "color": "#0e7490", "orden": 2, "orden_lista": 1},
+     "color": "#0e7490"},
     {"id": "plan", "nombre": "Planificado, sin empezar", "motivo": "Previsto, aún no ha arrancado",
-     "color": "#8a929d", "orden": 3, "orden_lista": 3},
+     "color": "#8a929d"},
     {"id": "hecho", "nombre": "Terminado y publicado", "motivo": "Hecho y ya en producción",
-     "color": "#0f6f45", "orden": 4, "orden_lista": 4, "plegada": True},
+     "color": "#0f6f45", "plegada": True},
 )
 ETAPA_POR_ID = {e["id"]: e for e in ETAPAS}
 
