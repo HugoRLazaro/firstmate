@@ -117,7 +117,15 @@ dir_movil() {
 }
 
 dir_local() {
-  printf 'http://127.0.0.1:%s' "$(puerto)"
+  local hosts primero host
+  hosts="$(direcciones)"
+  for host in $hosts; do
+    case "$host" in
+      127.0.0.1|localhost) printf 'http://%s:%s' "$host" "$(puerto)"; return 0 ;;
+    esac
+  done
+  primero="${hosts%% *}"
+  printf 'http://%s:%s' "$primero" "$(puerto)"
 }
 
 proceso_vivo() {
@@ -141,6 +149,7 @@ escucha() {
 cmd_start() {
   need_python
   mkdir -p "$TABLERO_DIR"
+  chmod 700 "$TABLERO_DIR"
   if proceso_vivo; then
     info "El tablero ya estaba arrancado (pid $(cat "$PIDFILE"))."
     cmd_url
@@ -153,7 +162,7 @@ cmd_start() {
   ip="$(tailscale_ip)"
 
   local -a argumentos=(serve --home "$FM_HOME" --port "$port")
-  local host
+  local host escuchando=""
   for host in $hosts; do
     argumentos+=(--host "$host")
   done
@@ -171,13 +180,14 @@ cmd_start() {
       tail -n 5 "$LOGFILE" >&2 || true
       return 1
     fi
-    # Basta con que conteste la dirección local: las demás se abren en el mismo proceso.
-    if escucha 127.0.0.1 "$port"; then
-      break
-    fi
+    # Basta con que conteste una de las direcciones configuradas: el mismo
+    # proceso abre todas.
+    for host in $hosts; do
+      if escucha "$host" "$port"; then escuchando=$host; break 2; fi
+    done
     sleep 0.2
   done
-  if ! escucha 127.0.0.1 "$port"; then
+  if [ -z "$escuchando" ]; then
     printf 'fm-tablero: el servidor no llegó a escuchar en el puerto %s:\n' "$port" >&2
     tail -n 5 "$LOGFILE" >&2 || true
     return 1

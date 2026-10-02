@@ -35,7 +35,7 @@ board asks, firstmate does.
 
 A question or an answer written in a card is ALSO a message to firstmate, so it
 leaves exactly one note in that inbox, naming the task and carrying the
-captain's words verbatim, before the decision mechanism is asked to close or
+captain's words verbatim, after the decision mechanism is asked to close or
 release anything. The chat and the move/remove requests keep their own single
 note, and no action ever writes two.
 
@@ -68,6 +68,7 @@ PAGINA = Path(__file__).resolve().parent / "tablero"
 MAX_CUERPO = 64 * 1024
 MAX_MENSAJES = 300
 MAX_RESPUESTA = 8192
+SLUG_TAREA = re.compile(r"[A-Za-z0-9._-]+")
 
 MESES = (
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -91,7 +92,7 @@ ETAPA_POR_ID = {e["id"]: e for e in ETAPAS}
 
 # Claves que el backlog escribe entre paréntesis al final de la línea de una tarea.
 CLAVES_ANOTACION = (
-    "repo", "kind", "since", "done", "reported", "hold", "hold-kind", "hold-until",
+    "repo", "kind", "since", "done", "merged", "reported", "hold", "hold-kind", "hold-until",
     "blocks", "deps", "priority", "deadline", "closed", "link", "links",
     "delivery-state", "blocked-by", "delivery", "origin", "until",
 )
@@ -502,6 +503,19 @@ def _rutas_conversacion(home: Path) -> tuple[Path, Path]:
     return directorio / "conversacion.jsonl", directorio / "conversacion.lock"
 
 
+def _carpeta_privada(home: Path) -> Path:
+    carpeta = home / "state" / "tablero"
+    carpeta.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(carpeta, 0o700)
+    return carpeta
+
+
+def _abrir_privado(ruta: Path, modo: str, banderas: int):
+    fd = os.open(ruta, banderas, 0o600)
+    os.fchmod(fd, 0o600)
+    return os.fdopen(fd, modo, encoding="utf-8")
+
+
 def leer_conversacion(home: Path) -> list[dict]:
     ruta, _ = _rutas_conversacion(home)
     if not ruta.exists():
@@ -536,7 +550,7 @@ def anadir_mensaje(home: Path, de: str, texto: str, tipo: str = "mensaje",
                    nota: str = "", mensaje_id: str = "") -> dict:
     """Añade un mensaje al registro durable, con cerrojo y una sola escritura."""
     ruta, cerrojo = _rutas_conversacion(home)
-    ruta.parent.mkdir(parents=True, exist_ok=True)
+    _carpeta_privada(home)
     ahora = datetime.now(timezone.utc)
     registro = {
         "id": mensaje_id or nuevo_mensaje_id(),
@@ -551,9 +565,9 @@ def anadir_mensaje(home: Path, de: str, texto: str, tipo: str = "mensaje",
     if responde_a:
         registro["responde_a"] = responde_a
     linea = json.dumps(registro, ensure_ascii=False) + "\n"
-    with cerrojo.open("a+") as candado:
+    with _abrir_privado(cerrojo, "a+", os.O_RDWR | os.O_CREAT) as candado:
         fcntl.flock(candado, fcntl.LOCK_EX)
-        with ruta.open("a", encoding="utf-8") as fh:
+        with _abrir_privado(ruta, "a", os.O_WRONLY | os.O_CREAT | os.O_APPEND) as fh:
             fh.write(linea)
             fh.flush()
             os.fsync(fh.fileno())
@@ -638,11 +652,10 @@ def responder_decision(home: Path, tarea: str, texto: str) -> dict:
         return {"ok": False, "error": "La respuesta está vacía."}
     if len(limpio.encode("utf-8")) > MAX_RESPUESTA:
         return {"ok": False, "error": "La respuesta es demasiado larga."}
-    carpeta = home / "state" / "tablero"
-    carpeta.mkdir(parents=True, exist_ok=True)
+    carpeta = _carpeta_privada(home)
     decision = carpeta / f"decision-{tarea}.txt"
-    decision.write_text(limpio + "\n", encoding="utf-8")
-    os.chmod(decision, 0o600)
+    with _abrir_privado(decision, "w", os.O_WRONLY | os.O_CREAT | os.O_TRUNC) as fh:
+        fh.write(limpio + "\n")
 
     con_encargado = (home / "state" / f"{tarea}.meta").exists()
     comando = [str(home / "bin" / "fm-captain-hold.sh"), "answer", tarea,
@@ -813,6 +826,9 @@ class Manejador(BaseHTTPRequestHandler):
         if not tarea:
             self._json({"ok": False, "error": "Falta la tarea."}, 400)
             return
+        if not SLUG_TAREA.fullmatch(tarea):
+            self._json({"ok": False, "error": "El identificador de la tarea no es válido."}, 400)
+            return
         if not limpio:
             self._json({"ok": False, "error": "La respuesta está vacía."}, 400)
             return
@@ -896,9 +912,12 @@ def servir(home: Path, hosts: list[str], puerto: int) -> int:
             print("fm-tablero: no se abre el tablero a toda la máquina; "
                   "usa su dirección de Tailscale o 127.0.0.1.", file=sys.stderr)
             return 2
+    origenes = {f"http://{h}:{puerto}" for h in hosts}
+    if any(h in ("127.0.0.1", "localhost", "::1") for h in hosts):
+        origenes.update(f"http://{alias}:{puerto}" for alias in ("127.0.0.1", "localhost"))
     clase = type("ManejadorDelHome", (Manejador,), {
         "home": home,
-        "origenes": tuple(f"http://{h}:{puerto}" for h in hosts),
+        "origenes": tuple(origenes),
     })
     servidores = []
     for host in hosts:

@@ -74,6 +74,7 @@ printf 'window=default:w1:p1\nharness=pi\nproject=/home/firstmate/projects/licit
 printf 'done: ready in branch fm/motor-de-aditivas\n' > "$HOME_DIR/state/motor-de-aditivas.status"
 printf 'window=default:w1:p2\nharness=pi\n' > "$HOME_DIR/state/barra-por-sobres.meta"
 printf 'working: paso 3 en marcha\n' > "$HOME_DIR/state/barra-por-sobres.status"
+printf 'entered: 2026-09-25T10:00:00Z\nexpected_return: 2026-09-26\n' > "$HOME_DIR/state/.afk-contract"
 
 # La conversación es durable, así que se siembra escribiéndola con el propio
 # comando del tablero: primero un mensaje del capitán, luego su respuesta.

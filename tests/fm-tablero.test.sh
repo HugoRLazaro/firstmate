@@ -60,14 +60,16 @@ PY
 }
 
 # pide <metodo> <url> [cuerpo-json]: the HTTP response body, error or not.
-pide() {
-  python3 - "$1" "$2" "${3-}" <<'PY'
+pide() {  # <metodo> <url> [cuerpo-json] [origin]
+  python3 - "$1" "$2" "${3-}" "${4-}" <<'PY'
 import sys, urllib.error, urllib.request
-metodo, url, cuerpo = sys.argv[1], sys.argv[2], sys.argv[3]
+metodo, url, cuerpo, origen = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 datos = cuerpo.encode("utf-8") if cuerpo else None
 peticion = urllib.request.Request(url, data=datos, method=metodo)
 if datos:
     peticion.add_header("Content-Type", "application/json")
+if origen:
+    peticion.add_header("Origin", origen)
 try:
     with urllib.request.urlopen(peticion, timeout=30) as respuesta:
         sys.stdout.write(respuesta.read().decode("utf-8"))
@@ -100,8 +102,9 @@ comprobar_charla() {  # <puerto> <descripcion> <programa>
   comprobar_json "http://127.0.0.1:$1/api/conversacion" "$2" "$3"
 }
 
-escucha() {
-  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+escucha() {  # <puerto> [host]
+  local host=${2:-127.0.0.1}
+  (exec 3<>"/dev/tcp/$host/$1") 2>/dev/null
 }
 
 # nuevo_home <nombre> <real|shim>: a home with a fresh backlog and state dir.
@@ -148,9 +151,9 @@ SH
 }
 
 # arrancar <home> <puerto>: start through the shipped command and remember the pid.
-arrancar() {
-  local home=$1 puerto=$2 salida
-  salida=$(FM_HOME="$home" FM_TABLERO_BIND=127.0.0.1 FM_TABLERO_PORT="$puerto" \
+arrancar() {  # <home> <puerto> [bind]
+  local home=$1 puerto=$2 bind=${3:-127.0.0.1} salida
+  salida=$(FM_HOME="$home" FM_TABLERO_BIND="$bind" FM_TABLERO_PORT="$puerto" \
     "$TABLERO" start 2>&1) || fail "arrancar el tablero: $salida"
   assert_contains "$salida" "Tablero arrancado" "start dice que quedó arrancado"
   if [ -s "$home/state/tablero/servidor.pid" ]; then
@@ -158,7 +161,7 @@ arrancar() {
   fi
   local intento
   for ((intento = 0; intento < 40; intento++)); do
-    escucha "$puerto" && return 0
+    escucha "$puerto" "$bind" && return 0
     sleep 0.25
   done
   fail "el tablero no escuchó en el puerto $puerto"
@@ -192,7 +195,7 @@ backlog_de "$HOME_A" '# Backlog
   Captain hold set: 2026-09-24T10:00:00Z
 - [ ] tarea-plan - Un trabajo previsto (repo: firstmate) (kind: ship) (since 2026-09-25)
 ## Done
-- [x] tarea-hecha - Algo ya publicado (repo: firstmate) (kind: ship) (done 2026-09-25)
+- [x] tarea-hecha - Algo ya publicado (repo: firstmate) (kind: ship) (done 2026-09-25) (merged 2026-07-06)
   local main'
 printf 'working: paso 2 en marcha\n' > "$HOME_A/state/tarea-ahora.status"
 printf 'window=default:w1:p1\nharness=pi\n' > "$HOME_A/state/tarea-ahora.meta"
@@ -236,6 +239,15 @@ assert "cerrada" in tarjeta["respuesta_accion"], tarjeta["respuesta_accion"]
 assert "2026-09-24" in tarjeta["desde"], tarjeta["desde"]
 assert tarjeta["area"] == "licitaciones-platform", tarjeta["area"]
 assert "repo:" not in tarjeta["titulo"], tarjeta["titulo"]
+'
+
+comprobar "$PUERTO_A" "una fila ya aterrizada con merged al final se lee sin arrastrar anotaciones" '
+import json, sys
+d = json.load(sys.stdin)
+tarjeta = [t for c in d["columnas"] for t in c["tarjetas"] if t["id"] == "tarea-hecha"][0]
+assert tarjeta["area"] == "firstmate", tarjeta
+assert tarjeta["titulo"] == "Algo ya publicado", tarjeta["titulo"]
+print("merged")
 '
 
 comprobar "$PUERTO_A" "el trabajo terminado trae lo que dijo su ayudante al acabar" '
@@ -310,6 +322,20 @@ pass "las palabras del capitán llegan al mecanismo de decisión tal cual, con a
 assert_contains "$RESPUESTA" "queda cerrada" "el tablero dice que la decisión queda cerrada"
 pass "el tablero confirma que la decisión queda cerrada"
 
+PERMISOS=$(python3 - "$HOME_B/state/tablero" <<'PY'
+import os, stat, sys
+tablero = sys.argv[1]
+modo = stat.S_IMODE(os.stat(tablero).st_mode)
+assert modo == 0o700, oct(modo)
+for nombre in ("conversacion.jsonl", "conversacion.lock"):
+    modo = stat.S_IMODE(os.stat(os.path.join(tablero, nombre)).st_mode)
+    assert modo == 0o600, (nombre, oct(modo))
+print("700/600")
+PY
+) || fail "la conversación durable y su carpeta deben ser de sólo el dueño"
+assert_contains "$PERMISOS" "700/600" "la conversación durable y su carpeta son de sólo el dueño"
+pass "la conversación durable y su carpeta se guardan con permisos de dueño"
+
 # Un encargado en marcha esperando la respuesta es trabajo que sigue: se suelta.
 CUERPO_TRABAJO=$(python3 -c 'import json; print(json.dumps({"tarea":"tarea-trabajo","texto":"a. si, se construye"}))')
 pide POST "http://127.0.0.1:$PUERTO_B/api/responder" "$CUERPO_TRABAJO" >/dev/null
@@ -324,6 +350,15 @@ pide POST "http://127.0.0.1:$PUERTO_B/api/responder" '{"tarea":"tarea-decision",
 assert_equals "$ANTES" "$(wc -l < "$HOME_B/recorder-hold-argv.txt")" \
   "una respuesta vacía no llega al mecanismo de decisión"
 pass "una respuesta vacía no llega al mecanismo de decisión"
+
+ANTES=$(wc -l < "$HOME_B/recorder-hold-argv.txt")
+MALA=$(pide POST "http://127.0.0.1:$PUERTO_B/api/responder" \
+  '{"tarea":"x/y","texto":"Esto no puede tocar ningún fichero."}' 2>/dev/null || true)
+assert_contains "$MALA" '"ok": false' \
+  "una tarea que no es un identificador válido se rechaza con una respuesta, sin cortar la conexión"
+assert_equals "$ANTES" "$(wc -l < "$HOME_B/recorder-hold-argv.txt")" \
+  "una tarea que no es un identificador válido no llega al mecanismo de decisión"
+pass "una tarea inválida se rechaza limpiamente y no escribe nada"
 
 # Lo escrito en una tarjeta avisa al buzón igual que un mensaje del chat: una sola
 # nota por envío, con la tarea, las palabras del capitán tal cual y el camino de
@@ -590,6 +625,15 @@ assert "muevan" in pedido["texto"] and "jerga" not in pedido["texto"], pedido
 print("2 peticiones")
 '
 
+assert_contains "$(pide POST "http://127.0.0.1:$PUERTO_D/api/mensaje" \
+  '{"texto":"La misma página abierta como localhost también escribe."}' "http://localhost:$PUERTO_D")" \
+  '"ok": true' "la propia página servida como localhost puede escribir"
+pass "la propia página servida como localhost puede escribir: el alias de loopback no se rechaza"
+assert_contains "$(pide POST "http://127.0.0.1:$PUERTO_D/api/mensaje" \
+  '{"texto":"Esto viene de otra página."}' "http://otra-pagina.example")" \
+  '"ok": false' "una página ajena sigue sin poder escribir en el tablero"
+pass "una página ajena sigue rechazada aunque el alias local se acepte"
+
 # ------------------------------------------- escenario: arrancar, parar, estado
 
 assert_contains "$(FM_HOME="$HOME_D" FM_TABLERO_BIND=127.0.0.1 FM_TABLERO_PORT="$PUERTO_D" "$TABLERO" status)" \
@@ -598,6 +642,20 @@ pass "status dice que está arrancado"
 assert_equals "http://127.0.0.1:$PUERTO_D" \
   "$(FM_HOME="$HOME_D" FM_TABLERO_BIND=127.0.0.1 FM_TABLERO_PORT="$PUERTO_D" "$TABLERO" url)" \
   "url dice con qué dirección se abre desde esta máquina"
+
+if python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.2", 0))' 2>/dev/null; then
+  HOME_F=$(nuevo_home bind-sin-loopback)
+  backlog_de "$HOME_F" '# Backlog'
+  PUERTO_F=$(puerto_libre)
+  arrancar "$HOME_F" "$PUERTO_F" 127.0.0.2
+  assert_contains "$(FM_HOME="$HOME_F" FM_TABLERO_BIND=127.0.0.2 FM_TABLERO_PORT="$PUERTO_F" "$TABLERO" status)" \
+    "http://127.0.0.2:$PUERTO_F" \
+    "con un bind sin loopback, status anuncia la dirección que sí escucha"
+  pass "con un bind sin loopback el tablero arranca y anuncia la dirección que escucha"
+  FM_HOME="$HOME_F" "$TABLERO" stop >/dev/null
+else
+  echo "skip: live: esta máquina no puede escuchar en 127.0.0.2"
+fi
 
 FM_HOME="$HOME_A" "$TABLERO" stop >/dev/null
 sleep 0.5

@@ -177,7 +177,7 @@ function pintar(datos) {
   }
 
   subEl.textContent = datos.generado_texto ? "Actualizado el " + datos.generado_texto + "." : "";
-  aviso(datos.aviso);
+  aviso(textoAviso(datos));
 }
 
 function pintarColumna(col) {
@@ -219,7 +219,8 @@ function pintarColumna(col) {
   colEl.appendChild(cuerpo);
 
   colEl.addEventListener("dragover", (ev) => {
-    if (!arrastrando || arrastrando === col.id) return;
+    const tarjeta = arrastrando ? tarjetaPorId(arrastrando) : null;
+    if (!tarjeta || tarjeta.etapa === col.id) return;
     ev.preventDefault();
     colEl.classList.add("over");
   });
@@ -227,7 +228,8 @@ function pintarColumna(col) {
   colEl.addEventListener("drop", (ev) => {
     ev.preventDefault();
     colEl.classList.remove("over");
-    if (arrastrando && arrastrando !== col.id) pedirMover(arrastrando, col);
+    const tarjeta = arrastrando ? tarjetaPorId(arrastrando) : null;
+    if (tarjeta && tarjeta.etapa !== col.id) pedirMover(arrastrando, col);
   });
   return colEl;
 }
@@ -723,16 +725,18 @@ async function cargar(urgente) {
   if (!urgente && huella === huellaEstado) return;
   huellaEstado = huella;
   estado = datos;
-  tono(datos);
   pintar(datos);
 }
 
-function tono(datos) {
-  if (!datos.ausencia) return;
-  /* El modo ausencia no cambia lo que se puede hacer aquí: el tablero sigue
-     recibiendo. Solo se avisa, para que el capitán sepa qué esperar. */
-  const texto = datos.ausencia.texto || "Estás en modo ausencia.";
-  aviso(texto);
+function textoAviso(datos) {
+  const trozos = [];
+  if (datos.aviso) trozos.push(datos.aviso);
+  if (datos.ausencia) {
+    /* El modo ausencia no cambia lo que se puede hacer aquí: el tablero sigue
+       recibiendo. Solo se avisa, para que el capitán sepa qué esperar. */
+    trozos.push(datos.ausencia.texto || "Estás en modo ausencia.");
+  }
+  return trozos.join(" ");
 }
 
 function conectar() {

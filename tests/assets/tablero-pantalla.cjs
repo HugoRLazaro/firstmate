@@ -88,8 +88,10 @@ pagina.on("request", (p) => {
 });
 
 let sondeos = 0;
+let peticiones = 0;
 pagina.on("request", (p) => {
   if (p.url().endsWith("/api/estado")) sondeos += 1;
+  if (p.url().endsWith("/api/peticion")) peticiones += 1;
 });
 
 async function esperarSondeos(cuantos) {
@@ -104,8 +106,18 @@ async function captura(nombre, completa = true) {
 
 // ---------------------------------------------------------------- la pantalla
 
+const ausenciaInicial = (await (await fetch(BASE + "/api/estado")).json()).ausencia;
 await pagina.goto(BASE, { waitUntil: "networkidle" });
 await pagina.waitForSelector(".board .col", { timeout: 15000 });
+
+if (ausenciaInicial) {
+  const textoAviso = ((await pagina.textContent("#aviso")) || "").trim();
+  comprobar(
+    "el modo ausencia se avisa aunque el tablero no traiga otro aviso que enseñar",
+    (await pagina.isVisible("#aviso")) && textoAviso.includes("ausencia"),
+    JSON.stringify(textoAviso)
+  );
+}
 
 const nombres = await pagina.$$eval(".col-name", (n) => n.map((e) => e.textContent.trim()));
 comprobar(
@@ -127,6 +139,25 @@ comprobar("cada tarjeta que espera dice qué necesita del capitán", esperan.len
 
 const titulos = await pagina.$$eval(".card h3", (n) => n.map((e) => e.textContent));
 comprobar("ningún título arrastra las anotaciones internas del registro", !titulos.some((t) => /\(repo:|\(kind:|\(hold:/.test(t)));
+
+// Arrastrar a la propia columna no es un movimiento: no se pide nada.
+{
+  const columna = pagina.locator(".col:nth-child(2)");
+  const tarjeta = columna.locator(".card").first();
+  if (await tarjeta.count()) {
+    await tarjeta.dragTo(columna);
+    await pagina.waitForTimeout(300);
+    comprobar("soltar una tarjeta en su propia columna no pide moverla", peticiones === 0, String(peticiones));
+  }
+}
+if (MUTAR) {
+  const tarjeta = pagina.locator(".col:nth-child(1) .card").first();
+  if (await tarjeta.count()) {
+    await tarjeta.dragTo(pagina.locator(".col:nth-child(2)"));
+    await pagina.waitForTimeout(600);
+    comprobar("soltar una tarjeta en otra columna sí pide moverla", peticiones === 1, String(peticiones));
+  }
+}
 
 const pie = await pagina.textContent(".foot");
 comprobar("la pantalla dice que mover y quitar sólo se piden", /piden/i.test(pie) && /firstmate/i.test(pie));
@@ -285,7 +316,7 @@ const enPestana = await pagina.textContent("#chatPend");
 const enTablero = Number(await pagina.textContent("#waitN"));
 comprobar(
   "el repintado del tablero no pisa el contador de la pestaña de conversación",
-  enPestana === String(sinContestar) && enTablero !== sinContestar,
+  enPestana === String(sinContestar) && (!MUTAR || enTablero !== sinContestar),
   JSON.stringify({ enPestana, sinContestar, enTablero })
 );
 await pagina.click(".col:nth-child(5) .fold");
