@@ -1295,6 +1295,9 @@ FM_CRASH_BACKOFF=60                # seconds to wait after crossing the crash th
 FM_CRASH_NORMAL_SLEEP=5            # seconds to wait after an isolated watcher crash
 FM_LOG_MAX_BYTES=1048576           # daemon log size that triggers trimming
 FM_LOG_KEEP_LINES=2000             # daemon log lines kept when trimming
+# work board; see "Work board" above
+FM_TABLERO_PORT=8787    # overrides config/tablero-port
+FM_TABLERO_BIND=        # overrides config/tablero-bind; space-separated listen addresses, default the machine's Tailscale address plus 127.0.0.1
 # spoken interface and captain inbox; see "Spoken interface and captain inbox" above
 FM_VOICE_REGION=        # overrides config/voice-region for one relay run
 FM_VOICE_MODEL=         # overrides config/voice-model for one relay run
