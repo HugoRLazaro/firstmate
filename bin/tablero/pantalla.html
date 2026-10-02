@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Tablero del trabajo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%2318181b'/%3E%3Crect x='3' y='4' width='2.6' height='8' rx='1' fill='%237eedb8'/%3E%3Crect x='6.7' y='4' width='2.6' height='5' rx='1' fill='%23ffffff'/%3E%3Crect x='10.4' y='4' width='2.6' height='6.5' rx='1' fill='%239aa0aa'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="pantalla.css">
+</head>
+<body data-vista="tablero">
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Tablero del trabajo</h1>
+      <p class="sub" id="sub">Leyendo el estado real&hellip;</p>
+    </div>
+    <div class="tools">
+      <div class="waiting" aria-live="polite"><b id="waitN">0</b><span id="waitT">esperan tu respuesta</span></div>
+      <span class="blocking-pill" id="blockPill" hidden><span id="blockT"></span></span>
+    </div>
+  </header>
+
+  <div class="tabbar">
+    <div class="tabs" role="tablist" aria-label="Secciones">
+      <button type="button" class="tab" id="tabTablero" role="tab" aria-selected="true" aria-controls="panelTablero" data-vista="tablero">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="1.8" y="2" width="3.4" height="12" rx="1"/><rect x="6.3" y="2" width="3.4" height="8" rx="1"/><rect x="10.8" y="2" width="3.4" height="10" rx="1"/></svg>
+        Tablero
+      </button>
+      <button type="button" class="tab" id="tabChat" role="tab" aria-selected="false" aria-controls="panelChat" data-vista="chat">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5h12a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 16 14H9l-3.5 3v-3H4a1.5 1.5 0 0 1-1.5-1.5V6A1.5 1.5 0 0 1 4 4.5z"/></svg>
+        Conversación
+        <span class="pend" id="chatPend" hidden></span>
+      </button>
+    </div>
+    <div class="switch" role="group" aria-label="Cómo ver el tablero">
+      <button type="button" data-view="etapas" aria-pressed="true">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="1.8" y="2" width="3.4" height="12" rx="1"/><rect x="6.3" y="2" width="3.4" height="8" rx="1"/><rect x="10.8" y="2" width="3.4" height="10" rx="1"/></svg>
+        Kanban
+      </button>
+      <button type="button" data-view="lista" aria-pressed="false">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>
+        Lista
+      </button>
+    </div>
+  </div>
+
+  <p class="aviso" id="aviso" hidden></p>
+
+  <section class="panel" id="panelTablero" role="tabpanel" aria-labelledby="tabTablero">
+    <main id="main"></main>
+  </section>
+
+  <section class="panel" id="panelChat" role="tabpanel" aria-labelledby="tabChat" hidden>
+    <aside class="chat chat-full" aria-label="Conversación con firstmate">
+      <div class="chat-head">
+        <div class="chat-title">
+          <span class="sec-dot"></span>
+          <h2>Conversación</h2>
+          <span class="chat-pend" id="chatHeadPend" hidden></span>
+        </div>
+        <p class="chat-note">Escribe aquí propuestas, preguntas o encargos nuevos. Firstmate los recibe igual que si se lo dijeras en su chat, y contesta cuando le toca el turno: en segundos o un par de minutos.</p>
+      </div>
+      <div class="chat-log" id="chatLog" tabindex="0" aria-live="polite" aria-label="Mensajes"></div>
+      <form class="composer" id="composer">
+        <div class="composer-box">
+          <textarea id="chatInput" rows="1" placeholder="Propuestas, preguntas, encargos&hellip;" aria-label="Mensaje para firstmate"></textarea>
+          <button type="submit" class="btn btn-primary" id="chatSend" disabled>
+            Enviar
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10h11M10.5 5.5L15 10l-4.5 4.5"/></svg>
+          </button>
+        </div>
+        <p class="composer-hint" id="composerHint">Intro envía. Mayúsculas e Intro, otra línea.</p>
+      </form>
+    </aside>
+  </section>
+
+  <footer class="foot">
+    <span>Arrastrar una tarjeta, «Mover» y «Quitar» no cambian nada por sí solos: se lo <b>piden</b> a firstmate, que es quien lo hace. Responder una decisión sí la cierra en el momento.</span>
+  </footer>
+</div>
+
+<div class="menu" id="menu" role="menu"></div>
+
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <form method="dialog" class="dlg">
+    <h2 id="dlgTitle">¿Pedir que quite esto?</h2>
+    <p class="dlg-card" id="dlgCard"></p>
+    <p>El tablero no borra nada. Lo que hace es <b>pedírselo a firstmate</b>:</p>
+    <ul class="dlg-list">
+      <li>firstmate recibe el aviso de que ya no la quieres,</li>
+      <li><b>te lo confirma antes de borrar nada</b>,</li>
+      <li>y solo la borra cuando se lo digas a él.</li>
+    </ul>
+    <div class="dlg-actions">
+      <button class="btn btn-ghost" value="no" type="submit">Cancelar</button>
+      <button class="btn btn-danger-solid" value="yes" type="submit" id="dlgYes">Sí, pedirlo</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"><span id="toastT"></span></div>
+
+<script src="pantalla.js"></script>
+</body>
+</html>
