@@ -426,6 +426,8 @@ The report is the only thing that survives, so anything worth keeping must be in
    floors printed there; delete its intermediate data when it finishes, keeping only the result.
    Before you report a terminal state, stop every process you started that the result does not
    need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   \`pkill\`, \`killall\`, or name pattern, which also kills the jobs of every other worker on this host.
 
 $INBOX_SECTION
 
@@ -528,6 +530,8 @@ $ASK_USER_BLOCK
    floors printed there; delete its intermediate data when it finishes, keeping only the result.
    Before you report a terminal state, stop every process you started that the result does not
    need running: a job left behind keeps its memory after you stop.
+   Stop only that job's own pid, or a pattern anchored to this worktree's path: never a broad
+   \`pkill\`, \`killall\`, or name pattern, which also kills the jobs of every other worker on this host.
 
 $INBOX_SECTION
 

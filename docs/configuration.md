@@ -658,6 +658,8 @@ The watcher polls every `FM_CHECK_INTERVAL` seconds (default 300), so this is an
   Keep the caps of the jobs running at once, plus 0.4 GB per live worker, under the host's memory minus the launch floor.
   Every worker brief carries this rule.
   A node or vitest test suite is such a job and also gets a bounded worker count, because each test worker can grow to its own heap limit and, under WSL, every worker that aborts is written whole to the host disk as a crash dump.
+- A worker stops a job it started only by that job's own pid, or by a pattern anchored to its worktree's path, never with a broad `pkill`, `killall`, or name pattern, which would also kill the jobs of every other worker on the shared host.
+  Every worker brief carries this rule.
 - A job that will write more than a few GB checks free space first and deletes its intermediate data when it finishes; every worker brief carries this rule too.
   `bin/fm-memory.sh status` prints the free space on the host and root disks, the disk floors, and the size of the WSL crash-dump folder when there is one.
 - Cleanup never removes a task's `data/<id>/` directory.
