@@ -3869,6 +3869,11 @@ if [ "$KIND" != secondmate ]; then
         exit 1
       }
       [ "$RELAUNCH" -ne 1 ] || RELAUNCH_REPLACEMENT_BUSY_GEN=$BUSY_GEN
+    elif [ "$RELAUNCH" -eq 1 ]; then
+      "$FM_ROOT/bin/fm-busy-event.sh" retire "$STATE_REAL" "$ID" --current-gen || {
+        echo "error: failed to retire the prior busy-state contract for $ID" >&2
+        exit 1
+      }
     fi
     ;;
   opencode* | pi | pi-signed | omp)

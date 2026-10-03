@@ -365,6 +365,34 @@ test_raw_claude_launch_has_no_semantic_wiring() {
   pass "raw claude launch remains unwired and classifies unknown"
 }
 
+# A canonical spawn arms the busy contract. A raw claude relaunch cannot
+# receive the --settings layer that would wire a writer, so the replacement's
+# launch must retire the prior incarnation instead of inheriting its stale
+# busy/idle label.
+test_raw_claude_relaunch_retires_the_prior_busy_record() {
+  local rec id=busy-cl-relaunch out state window
+  rec=$(make_spawn_case claude-raw-relaunch claude "$id")
+  read_case_record "$rec"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR")
+  expect_code 0 $? "the canonical claude spawn should succeed: $out"
+  state="$HOME_DIR/state"
+  assert_present "$state/$id.busy-gen" "the canonical spawn should arm a busy generation"
+  out=$(classify claude "$id" "$state")
+  [ "$out" = "busy fm-spawn" ] || fail "the canonical spawn should seed busy fm-spawn, got '$out'"
+
+  window=$(awk -F= '$1 == "window" { print $2 }' "$state/$id.meta" | tail -1)
+  out=$(FM_FAKE_DUPLICATE_WINDOW="${window#*:}" FM_FAKE_PANE_COMMAND=zsh \
+    GROK_HOME="$HOME_DIR/grok-home" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" --relaunch --harness 'claude --debug')
+  expect_code 0 $? "the raw claude relaunch should succeed: $out"
+  assert_absent "$state/$id.busy-gen" "a raw claude relaunch must retire the prior busy generation"
+  assert_absent "$state/$id.busy-state" "a raw claude relaunch must remove the prior busy record"
+  assert_absent "$state/$id.claude-settings.json" "a raw claude relaunch must not keep the prior incarnation's settings"
+  out=$(classify claude "$id" "$state")
+  [ "$out" = "unknown missing" ] || fail "a raw claude relaunch must classify unknown, got '$out'"
+  pass "a raw claude relaunch retires the prior incarnation's busy record"
+}
+
 test_codex_unverified_until_a_semantic_source_exists() {
   local rec id=busy-cx-1 out state
   rec=$(make_spawn_case codex-unverified codex "$id")
@@ -511,6 +539,7 @@ test_gemini_hooks_semantic_lifecycle
 test_gemini_hooks_stale_incarnation_harmless
 test_raw_gemini_launch_has_no_semantic_wiring
 test_raw_claude_launch_has_no_semantic_wiring
+test_raw_claude_relaunch_retires_the_prior_busy_record
 test_gemini_is_refused_as_a_secondmate
 test_codex_unverified_until_a_semantic_source_exists
 
