@@ -241,7 +241,7 @@ test_claude_hooks_semantic_lifecycle() {
   out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR")
   expect_code 0 $? "claude spawn should succeed: $out"
   state="$HOME_DIR/state"
-  settings="$WT_DIR/.claude/settings.local.json"
+  settings="$state/$id.claude-settings.json"
   assert_present "$settings" "claude spawn did not write hook settings"
   jq -e . "$settings" >/dev/null || fail "claude hook settings are not valid JSON"
   for ev in UserPromptSubmit Stop StopFailure SessionEnd; do
@@ -279,13 +279,63 @@ test_claude_hooks_stale_incarnation_harmless() {
   out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR")
   expect_code 0 $? "claude spawn should succeed: $out"
   state="$HOME_DIR/state"
-  settings="$WT_DIR/.claude/settings.local.json"
+  settings="$state/$id.claude-settings.json"
   "$ROOT/bin/fm-busy-event.sh" arm "$state" "$id" >/dev/null
   run_claude_hook "$settings" UserPromptSubmit \
     || fail "a stale-gen hook must still exit 0 so Claude's lifecycle is never broken"
   out=$(classify claude "$id" "$state")
   [ "$out" = "busy fm-spawn" ] || fail "a stale-gen hook event must not change state, got '$out'"
   pass "claude hook events from a superseded incarnation are rejected without breaking the hook"
+}
+
+# The project's own Claude settings file must survive a worker launch byte for
+# byte: firstmate's hooks ride a firstmate-owned file under state/ reached with
+# --settings, never the worktree's .claude/settings.local.json. Before this fix
+# the spawn overwrote the project's committed file and added it to
+# .git/info/exclude, so a finished task's teardown refused the modified
+# tracked file and the change had to be discarded by hand.
+test_claude_spawn_preserves_project_settings() {
+  local case_dir home proj wt fakebin id=busy-cl-3 out state settings
+  local hash_before hash_after launch_log launch exclude
+  case_dir="$TMP_ROOT/claude-project-settings"
+  home="$case_dir/home"
+  proj="$case_dir/project"
+  wt="$case_dir/wt"
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" pi claude codex)
+  fm_test_spawn_home "$home" claude
+  # The project tracks its own Claude Code settings file on its main branch,
+  # so the task copy carries it and spawn's origin/main settle keeps it.
+  fm_git_init_commit "$proj"
+  mkdir -p "$proj/.claude"
+  printf '%s\n' '{"outputStyle":"Explanatory","permissions":{"allow":["Bash(git status)"]}}' \
+    > "$proj/.claude/settings.local.json"
+  git -C "$proj" add .claude/settings.local.json
+  git -C "$proj" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' \
+    commit -qm 'project claude settings'
+  fm_git_add_origin "$proj" "$proj.origin.git"
+  git -C "$proj" worktree add --quiet -b "wt-$id" "$wt"
+  fm_test_spawn_brief "$home" "$id"
+  launch_log="$case_dir/launch.log"
+
+  hash_before=$(sha256sum "$wt/.claude/settings.local.json" | awk '{print $1}')
+  out=$(FM_FAKE_LAUNCH_LOG="$launch_log" run_spawn "$home" "$wt" "$fakebin" "$id" "$proj")
+  expect_code 0 $? "claude spawn with a project settings file should succeed: $out"
+  state="$home/state"
+  hash_after=$(sha256sum "$wt/.claude/settings.local.json" | awk '{print $1}')
+  [ "$hash_before" = "$hash_after" ] \
+    || fail "claude spawn changed the project's .claude/settings.local.json"
+  [ -z "$(git -C "$wt" status --porcelain)" ] \
+    || fail "claude spawn left the worktree dirty: $(git -C "$wt" status --porcelain)"
+  settings="$state/$id.claude-settings.json"
+  assert_present "$settings" "claude spawn did not write its firstmate-owned settings file"
+  jq -e . "$settings" >/dev/null || fail "the firstmate-owned claude settings are not valid JSON"
+  launch=$(cat "$launch_log")
+  assert_contains "$launch" "--settings '$settings'" \
+    "claude launch did not reach its firstmate-owned settings file with --settings"
+  exclude=$(cat "$(git -C "$wt" rev-parse --git-path info/exclude)" 2>/dev/null || true)
+  assert_not_contains "$exclude" ".claude/settings.local.json" \
+    "claude spawn hid the project's settings file from the worktree check"
+  pass "claude spawn keeps the project's tracked settings file byte-identical and passes its own file with --settings"
 }
 
 test_codex_unverified_until_a_semantic_source_exists() {
@@ -429,6 +479,7 @@ test_kimi_and_grok_install_no_unverified_wiring
 test_opencode_plugin_semantic_lifecycle
 test_claude_hooks_semantic_lifecycle
 test_claude_hooks_stale_incarnation_harmless
+test_claude_spawn_preserves_project_settings
 test_gemini_hooks_semantic_lifecycle
 test_gemini_hooks_stale_incarnation_harmless
 test_raw_gemini_launch_has_no_semantic_wiring
