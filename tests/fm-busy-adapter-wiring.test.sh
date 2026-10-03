@@ -51,6 +51,14 @@ classify() {  # <harness> <id> <state-dir>
   fm_busy_classify tmux fake:w "$1" "$2" "$3"
 }
 
+sha256_file() {  # <path>
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    sha256sum "$1" | awk '{print $1}'
+  fi
+}
+
 # drive_pi_ext <ext-path> <mode>: load the generated Pi extension in a plain
 # Node host and fire one lifecycle handler. Modes: agent-start, settle-idle,
 # settle-continuing, turn-end.
@@ -317,11 +325,11 @@ test_claude_spawn_preserves_project_settings() {
   fm_test_spawn_brief "$home" "$id"
   launch_log="$case_dir/launch.log"
 
-  hash_before=$(sha256sum "$wt/.claude/settings.local.json" | awk '{print $1}')
+  hash_before=$(sha256_file "$wt/.claude/settings.local.json")
   out=$(FM_FAKE_LAUNCH_LOG="$launch_log" run_spawn "$home" "$wt" "$fakebin" "$id" "$proj")
   expect_code 0 $? "claude spawn with a project settings file should succeed: $out"
   state="$home/state"
-  hash_after=$(sha256sum "$wt/.claude/settings.local.json" | awk '{print $1}')
+  hash_after=$(sha256_file "$wt/.claude/settings.local.json")
   [ "$hash_before" = "$hash_after" ] \
     || fail "claude spawn changed the project's .claude/settings.local.json"
   [ -z "$(git -C "$wt" status --porcelain)" ] \
@@ -336,6 +344,25 @@ test_claude_spawn_preserves_project_settings() {
   assert_not_contains "$exclude" ".claude/settings.local.json" \
     "claude spawn hid the project's settings file from the worktree check"
   pass "claude spawn keeps the project's tracked settings file byte-identical and passes its own file with --settings"
+}
+
+# A raw claude launch keeps its whole command, so it never receives the
+# --settings layer that carries the busy hooks and the firstmate-owned settings
+# file. Arming there would seed a busy/fm-spawn record no writer can ever
+# clear, so a raw claude launch stays unarmed and classifies unknown, exactly
+# like raw gemini.
+test_raw_claude_launch_has_no_semantic_wiring() {
+  local rec id=busy-cl-raw out state
+  rec=$(make_spawn_case claude-raw claude "$id")
+  read_case_record "$rec"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR" 'claude --debug')
+  expect_code 0 $? "raw claude spawn should succeed: $out"
+  state="$HOME_DIR/state"
+  assert_absent "$state/$id.busy-gen" "raw claude launch must not arm a busy generation"
+  assert_absent "$state/$id.claude-settings.json" "raw claude launch must not write firstmate-owned settings"
+  out=$(classify claude "$id" "$state")
+  [ "$out" = "unknown missing" ] || fail "raw claude launch must classify unknown, got '$out'"
+  pass "raw claude launch remains unwired and classifies unknown"
 }
 
 test_codex_unverified_until_a_semantic_source_exists() {
@@ -483,6 +510,7 @@ test_claude_spawn_preserves_project_settings
 test_gemini_hooks_semantic_lifecycle
 test_gemini_hooks_stale_incarnation_harmless
 test_raw_gemini_launch_has_no_semantic_wiring
+test_raw_claude_launch_has_no_semantic_wiring
 test_gemini_is_refused_as_a_secondmate
 test_codex_unverified_until_a_semantic_source_exists
 

@@ -926,14 +926,11 @@ test_non_claude_harness_ignores_config_dir() {
 # launch must therefore carry the policy itself, or a spawned worker writes
 # Co-Authored-By and Claude-Session trailers into commits and PR bodies.
 assert_attribution_policy() {  # <launch-command> <what> <settings-file>
-  local launch=$1 what=$2 settings=$3 body
+  local launch=$1 what=$2 settings=$3
   assert_contains "$launch" "--settings '$settings'" \
     "$what launch does not reach its firstmate-owned settings file"
-  body=$(cat "$settings" 2>/dev/null || true)
-  assert_contains "$body" '"attribution":' "$what settings carry no attribution policy"
-  assert_contains "$body" '"commit":""' "$what settings do not silence the commit trailer"
-  assert_contains "$body" '"pr":""' "$what settings do not silence the PR-body attribution"
-  assert_contains "$body" '"sessionUrl":false' "$what settings do not silence the session URL"
+  jq -e '.["attribution"] == {"commit":"","pr":"","sessionUrl":false}' "$settings" >/dev/null \
+    || fail "$what settings do not carry the attribution-off policy"
 }
 
 test_claude_task_launch_carries_control_channel_authority() {
@@ -1005,8 +1002,8 @@ test_claude_secondmate_launch_carries_the_attribution_policy() {
   expect_code 0 "$status" "secondmate claude spawn should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
   assert_attribution_policy "$launch" "claude secondmate" "$HOME_DIR/state/$id.claude-settings.json"
-  assert_not_contains "$(cat "$HOME_DIR/state/$id.claude-settings.json")" '"hooks"' \
-    "a claude secondmate settings file must not carry a worker's busy hooks"
+  jq -e 'has("hooks") | not' "$HOME_DIR/state/$id.claude-settings.json" >/dev/null \
+    || fail "a claude secondmate settings file must not carry a worker's busy hooks"
   pass "a claude secondmate launch carries the attribution-off policy too"
 }
 

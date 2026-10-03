@@ -3862,7 +3862,16 @@ if [ "$KIND" != secondmate ]; then
     ;;
   esac
   case "$HARNESS" in
-  claude* | opencode* | pi | pi-signed | omp)
+  claude*)
+    if [ "$RAW_LAUNCH" -eq 0 ]; then
+      BUSY_GEN=$("$FM_ROOT/bin/fm-busy-event.sh" arm "$STATE_REAL" "$ID") || {
+        echo "error: failed to arm the busy-state contract for $ID" >&2
+        exit 1
+      }
+      [ "$RELAUNCH" -ne 1 ] || RELAUNCH_REPLACEMENT_BUSY_GEN=$BUSY_GEN
+    fi
+    ;;
+  opencode* | pi | pi-signed | omp)
     BUSY_GEN=$("$FM_ROOT/bin/fm-busy-event.sh" arm "$STATE_REAL" "$ID") || {
       echo "error: failed to arm the busy-state contract for $ID" >&2
       exit 1
@@ -4211,7 +4220,7 @@ fi
 # no busy contract, so its file carries the policy keys only.
 case "$HARNESS" in
 claude*)
-  if [ "$KIND" != secondmate ]; then
+  if [ "$RAW_LAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
     busy_cmd_prefix="$(shell_quote "$FM_ROOT/bin/fm-busy-event.sh") apply $(shell_quote "$STATE_REAL") $(shell_quote "$ID")"
     busy_suffix="--gen $(shell_quote "$BUSY_GEN") --source claude-hook"
     j_submit=$(json_escape "$busy_cmd_prefix busy $busy_suffix --event user-prompt-submit 2>/dev/null || true")
@@ -4221,7 +4230,7 @@ claude*)
     cat >"$STATE_REAL/$ID.claude-settings.json" <<EOF
 {"feedbackDrafts":"off","attribution":{"commit":"","pr":"","sessionUrl":false},"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"$j_submit"}]}],"Stop":[{"hooks":[{"type":"command","command":"$j_stop"}]}],"StopFailure":[{"hooks":[{"type":"command","command":"$j_stopfail"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"$j_sessionend"}]}]}}
 EOF
-  else
+  elif [ "$RAW_LAUNCH" -eq 0 ]; then
     printf '%s\n' '{"feedbackDrafts":"off","attribution":{"commit":"","pr":"","sessionUrl":false}}' >"$STATE_REAL/$ID.claude-settings.json"
   fi
   ;;
