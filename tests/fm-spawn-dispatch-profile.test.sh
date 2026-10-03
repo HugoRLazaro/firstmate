@@ -132,7 +132,7 @@ test_no_profile_keeps_claude_profile_defaults() {
   assert_meta_profile "$HOME_DIR/state/$id.meta" claude default default
 
   launch=$(cat "$LAUNCH_LOG")
-  expected="export COMPACT_ADVISER_DISABLE=1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions --settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < '$HOME_DIR/data/$id/launch-brief.md')\""
+  expected="export COMPACT_ADVISER_DISABLE=1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions --settings '$HOME_DIR/state/$id.claude-settings.json' $CLAUDE_CONTROL_CHANNEL_FLAG \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < '$HOME_DIR/data/$id/launch-brief.md')\""
   [ "$launch" = "$expected" ] || fail "no-profile claude launch did not use the canonical launch kind"$'\n'"expected: $expected"$'\n'"actual:   $launch"
   pass "no --model/--effort records defaults and types the claude launch instructions"
 }
@@ -883,7 +883,7 @@ test_claude_forwards_firstmate_config_dir_when_set() {
   status=$?
   expect_code 0 "$status" "claude spawn with CLAUDE_CONFIG_DIR set should succeed"
   launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" "CLAUDE_CONFIG_DIR='$CASE_DIR/claude-work' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions --settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}'" \
+  assert_contains "$launch" "CLAUDE_CONFIG_DIR='$CASE_DIR/claude-work' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions --settings '$HOME_DIR/state/$id.claude-settings.json'" \
     "claude launch did not forward firstmate's CLAUDE_CONFIG_DIR to the crewmate pane"
   pass "claude forwards firstmate's CLAUDE_CONFIG_DIR so the crewmate uses the same credential store"
 }
@@ -925,12 +925,12 @@ test_non_claude_harness_ignores_config_dir() {
 # spawned worker's settings sources are not guaranteed to load. Every claude
 # launch must therefore carry the policy itself, or a spawned worker writes
 # Co-Authored-By and Claude-Session trailers into commits and PR bodies.
-assert_attribution_policy() {  # <launch-command> <what>
-  local launch=$1 what=$2
-  assert_contains "$launch" '"attribution":' "$what launch carries no attribution policy"
-  assert_contains "$launch" '"commit":""' "$what launch does not silence the commit trailer"
-  assert_contains "$launch" '"pr":""' "$what launch does not silence the PR-body attribution"
-  assert_contains "$launch" '"sessionUrl":false' "$what launch does not silence the session URL"
+assert_attribution_policy() {  # <launch-command> <what> <settings-file>
+  local launch=$1 what=$2 settings=$3
+  assert_contains "$launch" "--settings '$settings'" \
+    "$what launch does not reach its firstmate-owned settings file"
+  jq -e '.["attribution"] == {"commit":"","pr":"","sessionUrl":false}' "$settings" >/dev/null \
+    || fail "$what settings do not carry the attribution-off policy"
 }
 
 test_claude_task_launch_carries_control_channel_authority() {
@@ -984,7 +984,7 @@ test_claude_crewmate_launch_carries_the_attribution_policy() {
   status=$?
   expect_code 0 "$status" "claude crewmate spawn should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
-  assert_attribution_policy "$launch" "claude crewmate"
+  assert_attribution_policy "$launch" "claude crewmate" "$HOME_DIR/state/$id.claude-settings.json"
   pass "a claude crewmate launch carries the attribution-off policy in its own settings"
 }
 
@@ -1001,7 +1001,9 @@ test_claude_secondmate_launch_carries_the_attribution_policy() {
   status=$?
   expect_code 0 "$status" "secondmate claude spawn should succeed"$'\n'"$out"
   launch=$(cat "$LAUNCH_LOG")
-  assert_attribution_policy "$launch" "claude secondmate"
+  assert_attribution_policy "$launch" "claude secondmate" "$HOME_DIR/state/$id.claude-settings.json"
+  jq -e 'has("hooks") | not' "$HOME_DIR/state/$id.claude-settings.json" >/dev/null \
+    || fail "a claude secondmate settings file must not carry a worker's busy hooks"
   pass "a claude secondmate launch carries the attribution-off policy too"
 }
 
@@ -1329,7 +1331,7 @@ SH
 # permission flag, and any other token refuses before endpoint or metadata.
 claude_expected_launch() {  # <home> <id> <permission-flag>
   local home=$1 id=$2 flag=$3
-  printf '%s' "export COMPACT_ADVISER_DISABLE=1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $flag --settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < '$home/data/$id/launch-brief.md')\""
+  printf '%s' "export COMPACT_ADVISER_DISABLE=1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $flag --settings '$home/state/$id.claude-settings.json' $CLAUDE_CONTROL_CHANNEL_FLAG \"\$('${ROOT}/bin/fm-operational-input.sh' encode launch-brief < '$home/data/$id/launch-brief.md')\""
 }
 
 test_claude_permission_mode_bypass_matches_absent_launch() {

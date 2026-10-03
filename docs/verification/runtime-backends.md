@@ -508,6 +508,87 @@ The lab home was deleted and the test entry was removed from the store and verif
 That automated spawn case runs against a fake claude, so it asserts the store entry and the launch command and nothing more; the live arms above are what establish that the entry actually suppresses the dialog.
 The composer-classification record below observes the same gate from the other side, where an untrusted worktree left Claude, Grok, and Muse unverified because the guard reads a first-launch trust dialog as an unreadable composer.
 
+## Claude worker settings placement
+
+Verified 2026-10-03 on Claude Code 2.1.288, Linux x86_64.
+
+Firstmate's Claude worker hooks and launch policy live in a firstmate-owned `state/<id>.claude-settings.json` reached with `--settings <path>`.
+They are NOT written into the worktree's `.claude/settings.local.json`, because that path is the project's own settings file: overwriting it clobbered a project's `outputStyle` and `permissions` in the task copy, and teardown's unlanded-work check then refused the modified tracked file.
+
+The flag accepts a settings file or an inline JSON string:
+
+```sh
+claude --help | grep -A 1 -- '--settings'
+```
+
+```text
+  --settings <file-or-json>             Path to a settings JSON file or a JSON
+                                        string to load additional settings from
+```
+
+Three lab arms ran in a throwaway project whose `.claude/settings.local.json` defined its own `UserPromptSubmit` hook, with an isolated `CLAUDE_CONFIG_DIR` holding only a copied credential file.
+Every settings-file hook event fired, the project's own hook fired in the same session, and the project's file hash was unchanged after every arm.
+A fourth arm drove the settings file a real `bin/fm-spawn.sh` run generated, in that run's task worktree.
+
+```sh
+# arm 1: the --settings UserPromptSubmit hook exits 2, which blocks the prompt
+# before any model call, so this arm spends no tokens.
+cd <lab>/project
+HOME=<lab>/home CLAUDE_CONFIG_DIR=<lab>/config \
+  claude -p --settings <lab>/fm-settings.json 'hola' </dev/null
+```
+
+```text
+UserPromptSubmit operation blocked by hook:
+[printf 'fm-hook-ran\n' >> '<lab>/fmmark'; ...]: FM_HOOK_BLOCKED_PROMPT
+```
+
+Both `<lab>/fmmark` and `<lab>/projmark` existed afterward, so hooks from `--settings` and the project layer merged; `sha256sum` of `<lab>/project/.claude/settings.local.json` was unchanged.
+
+```sh
+# arm 2: a real turn fires Stop and SessionEnd.
+HOME=<lab>/home CLAUDE_CONFIG_DIR=<lab>/config \
+  claude -p --settings <lab>/fm-lifecycle.json --model haiku --effort low \
+  'Reply with exactly: OK'
+
+# arm 3: a local HTTP server answered every POST with 400 invalid_request_error,
+# a non-retryable API error, so StopFailure and SessionEnd fire.
+HOME=<lab>/home CLAUDE_CONFIG_DIR=<lab>/config ANTHROPIC_BASE_URL=http://127.0.0.1:<port> \
+  claude -p --settings <lab>/fm-lifecycle.json --model haiku --effort low 'Reply OK'
+```
+
+```text
+# arm 2
+OK
+marks: stop, sessionend
+# arm 3
+API Error: 400 boom
+marks: stopfail, sessionend
+```
+
+```sh
+# arm 4: a real spawn against a project whose tracked .claude/settings.local.json
+# holds outputStyle and permissions, then a real turn through the file it wrote.
+cd <spawn-worktree>
+HOME=<lab>/home CLAUDE_CONFIG_DIR=<lab>/config \
+  claude -p --settings <home>/state/<id>.claude-settings.json --model haiku --effort low \
+  'Reply with exactly: OK'
+```
+
+```text
+OK
+busy-state before: ... seq=1 state=busy source=fm-spawn event=launch-brief
+busy-state after:  ... seq=4 state=idle source=claude-hook event=session-end
+turn-ended present: YES
+project settings unchanged: YES
+worktree status: clean
+```
+
+The four accepted busy events in arm 4 are the spawn seed, `UserPromptSubmit`, `Stop`, and `SessionEnd`; the touched turn-ended marker is the Stop hook's watcher NOTIFICATION.
+
+`tests/fm-busy-adapter-wiring.test.sh` pins the placement portably: it runs the real spawn against a project with a tracked `.claude/settings.local.json` and asserts the file's hash is unchanged, the worktree stays clean, and the launch reaches the firstmate-owned file with `--settings`.
+The same suite pins the raw-launch boundary: a fresh raw claude launch writes no settings file and classifies unknown, and a raw relaunch retires the prior incarnation's record instead of inheriting it.
+
 ## Codex hook trust
 
 Verified 2026-09-16 on codex-cli 0.151.0, macOS arm64, in a fresh linked worktree of this repository.
@@ -834,7 +915,7 @@ The credential must also be present before the session-provider daemon starts, s
 
 ### Settings placement
 
-Firstmate's hooks are NOT written into the worktree's `.gemini/settings.json`, because unlike Claude's `settings.local.json` that path is the project's own committed settings file.
+Firstmate's hooks are NOT written into the worktree's `.gemini/settings.json`, because that path is the project's own committed settings file, exactly as claude's `.claude/settings.local.json` was before it moved to a firstmate-owned file.
 They go to a firstmate-owned `state/<id>.gemini-settings.json` reached through `GEMINI_CLI_SYSTEM_SETTINGS_PATH`.
 Two measurements support that choice.
 Hooks from the system layer fired under `--skip-trust` in an untrusted folder, so the busy contract does not depend on the trust decision:

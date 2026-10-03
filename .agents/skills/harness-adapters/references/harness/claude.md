@@ -1,6 +1,6 @@
 # Claude
 
-Busy hooks verified 2026-07-28 on Claude Code 2.1.220.
+Busy hooks verified 2026-07-28 on Claude Code 2.1.220; the firstmate-owned settings file they ride, reached with `--settings`, was re-verified 2026-10-03 on 2.1.288 (see `../../../../../docs/verification/runtime-backends.md` "Claude worker settings placement").
 
 ## Operating facts
 
@@ -65,7 +65,8 @@ A `--secondmate` launch omits the statement because a secondmate operates under 
 ## Primary integration
 
 Primary behavior was verified 2026-07-04 on 2.1.201, preserved 2026-07-08 on 2.1.204, and Stop auto-arm revalidated 2026-07-24 on 2.1.219.
-This differs from the worker hook, which only touches a task marker through `.claude/settings.local.json`.
+This differs from the worker hook, which only touches a task marker through the firstmate-owned `state/<id>.claude-settings.json` the worker launch passes with `--settings`, never the project's own `.claude/settings.local.json`.
+A raw Claude-shaped launch is an unverified escape hatch: it receives no busy-state wiring and therefore has no trusted busy state.
 
 Primary `.claude/settings.json` registers `../../../bin/fm-turnend-guard.sh --claude` and `../../../bin/fm-claude-stop-autoarm.sh` with `asyncRewake: true` and `timeout: 28800`.
 Guard exit 2 plus stderr forces continuation.

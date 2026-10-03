@@ -51,6 +51,14 @@ classify() {  # <harness> <id> <state-dir>
   fm_busy_classify tmux fake:w "$1" "$2" "$3"
 }
 
+sha256_file() {  # <path>
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    sha256sum "$1" | awk '{print $1}'
+  fi
+}
+
 # drive_pi_ext <ext-path> <mode>: load the generated Pi extension in a plain
 # Node host and fire one lifecycle handler. Modes: agent-start, settle-idle,
 # settle-continuing, turn-end.
@@ -241,7 +249,7 @@ test_claude_hooks_semantic_lifecycle() {
   out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR")
   expect_code 0 $? "claude spawn should succeed: $out"
   state="$HOME_DIR/state"
-  settings="$WT_DIR/.claude/settings.local.json"
+  settings="$state/$id.claude-settings.json"
   assert_present "$settings" "claude spawn did not write hook settings"
   jq -e . "$settings" >/dev/null || fail "claude hook settings are not valid JSON"
   for ev in UserPromptSubmit Stop StopFailure SessionEnd; do
@@ -279,13 +287,110 @@ test_claude_hooks_stale_incarnation_harmless() {
   out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR")
   expect_code 0 $? "claude spawn should succeed: $out"
   state="$HOME_DIR/state"
-  settings="$WT_DIR/.claude/settings.local.json"
+  settings="$state/$id.claude-settings.json"
   "$ROOT/bin/fm-busy-event.sh" arm "$state" "$id" >/dev/null
   run_claude_hook "$settings" UserPromptSubmit \
     || fail "a stale-gen hook must still exit 0 so Claude's lifecycle is never broken"
   out=$(classify claude "$id" "$state")
   [ "$out" = "busy fm-spawn" ] || fail "a stale-gen hook event must not change state, got '$out'"
   pass "claude hook events from a superseded incarnation are rejected without breaking the hook"
+}
+
+# The project's own Claude settings file must survive a worker launch byte for
+# byte: firstmate's hooks ride a firstmate-owned file under state/ reached with
+# --settings, never the worktree's .claude/settings.local.json. Before this fix
+# the spawn overwrote the project's committed file and added it to
+# .git/info/exclude, so a finished task's teardown refused the modified
+# tracked file and the change had to be discarded by hand.
+test_claude_spawn_preserves_project_settings() {
+  local case_dir home proj wt fakebin id=busy-cl-3 out state settings
+  local hash_before hash_after launch_log launch exclude
+  case_dir="$TMP_ROOT/claude-project-settings"
+  home="$case_dir/home"
+  proj="$case_dir/project"
+  wt="$case_dir/wt"
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" pi claude codex)
+  fm_test_spawn_home "$home" claude
+  # The project tracks its own Claude Code settings file on its main branch,
+  # so the task copy carries it and spawn's origin/main settle keeps it.
+  fm_git_init_commit "$proj"
+  mkdir -p "$proj/.claude"
+  printf '%s\n' '{"outputStyle":"Explanatory","permissions":{"allow":["Bash(git status)"]}}' \
+    > "$proj/.claude/settings.local.json"
+  git -C "$proj" add .claude/settings.local.json
+  git -C "$proj" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' \
+    commit -qm 'project claude settings'
+  fm_git_add_origin "$proj" "$proj.origin.git"
+  git -C "$proj" worktree add --quiet -b "wt-$id" "$wt"
+  fm_test_spawn_brief "$home" "$id"
+  launch_log="$case_dir/launch.log"
+
+  hash_before=$(sha256_file "$wt/.claude/settings.local.json")
+  out=$(FM_FAKE_LAUNCH_LOG="$launch_log" run_spawn "$home" "$wt" "$fakebin" "$id" "$proj")
+  expect_code 0 $? "claude spawn with a project settings file should succeed: $out"
+  state="$home/state"
+  hash_after=$(sha256_file "$wt/.claude/settings.local.json")
+  [ "$hash_before" = "$hash_after" ] \
+    || fail "claude spawn changed the project's .claude/settings.local.json"
+  [ -z "$(git -C "$wt" status --porcelain)" ] \
+    || fail "claude spawn left the worktree dirty: $(git -C "$wt" status --porcelain)"
+  settings="$state/$id.claude-settings.json"
+  assert_present "$settings" "claude spawn did not write its firstmate-owned settings file"
+  jq -e . "$settings" >/dev/null || fail "the firstmate-owned claude settings are not valid JSON"
+  launch=$(cat "$launch_log")
+  assert_contains "$launch" "--settings '$settings'" \
+    "claude launch did not reach its firstmate-owned settings file with --settings"
+  exclude=$(cat "$(git -C "$wt" rev-parse --git-path info/exclude)" 2>/dev/null || true)
+  assert_not_contains "$exclude" ".claude/settings.local.json" \
+    "claude spawn hid the project's settings file from the worktree check"
+  pass "claude spawn keeps the project's tracked settings file byte-identical and passes its own file with --settings"
+}
+
+# A raw claude launch keeps its whole command, so it never receives the
+# --settings layer that carries the busy hooks and the firstmate-owned settings
+# file. Arming there would seed a busy/fm-spawn record no writer can ever
+# clear, so a raw claude launch stays unarmed and classifies unknown, exactly
+# like raw gemini.
+test_raw_claude_launch_has_no_semantic_wiring() {
+  local rec id=busy-cl-raw out state
+  rec=$(make_spawn_case claude-raw claude "$id")
+  read_case_record "$rec"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR" 'claude --debug')
+  expect_code 0 $? "raw claude spawn should succeed: $out"
+  state="$HOME_DIR/state"
+  assert_absent "$state/$id.busy-gen" "raw claude launch must not arm a busy generation"
+  assert_absent "$state/$id.claude-settings.json" "raw claude launch must not write firstmate-owned settings"
+  out=$(classify claude "$id" "$state")
+  [ "$out" = "unknown missing" ] || fail "raw claude launch must classify unknown, got '$out'"
+  pass "raw claude launch remains unwired and classifies unknown"
+}
+
+# A canonical spawn arms the busy contract. A raw claude relaunch cannot
+# receive the --settings layer that would wire a writer, so the replacement's
+# launch must retire the prior incarnation instead of inheriting its stale
+# busy/idle label.
+test_raw_claude_relaunch_retires_the_prior_busy_record() {
+  local rec id=busy-cl-relaunch out state window
+  rec=$(make_spawn_case claude-raw-relaunch claude "$id")
+  read_case_record "$rec"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" "$PROJ_DIR")
+  expect_code 0 $? "the canonical claude spawn should succeed: $out"
+  state="$HOME_DIR/state"
+  assert_present "$state/$id.busy-gen" "the canonical spawn should arm a busy generation"
+  out=$(classify claude "$id" "$state")
+  [ "$out" = "busy fm-spawn" ] || fail "the canonical spawn should seed busy fm-spawn, got '$out'"
+
+  window=$(awk -F= '$1 == "window" { print $2 }' "$state/$id.meta" | tail -1)
+  out=$(FM_FAKE_DUPLICATE_WINDOW="${window#*:}" FM_FAKE_PANE_COMMAND=zsh \
+    GROK_HOME="$HOME_DIR/grok-home" \
+    fm_test_run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" --relaunch --harness 'claude --debug')
+  expect_code 0 $? "the raw claude relaunch should succeed: $out"
+  assert_absent "$state/$id.busy-gen" "a raw claude relaunch must retire the prior busy generation"
+  assert_absent "$state/$id.busy-state" "a raw claude relaunch must remove the prior busy record"
+  assert_absent "$state/$id.claude-settings.json" "a raw claude relaunch must not keep the prior incarnation's settings"
+  out=$(classify claude "$id" "$state")
+  [ "$out" = "unknown missing" ] || fail "a raw claude relaunch must classify unknown, got '$out'"
+  pass "a raw claude relaunch retires the prior incarnation's busy record"
 }
 
 test_codex_unverified_until_a_semantic_source_exists() {
@@ -429,9 +534,12 @@ test_kimi_and_grok_install_no_unverified_wiring
 test_opencode_plugin_semantic_lifecycle
 test_claude_hooks_semantic_lifecycle
 test_claude_hooks_stale_incarnation_harmless
+test_claude_spawn_preserves_project_settings
 test_gemini_hooks_semantic_lifecycle
 test_gemini_hooks_stale_incarnation_harmless
 test_raw_gemini_launch_has_no_semantic_wiring
+test_raw_claude_launch_has_no_semantic_wiring
+test_raw_claude_relaunch_retires_the_prior_busy_record
 test_gemini_is_refused_as_a_secondmate
 test_codex_unverified_until_a_semantic_source_exists
 
