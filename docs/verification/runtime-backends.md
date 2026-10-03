@@ -587,6 +587,7 @@ worktree status: clean
 The four accepted busy events in arm 4 are the spawn seed, `UserPromptSubmit`, `Stop`, and `SessionEnd`; the touched turn-ended marker is the Stop hook's watcher NOTIFICATION.
 
 `tests/fm-busy-adapter-wiring.test.sh` pins the placement portably: it runs the real spawn against a project with a tracked `.claude/settings.local.json` and asserts the file's hash is unchanged, the worktree stays clean, and the launch reaches the firstmate-owned file with `--settings`.
+The same suite pins the raw-launch boundary: a fresh raw claude launch writes no settings file and classifies unknown, and a raw relaunch retires the prior incarnation's record instead of inheriting it.
 
 ## Codex hook trust
 

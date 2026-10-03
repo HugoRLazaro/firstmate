@@ -342,11 +342,12 @@
 # seen and firstmate cannot answer it. That helper's header owns the structural
 # scope test for both shapes and every refusal; a failed registration stops this
 # spawn rather than launching a worker that would wedge on the dialog.
-# Every claude launch also carries the attribution-off policy in the
-# firstmate-owned settings file its launch passes with --settings, so a spawned
-# worker never writes a Co-Authored-By trailer, Claude-Session link, or
-# generated-with line into a commit or PR body; launch_template() below owns the
-# reason it cannot come from the captain's own settings.
+# Every claude launch through the adapter template also carries the
+# attribution-off policy in the firstmate-owned settings file its launch passes
+# with --settings, so a spawned worker never writes a Co-Authored-By trailer,
+# Claude-Session link, or generated-with line into a commit or PR body;
+# launch_template() below owns the reason it cannot come from the captain's own
+# settings.
 # Publishing the record and moving this home's backlog item to In flight are one
 # step, not two: bin/fm-backlog-transition-lib.sh owns that invariant, and this
 # script performs the transition under the task's own meta lock before it reports
@@ -3844,14 +3845,14 @@ if [ "$RELAUNCH" -eq 1 ]; then
 fi
 if [ "$KIND" != secondmate ]; then
   # Arm the semantic busy-state contract (bin/fm-busy-lib.sh) for every
-  # adapter with a verified semantic source. The launch brief sent below IS a
-  # submitted turn, so the seed record is busy/fm-spawn. The minted gen is
-  # embedded into each adapter's wiring so an event from a superseded
-  # incarnation is rejected as stale. Grok and rovo stay on their isolated
-  # rendered-tail fallbacks and standalone Kimi stays unknown until
-  # fm_busy_kimi_verified opens, so none of the three is armed here. Gemini IS
-  # armed: its BeforeAgent / AfterAgent / SessionEnd hooks are a verified
-  # open-close pair.
+  # adapter with a verified semantic source whose launch resolves through the
+  # adapter template. The launch brief sent below IS a submitted turn, so the
+  # seed record is busy/fm-spawn. The minted gen is embedded into each
+  # adapter's wiring so an event from a superseded incarnation is rejected as
+  # stale. Grok and rovo stay on their isolated rendered-tail fallbacks and
+  # standalone Kimi stays unknown until fm_busy_kimi_verified opens, so none of
+  # the three is armed here. Gemini IS armed: its BeforeAgent / AfterAgent /
+  # SessionEnd hooks are a verified open-close pair.
   BUSY_GEN=
   case "$HARNESS" in
   codex*)
