@@ -1,0 +1,21 @@
+
+=== canonical claude spawn (real fm-spawn.sh) ===
+warning: /tmp/fm-settings-lab.TLWGee/claude-switch/home/data/claude-harness-switch/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned claude-harness-switch harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-claude-harness-switch worktree=/tmp/fm-settings-lab.TLWGee/claude-switch/wt
+spawn rc=0
+settings file present: /tmp/fm-settings-lab.TLWGee/claude-switch/home/state/claude-harness-switch.claude-settings.json
+busy record: v1 gen=g1790991636.4010741.14476 seq=1 state=busy source=fm-spawn event=launch-brief ts=1790991636
+
+=== real fm-control.sh claude-harness-switch relaunch --harness codex --note ... ===
+warning: /tmp/fm-settings-lab.TLWGee/claude-switch/home/data/claude-harness-switch/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+relaunched claude-harness-switch harness=codex from=claude model=default effort=default backend=tmux endpoint=firstmate:fm-claude-harness-switch worktree=/tmp/fm-settings-lab.TLWGee/claude-switch/wt
+fm-control rc=0
+
+=== outcome ===
+meta harness: harness=codex
+literal keystrokes sent to the pane:
+/exit
+unset TRACEPARENT; export COMPACT_ADVISER_DISABLE=1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI codex --dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch '/tmp/fm-settings-lab.TLWGee/claude-switch/home/state/claude-harness-switch.turn-ended'\"]" "$('/home/hugorl/.no-mistakes/worktrees/71308d303441/01M3ZHZ0QBKJAP4DWNHYJ2AE8P/bin/fm-operational-input.sh' encode launch-brief < '/tmp/fm-settings-lab.TLWGee/claude-switch/home/data/claude-harness-switch/launch-brief.md')"
+state files matching busy/claude-settings after the switch:
+  (none)
+classification after the switch: unknown codex-unverified

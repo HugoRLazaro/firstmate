@@ -1,0 +1,36 @@
+
+=== raw launch: real fm-spawn.sh claude-raw-fresh ... 'claude --debug' ===
+warning: /tmp/fm-settings-lab.TLWGee/claude-raw/home/data/claude-raw-fresh/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned claude-raw-fresh harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-claude-raw-fresh worktree=/tmp/fm-settings-lab.TLWGee/claude-raw/wt
+spawn rc=0
+launch command sent to the pane:
+export COMPACT_ADVISER_DISABLE=1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI claude --debug
+state files matching busy/claude-settings:
+  (none)
+classification: unknown missing
+
+=== relaunch: canonical claude spawn first ===
+warning: /tmp/fm-settings-lab.TLWGee/claude-raw-relaunch/home/data/claude-raw-relaunch/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned claude-raw-relaunch harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-claude-raw-relaunch worktree=/tmp/fm-settings-lab.TLWGee/claude-raw-relaunch/wt
+spawn rc=0
+busy record: v1 gen=g1790992146.125816.9709 seq=1 state=busy source=fm-spawn event=launch-brief ts=1790992146
+classification: busy fm-spawn
+recorded window: firstmate:fm-claude-raw-relaunch
+
+=== raw RELAUNCH: real fm-spawn.sh claude-raw-relaunch --relaunch --harness 'claude --debug' ===
+warning: /tmp/fm-settings-lab.TLWGee/claude-raw-relaunch/home/data/claude-raw-relaunch/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned claude-raw-relaunch harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-claude-raw-relaunch worktree=/tmp/fm-settings-lab.TLWGee/claude-raw-relaunch/wt
+relaunch rc=0
+relaunch command sent to the pane:
+unset TRACEPARENT; export COMPACT_ADVISER_DISABLE=1; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI claude --debug
+state files matching busy/claude-settings after relaunch:
+  (none)
+classification after raw relaunch: unknown missing
+
+=== raw RELAUNCH again with no prior busy generation (idempotent retire edge) ===
+warning: /tmp/fm-settings-lab.TLWGee/claude-raw-relaunch/home/data/claude-raw-relaunch/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned claude-raw-relaunch harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-claude-raw-relaunch worktree=/tmp/fm-settings-lab.TLWGee/claude-raw-relaunch/wt
+second relaunch rc=0
+classification after second raw relaunch: unknown missing
+state files matching busy/claude-settings after second relaunch:
+  (none)

@@ -1,0 +1,27 @@
+
+=== real fm-spawn.sh (canonical claude launch) ===
+warning: /tmp/fm-settings-lab.TLWGee/claude-real/home/data/claude-real-turn/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+spawned claude-real-turn harness=claude kind=ship mode=no-mistakes yolo=off window=firstmate:fm-claude-real-turn worktree=/tmp/fm-settings-lab.TLWGee/claude-real/wt
+spawn rc=0
+armed gen: g1790991458.3956552.16779
+busy record after spawn: v1 gen=g1790991458.3956552.16779 seq=1 state=busy source=fm-spawn event=launch-brief ts=1790991458
+classification after spawn: busy fm-spawn
+project settings sha256 before the turn: 2cecfeb56fa5129ecbfd1779d3749aebe9c9d50a4bda0a30948b65258cba6e48
+
+=== REAL claude -p --settings <generated file> in the task worktree ===
+Ignoring 1 permissions.allow entry from .claude/settings.local.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/tmp/fm-settings-lab.TLWGee/claude-real/project"].hasTrustDialogAccepted: true in /tmp/fm-settings-lab.TLWGee/claude-real/claude-config/.claude.json.
+OK
+claude rc=0
+
+=== busy-state record after the real turn ===
+v1 gen=g1790991458.3956552.16779 seq=4 state=idle source=claude-hook event=session-end ts=1790991462
+gen sidecar: g1790991458.3956552.16779
+classification after turn: idle claude-hook
+turn-ended marker: present (Stop hook fired)
+project settings sha256 after the turn:  2cecfeb56fa5129ecbfd1779d3749aebe9c9d50a4bda0a30948b65258cba6e48
+UNCHANGED: project settings byte-identical
+worktree status after the turn:
+state files:
+claude-real-turn.busy-gen
+claude-real-turn.busy-state
+claude-real-turn.claude-settings.json
