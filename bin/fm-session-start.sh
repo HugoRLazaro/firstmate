@@ -246,10 +246,11 @@
 #             because cutting either loses something no pointer can recover:
 #             the wake-queue presentation, whose drain has already advanced the
 #             presentation cursor, and the AGENTS.md instruction refresh below.
-#             The refresh is nevertheless bounded: a durable marker records the
-#             (lock pid, content hash) pair it already re-emitted, so the file
-#             is delivered complete at most once per content and a later
-#             compaction with the same bytes prints one withheld line instead.
+#             The refresh is nevertheless bounded: a per-session durable marker
+#             records the (session identity, content hash) pair it already
+#             re-emitted, so the file is delivered complete at most once per
+#             session per content and a later compaction with the same bytes
+#             prints one withheld line instead.
 #             NEXT STEP closes with a RE-EMIT SIZE line accounting for the
 #             budgeted bytes and for both of those payloads.
 #
@@ -263,15 +264,19 @@
 #             session's own baseline causes the complete current AGENTS.md to
 #             print before the bulky digest; an equal baseline emits no refresh.
 #             The baseline remains immutable, so a drift keeps returning; a
-#             second durable marker (state/.session-start-agents-refresh) keyed
-#             to the same lock-owning pid and the content hash records the
-#             bytes already re-emitted, so the complete refresh is delivered
-#             once per content and later compactions with the same bytes print
-#             one withheld line naming the AGENTS.md path instead. Markers and
-#             baselines are separate: a refresh never rewrites the true-start
-#             baseline, and a marker is consulted only when this session holds
-#             the lock and it names this pid, so a marker from another session
-#             can never suppress a refresh.
+#             second durable marker (state/.session-start-agents-refresh.<id>,
+#             one per harness session identity, with the lock-owning pid as the
+#             identity when none arrives) keyed to that identity and the content
+#             hash records the bytes already re-emitted, so the complete refresh
+#             is delivered once per session per content and later compactions
+#             of that session with the same bytes print one withheld line naming
+#             the AGENTS.md path instead. The Pi extension passes that identity
+#             in FM_SESSIONSTART_SESSION_ID and discards the session's marker
+#             when it stops a generation whose result it never delivered.
+#             Markers and baselines are separate: a refresh never rewrites the
+#             true-start baseline, and a marker is consulted only when this
+#             session holds the lock and it names this session, so a marker
+#             from another session can never suppress a refresh.
 #             A session with no baseline of its own - none recorded, or one
 #             recorded for another harness pid, which is what a resumed or
 #             manually started session has - is judged by a freshness proof
@@ -313,7 +318,7 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 COMPLETION_FILE="$STATE/.session-start-complete"
 AGENTS_BASELINE_FILE="$STATE/.session-start-agents-baseline"
-AGENTS_REFRESH_FILE="$STATE/.session-start-agents-refresh"
+AGENTS_REFRESH_MARKER_PREFIX="$STATE/.session-start-agents-refresh"
 
 REEMIT=0
 SESSION_SOURCE=
@@ -770,30 +775,48 @@ write_agents_baseline() {  # <lock-pid> <agents-hash>
   return 1
 }
 
-# The durable record behind the once-per-content instruction refresh: the lock
-# pid and the AGENTS.md SHA-256 that session already had re-emitted, one per
-# line. A different pid, or a different hash, never matches. Separate from the
-# true-start baseline, which stays immutable.
+# The durable record behind the once-per-session, once-per-content
+# instruction refresh: the harness session identity the Pi extension passed
+# (or the lock-owning pid when none arrived) and the AGENTS.md SHA-256 that
+# session already had re-emitted, one per line. A different identity, or a
+# different hash, never matches. Separate from the true-start baseline, which
+# stays immutable.
 agents_refresh_marker_applies() {  # <lock-pid>
   [ "$READ_ONLY" -eq 0 ] \
     && [ "$(cat "$STATE/.lock" 2>/dev/null || true)" = "$1" ]
 }
 
-agents_refresh_already_delivered() {  # <lock-pid> <content-key>
-  local lock_pid=$1 content_key=$2 marker_pid marker_key
-  [ -n "$lock_pid" ] && [ -n "$content_key" ] || return 1
-  [ -f "$AGENTS_REFRESH_FILE" ] && [ ! -L "$AGENTS_REFRESH_FILE" ] || return 1
-  marker_pid=$(sed -n '1p' "$AGENTS_REFRESH_FILE" 2>/dev/null || true)
-  marker_key=$(sed -n '2p' "$AGENTS_REFRESH_FILE" 2>/dev/null || true)
-  [ "$marker_pid" = "$lock_pid" ] && [ "$marker_key" = "$content_key" ]
+agents_refresh_identity() {  # <lock-pid>
+  local session_id=${FM_SESSIONSTART_SESSION_ID:-}
+  case "$session_id" in
+    ''|*[!A-Za-z0-9._-]*) printf '%s\n' "$1" ;;
+    *) printf '%s\n' "$session_id" ;;
+  esac
 }
 
-record_agents_refresh() {  # <lock-pid> <content-key>
-  local lock_pid=$1 content_key=$2 tmp
-  [ -n "$lock_pid" ] && [ -n "$content_key" ] || return 1
+# Each identity gets its own marker file so one conversation's delivery never
+# suppresses another's; the lock-owning pid is the identity when no harness
+# session identity arrives.
+agents_refresh_marker_file() {  # <identity>
+  printf '%s\n' "$AGENTS_REFRESH_MARKER_PREFIX.$1"
+}
+
+agents_refresh_already_delivered() {  # <identity> <content-key>
+  local identity=$1 content_key=$2 marker
+  [ -n "$identity" ] && [ -n "$content_key" ] || return 1
+  marker=$(agents_refresh_marker_file "$identity")
+  [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
+  [ "$(sed -n '1p' "$marker" 2>/dev/null || true)" = "$identity" ] \
+    && [ "$(sed -n '2p' "$marker" 2>/dev/null || true)" = "$content_key" ]
+}
+
+record_agents_refresh() {  # <identity> <content-key>
+  local identity=$1 content_key=$2 marker tmp
+  [ -n "$identity" ] && [ -n "$content_key" ] || return 1
+  marker=$(agents_refresh_marker_file "$identity")
   tmp=$(mktemp "$STATE/.session-start-agents-refresh.XXXXXX" 2>/dev/null) || return 1
-  if printf '%s\n%s\n' "$lock_pid" "$content_key" > "$tmp" 2>/dev/null \
-    && mv -f "$tmp" "$AGENTS_REFRESH_FILE" 2>/dev/null; then
+  if printf '%s\n%s\n' "$identity" "$content_key" > "$tmp" 2>/dev/null \
+    && mv -f "$tmp" "$marker" 2>/dev/null; then
     return 0
   fi
   rm -f "$tmp" 2>/dev/null || true
@@ -897,11 +920,12 @@ agents_refresh_required() {  # <rebuilding-session-pid>
 }
 
 print_agents_refresh_if_required() {  # <rebuilding-session-pid>
-  local lock_pid=$1 content_key
+  local lock_pid=$1 identity content_key
   agents_refresh_required "$lock_pid" || return 0
+  identity=$(agents_refresh_identity "$lock_pid")
   content_key=$(hash_file_sha256 "$FM_ROOT/AGENTS.md" 2>/dev/null || true)
   if [ -n "$content_key" ] && agents_refresh_marker_applies "$lock_pid" \
-    && agents_refresh_already_delivered "$lock_pid" "$content_key"; then
+    && agents_refresh_already_delivered "$identity" "$content_key"; then
     printf 'AGENTS.md REFRESH: the current bytes in %s were already delivered to this session, so they are not reprinted here; read that file directly if needed.\n' "$FM_ROOT/AGENTS.md"
     AGENTS_REFRESH_WITHHELD=1
     return 0
@@ -918,7 +942,7 @@ EOF
     printf 'The original AGENTS.md baseline no longer matches, but the current file is absent.\n'
   fi
   if [ -n "$content_key" ] && agents_refresh_marker_applies "$lock_pid"; then
-    record_agents_refresh "$lock_pid" "$content_key" || true
+    record_agents_refresh "$identity" "$content_key" || true
   fi
 }
 

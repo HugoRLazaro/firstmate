@@ -2332,7 +2332,7 @@ EOF
 }
 
 test_agents_baseline_stays_at_true_start_and_delivers_each_drifted_pi_compact_once() {
-  local rec root home fakebin startup compact_equal compact_first compact_second compact_third compact_fourth clear_out resume_out reset_out baseline baseline_after expected_hash refresh_line bootstrap_line marker lock_pid
+  local rec root home fakebin startup compact_equal compact_first compact_second compact_third compact_fourth clear_out resume_out reset_out baseline baseline_after expected_hash refresh_line bootstrap_line marker marker_file lock_pid
   rec=$(new_world agents-refresh)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -2351,7 +2351,8 @@ EOF
   expected_hash=$(hash_file_for_test "$root/AGENTS.md")
   [ "$(printf '%s\n' "$baseline" | sed -n '2p')" = "$expected_hash" ] \
     || fail "true startup baseline did not record the original AGENTS hash: $baseline"
-  assert_absent "$home/state/.session-start-agents-refresh" \
+  lock_pid=$(cat "$home/state/.lock")
+  assert_absent "$home/state/.session-start-agents-refresh.$lock_pid" \
     "a true startup recorded a re-emitted-instructions marker"
 
   compact_equal=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
@@ -2381,8 +2382,8 @@ EOF
     || fail "replacement instructions were not emitted before the bulky digest"
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
     || fail "a drifted compact rebased the original-session baseline"
-  lock_pid=$(cat "$home/state/.lock")
-  marker=$(cat "$home/state/.session-start-agents-refresh")
+  marker_file="$home/state/.session-start-agents-refresh.$lock_pid"
+  marker=$(cat "$marker_file")
   [ "$(printf '%s\n' "$marker" | sed -n '1p')" = "$lock_pid" ] \
     && [ "$(printf '%s\n' "$marker" | sed -n '2p')" = "$(hash_file_for_test "$root/AGENTS.md")" ] \
     || fail "the delivered refresh was not recorded against this lock owner and content: $marker"
@@ -2395,7 +2396,7 @@ EOF
   assert_contains "$compact_second" "AGENTS.md REFRESH" "a withheld AGENTS refresh was not named"
   assert_contains "$compact_second" "AGENTS.md REFRESH: the current bytes in $root/AGENTS.md were already delivered" \
     "the withheld AGENTS refresh line did not name the AGENTS.md path"
-  [ "$(cat "$home/state/.session-start-agents-refresh")" = "$marker" ] \
+  [ "$(cat "$marker_file")" = "$marker" ] \
     || fail "a withheld refresh rewrote the delivery marker"
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
     || fail "a repeated compact rebased the original-session baseline"
@@ -2448,7 +2449,7 @@ $(hash_file_for_test "$root/AGENTS.md")" ] \
   pass "true-start AGENTS baselines stay immutable while a drifted Pi compact delivers each content once"
 }
 
-test_agents_refresh_marker_binds_to_the_lock_owner_and_content() {
+test_agents_refresh_marker_falls_back_to_the_lock_owner_pid_and_content() {
   local rec root home fakebin lock_pid marker delivered
   rec=$(new_world agents-marker)
   IFS='|' read -r root home fakebin <<EOF
@@ -2464,25 +2465,77 @@ EOF
   delivered=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
   assert_contains "$delivered" "AGENTS_MARKER=changed" \
     "the first drifted compact did not deliver the complete AGENTS.md"
-  marker=$(cat "$home/state/.session-start-agents-refresh")
-  [ "$(printf '%s\n' "$marker" | sed -n '1p')" = "$lock_pid" ] \
-    && [ "$(printf '%s\n' "$marker" | sed -n '2p')" = "$(hash_file_for_test "$root/AGENTS.md")" ] \
-    || fail "the delivery marker did not bind to the lock owner and content: $marker"
+  marker="$home/state/.session-start-agents-refresh.$lock_pid"
+  [ -f "$marker" ] || fail "the fallback marker file was not written for the lock owner"
+  [ "$(sed -n '1p' "$marker")" = "$lock_pid" ] \
+    && [ "$(sed -n '2p' "$marker")" = "$(hash_file_for_test "$root/AGENTS.md")" ] \
+    || fail "the delivery marker did not bind to the lock owner and content: $(cat "$marker")"
 
-  printf '999999\n%s\n' "$(hash_file_for_test "$root/AGENTS.md")" > "$home/state/.session-start-agents-refresh"
+  # Another identity's marker is a different file: it must not suppress this
+  # session's refresh, and this session's own delivery must be recorded.
+  printf '999999\n%s\n' "$(hash_file_for_test "$root/AGENTS.md")" \
+    > "$home/state/.session-start-agents-refresh.999999"
+  rm -f "$marker"
   delivered=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
   assert_contains "$delivered" "AGENTS_MARKER=changed" \
-    "a marker written by another pid suppressed the refresh"
-  [ "$(sed -n '1p' "$home/state/.session-start-agents-refresh")" = "$lock_pid" ] \
-    || fail "the other session's marker was not replaced when the refresh was delivered"
+    "a marker written by another identity suppressed the refresh"
+  [ "$(sed -n '1p' "$marker")" = "$lock_pid" ] \
+    || fail "the fallback marker was not rewritten for the lock owner"
 
   printf '%s\n%s\n' "$lock_pid" "sha256:0000000000000000000000000000000000000000000000000000000000000000" \
-    > "$home/state/.session-start-agents-refresh"
+    > "$marker"
   delivered=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
   assert_contains "$delivered" "AGENTS_MARKER=changed" \
     "a marker naming other content suppressed the refresh"
 
-  pass "the re-emitted instruction marker binds to the lock-owning pid and to the content hash"
+  pass "the re-emitted instruction marker falls back to the lock-owning pid and the content hash when no harness session identity arrives"
+}
+
+test_agents_refresh_marker_binds_to_the_harness_session_identity() {
+  local rec root home fakebin delivered withheld marker
+  rec=$(new_world agents-session-marker)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" pi
+  printf 'AGENTS_SESSION=original\n' > "$root/AGENTS.md"
+  FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --source startup >/dev/null
+  printf 'AGENTS_SESSION=changed\n' > "$root/AGENTS.md"
+
+  delivered=$(FM_SESSIONSTART_SESSION_ID=conversation-a \
+    FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$delivered" "AGENTS_SESSION=changed" \
+    "the first conversation did not receive the complete changed AGENTS.md"
+  marker="$home/state/.session-start-agents-refresh.conversation-a"
+  [ -f "$marker" ] || fail "the first conversation's marker file was not written"
+  [ "$(sed -n '1p' "$marker")" = conversation-a ] \
+    || fail "the delivery marker did not record the harness session identity: $(cat "$marker")"
+
+  delivered=$(FM_SESSIONSTART_SESSION_ID=conversation-b \
+    FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$delivered" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
+    "a second conversation in the same process was denied the changed AGENTS.md"
+  assert_contains "$delivered" "AGENTS_SESSION=changed" \
+    "a second conversation in the same process did not receive the complete changed AGENTS.md"
+  [ "$(sed -n '1p' "$home/state/.session-start-agents-refresh.conversation-b")" = conversation-b ] \
+    || fail "the second conversation's delivery was not recorded under its session identity"
+
+  withheld=$(FM_SESSIONSTART_SESSION_ID=conversation-b \
+    FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_not_contains "$withheld" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
+    "a repeated compact of the same conversation re-emitted the delivered AGENTS.md"
+  assert_not_contains "$withheld" "AGENTS_SESSION=changed" \
+    "a repeated compact of the same conversation reprinted the delivered AGENTS.md"
+  assert_contains "$withheld" "AGENTS.md REFRESH: the current bytes" \
+    "a withheld AGENTS refresh was not named"
+
+  withheld=$(FM_SESSIONSTART_SESSION_ID=conversation-a \
+    FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_not_contains "$withheld" "AGENTS_SESSION=changed" \
+    "returning to the first conversation reprinted its already-delivered AGENTS.md"
+
+  pass "the re-emitted instruction marker binds to the harness session identity, not the process pid"
 }
 
 test_pi_compact_skips_the_agents_refresh_only_when_the_file_predates_the_session() {
@@ -2574,7 +2627,7 @@ EOF
   assert_contains "$out" "READ-ONLY SESSION" "competing live lock owner did not force read-only mode"
   assert_contains "$out" "READ_ONLY_AGENTS=current" \
     "read-only compact trusted another session's equal baseline"
-  assert_absent "$home/state/.session-start-agents-refresh" \
+  assert_absent "$home/state/.session-start-agents-refresh.$holder_pid" \
     "a read-only compact marked the refresh delivered for a lock owner that did not receive it"
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline_before" ] \
     || fail "read-only compact mutated the competing session's baseline"
@@ -3042,7 +3095,8 @@ test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
 test_compact_reemit_is_bounded_and_names_what_it_omits
 test_bounded_reemit_scratch_block_is_owner_only
 test_agents_baseline_stays_at_true_start_and_delivers_each_drifted_pi_compact_once
-test_agents_refresh_marker_binds_to_the_lock_owner_and_content
+test_agents_refresh_marker_falls_back_to_the_lock_owner_pid_and_content
+test_agents_refresh_marker_binds_to_the_harness_session_identity
 test_pi_compact_skips_the_agents_refresh_only_when_the_file_predates_the_session
 test_read_only_pi_compact_refreshes_against_its_own_session_identity
 test_codex_unreachable_reset_sources_do_not_claim_instruction_refresh
