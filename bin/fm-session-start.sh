@@ -246,6 +246,10 @@
 #             because cutting either loses something no pointer can recover:
 #             the wake-queue presentation, whose drain has already advanced the
 #             presentation cursor, and the AGENTS.md instruction refresh below.
+#             The refresh is nevertheless bounded: a durable marker records the
+#             (lock pid, content hash) pair it already re-emitted, so the file
+#             is delivered complete at most once per content and a later
+#             compaction with the same bytes prints one withheld line instead.
 #             NEXT STEP closes with a RE-EMIT SIZE line accounting for the
 #             budgeted bytes and for both of those payloads.
 #
@@ -257,9 +261,17 @@
 #             creates or replaces it. Pi and pi-signed compaction are the only
 #             supported stale-cache rebuild pair: a changed hash against this
 #             session's own baseline causes the complete current AGENTS.md to
-#             print before the bulky digest. The baseline remains immutable so
-#             every later drifted compaction refreshes again, while an equal
-#             baseline emits no instruction refresh.
+#             print before the bulky digest; an equal baseline emits no refresh.
+#             The baseline remains immutable, so a drift keeps returning; a
+#             second durable marker (state/.session-start-agents-refresh) keyed
+#             to the same lock-owning pid and the content hash records the
+#             bytes already re-emitted, so the complete refresh is delivered
+#             once per content and later compactions with the same bytes print
+#             one withheld line naming the AGENTS.md path instead. Markers and
+#             baselines are separate: a refresh never rewrites the true-start
+#             baseline, and a marker is consulted only when this session holds
+#             the lock and it names this pid, so a marker from another session
+#             can never suppress a refresh.
 #             A session with no baseline of its own - none recorded, or one
 #             recorded for another harness pid, which is what a resumed or
 #             manually started session has - is judged by a freshness proof
@@ -269,21 +281,28 @@
 #             before that start is necessarily the copy the session already
 #             runs on, and no refresh is emitted. The change time is the later
 #             of the file's mtime and ctime, so a backdated mtime cannot hide an
-#             edit. The start is the EARLIER of two readings, both of which can
-#             only be late, never early: the wall clock minus POSIX
-#             `ps -o etime`, and the mtime of the state/.lock this same pid
-#             wrote when it took the helm. The second one is a stamp rather
-#             than a subtraction, and it is what bounds a host whose elapsed
-#             clock stops while its wall clock moves on - a paused VM, which
-#             WSL2 is across a host sleep - where the first reading drifts
-#             later by the length of every pause. The proof records nothing
-#             and is repeated on every compaction. Any step that cannot be
-#             read - no harness pid, a lock this pid does not own, an unreadable
-#             or malformed etime, a failed stat, a symlinked AGENTS.md -
-#             refreshes exactly as before, and so does a file changed after the
-#             start. What the proof cannot see is a change made after the
-#             process started and before the earlier of its two readings; a
-#             true `startup` baseline, which compares bytes, has no such gap.
+#             edit. The start is the EARLIER of two readings. The first is the
+#             wall clock minus POSIX `ps -o etime`, read after the wall clock,
+#             so it is structurally early and can only understate the true
+#             start, never overstate it. The second is the mtime of the
+#             state/.lock this same pid wrote when it took the helm - a stamp
+#             necessarily later than the process start, and what bounds a host
+#             whose elapsed clock stops while its wall clock moves on - a
+#             paused VM, which WSL2 is across a host sleep - where the first
+#             reading drifts later by the length of every pause. Taking the
+#             earlier of the two therefore keeps the estimate at or before the
+#             process start in the normal case; the one real gap is
+#             lock-acquisition latency, where a stalled elapsed clock pushes
+#             the first reading past the stamp and the estimate lands on the
+#             helm instead of the process start. A change made in that gap -
+#             after the process started but before it took the helm - can be
+#             read as unchanged; the 3-second margin absorbs etime truncation,
+#             not a stall. The proof records nothing and is repeated on every
+#             compaction. Any step that cannot be read - no harness pid, a lock
+#             this pid does not own, an unreadable or malformed etime, a failed
+#             stat, a symlinked AGENTS.md - refreshes exactly as before, and so
+#             does a file changed after the start. A true `startup` baseline,
+#             which compares bytes, has no such gap.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -294,6 +313,7 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 COMPLETION_FILE="$STATE/.session-start-complete"
 AGENTS_BASELINE_FILE="$STATE/.session-start-agents-baseline"
+AGENTS_REFRESH_FILE="$STATE/.session-start-agents-refresh"
 
 REEMIT=0
 SESSION_SOURCE=
@@ -750,6 +770,36 @@ write_agents_baseline() {  # <lock-pid> <agents-hash>
   return 1
 }
 
+# The durable record behind the once-per-content instruction refresh: the lock
+# pid and the AGENTS.md SHA-256 that session already had re-emitted, one per
+# line. A different pid, or a different hash, never matches. Separate from the
+# true-start baseline, which stays immutable.
+agents_refresh_marker_applies() {  # <lock-pid>
+  [ "$READ_ONLY" -eq 0 ] \
+    && [ "$(cat "$STATE/.lock" 2>/dev/null || true)" = "$1" ]
+}
+
+agents_refresh_already_delivered() {  # <lock-pid> <content-key>
+  local lock_pid=$1 content_key=$2 marker_pid marker_key
+  [ -n "$lock_pid" ] && [ -n "$content_key" ] || return 1
+  [ -f "$AGENTS_REFRESH_FILE" ] && [ ! -L "$AGENTS_REFRESH_FILE" ] || return 1
+  marker_pid=$(sed -n '1p' "$AGENTS_REFRESH_FILE" 2>/dev/null || true)
+  marker_key=$(sed -n '2p' "$AGENTS_REFRESH_FILE" 2>/dev/null || true)
+  [ "$marker_pid" = "$lock_pid" ] && [ "$marker_key" = "$content_key" ]
+}
+
+record_agents_refresh() {  # <lock-pid> <content-key>
+  local lock_pid=$1 content_key=$2 tmp
+  [ -n "$lock_pid" ] && [ -n "$content_key" ] || return 1
+  tmp=$(mktemp "$STATE/.session-start-agents-refresh.XXXXXX" 2>/dev/null) || return 1
+  if printf '%s\n%s\n' "$lock_pid" "$content_key" > "$tmp" 2>/dev/null \
+    && mv -f "$tmp" "$AGENTS_REFRESH_FILE" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$tmp" 2>/dev/null || true
+  return 1
+}
+
 # The freshness proof for a session with no baseline of its own: see the
 # header's --source note for the argument and its limits.
 AGENTS_FRESH_MARGIN_SECS=3
@@ -847,8 +897,15 @@ agents_refresh_required() {  # <rebuilding-session-pid>
 }
 
 print_agents_refresh_if_required() {  # <rebuilding-session-pid>
-  local lock_pid=$1
+  local lock_pid=$1 content_key
   agents_refresh_required "$lock_pid" || return 0
+  content_key=$(hash_file_sha256 "$FM_ROOT/AGENTS.md" 2>/dev/null || true)
+  if [ -n "$content_key" ] && agents_refresh_marker_applies "$lock_pid" \
+    && agents_refresh_already_delivered "$lock_pid" "$content_key"; then
+    printf 'AGENTS.md REFRESH: the current bytes in %s were already delivered to this session, so they are not reprinted here; read that file directly if needed.\n' "$FM_ROOT/AGENTS.md"
+    AGENTS_REFRESH_WITHHELD=1
+    return 0
+  fi
   section "CURRENT AGENTS.md - INSTRUCTION REFRESH"
   if [ -f "$FM_ROOT/AGENTS.md" ]; then
     cat <<'EOF'
@@ -860,9 +917,13 @@ EOF
   else
     printf 'The original AGENTS.md baseline no longer matches, but the current file is absent.\n'
   fi
+  if [ -n "$content_key" ] && agents_refresh_marker_applies "$lock_pid"; then
+    record_agents_refresh "$lock_pid" "$content_key" || true
+  fi
 }
 
 AGENTS_START_HASH=
+AGENTS_REFRESH_WITHHELD=0
 if [ "$REEMIT" -eq 0 ] && [ "$SESSION_SOURCE" = startup ]; then
   AGENTS_START_HASH=$(hash_file_sha256 "$FM_ROOT/AGENTS.md" 2>/dev/null || true)
 fi
@@ -1341,8 +1402,13 @@ if [ "$REEMIT_BOUNDED" -eq 1 ]; then
     printf '\nRE-EMIT BUDGET EXCEEDED - these sections were omitted, and each is read with the command beside it:\n%s' \
       "$REEMIT_OMITTED"
   fi
-  printf '\nRE-EMIT SIZE: %s of %s budgeted bytes used; outside the budget: wake queue %s bytes, AGENTS.md refresh %s bytes.\n' \
-    "$REEMIT_USED" "$REEMIT_BUDGET" "$REEMIT_WAKE_BYTES" "$REEMIT_AGENTS_BYTES"
+  if [ "$AGENTS_REFRESH_WITHHELD" -eq 1 ]; then
+    printf '\nRE-EMIT SIZE: %s of %s budgeted bytes used; outside the budget: wake queue %s bytes, AGENTS.md refresh withheld (same bytes already delivered).\n' \
+      "$REEMIT_USED" "$REEMIT_BUDGET" "$REEMIT_WAKE_BYTES"
+  else
+    printf '\nRE-EMIT SIZE: %s of %s budgeted bytes used; outside the budget: wake queue %s bytes, AGENTS.md refresh %s bytes.\n' \
+      "$REEMIT_USED" "$REEMIT_BUDGET" "$REEMIT_WAKE_BYTES" "$REEMIT_AGENTS_BYTES"
+  fi
 fi
 
 if [ "$READ_ONLY" -eq 0 ] && [ "$REEMIT" -eq 0 ]; then

@@ -2255,9 +2255,18 @@ EOF
   [ "$budgeted" -le 24576 ] \
     || fail "a compaction re-emit beside an AGENTS refresh printed $budgeted budgeted bytes"
 
-  # The cap is hard: a budget too small for a section drops that section, names
-  # it and the command that reads it, and still never cuts the wake queue. A
-  # value under the floor is raised to the 8192-byte floor rather than obeyed.
+  # A further content change beside a tiny budget is still refreshed complete:
+  # the once-per-content refresh stays outside the byte budget but is never
+  # repeated. The cap is hard: a budget too small for a section drops that
+  # section, names it and the command that reads it, and still never cuts the
+  # wake queue. A value under the floor is raised to the 8192-byte floor rather
+  # than obeyed.
+  {
+    printf 'BOUNDED_AGENTS=squeezed\n'
+    for i in $(seq 1 500); do printf 'squeezed instruction line %s that a stale native cache does not have yet.\n' "$i"; done
+    printf 'BOUNDED_AGENTS_SQUEEZED_LAST_LINE\n'
+  } > "$root/AGENTS.md"
+  [ "$(wc -c < "$root/AGENTS.md")" -gt 8192 ] || fail "the squeezed AGENTS fixture is not larger than the floor budget"
   squeezed=$(FM_SESSION_START_REEMIT_BUDGET=1 FM_FAKE_HARNESS=pi \
     run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
   assert_contains "$squeezed" "RE-EMIT BUDGET: SUPERVISION OPERATING INSTRUCTIONS omitted" \
@@ -2270,7 +2279,7 @@ EOF
     "a section that did not fit the budget was printed anyway"
   assert_contains "$squeezed" "done: queued before the compaction" "the budget cut a queued wake"
   assert_contains "$squeezed" "WAKE_ACK_REQUIRED:" "the budget cut the wake acknowledgement"
-  assert_contains "$squeezed" "BOUNDED_AGENTS_LAST_LINE" "the budget cut the AGENTS refresh"
+  assert_contains "$squeezed" "BOUNDED_AGENTS_SQUEEZED_LAST_LINE" "the budget cut the AGENTS refresh"
   assert_contains "$squeezed" "NEXT STEP" "the budget cut the closing reminder"
   budgeted=$(budgeted_reemit_bytes "$squeezed")
   [ "$budgeted" -le 8192 ] \
@@ -2322,8 +2331,8 @@ EOF
   pass "the bounded re-emit buffers its digest blocks in an owner-only scratch file"
 }
 
-test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact() {
-  local rec root home fakebin startup compact_equal compact_first compact_second clear_out resume_out reset_out baseline baseline_after expected_hash refresh_line bootstrap_line
+test_agents_baseline_stays_at_true_start_and_delivers_each_drifted_pi_compact_once() {
+  local rec root home fakebin startup compact_equal compact_first compact_second compact_third compact_fourth clear_out resume_out reset_out baseline baseline_after expected_hash refresh_line bootstrap_line marker lock_pid
   rec=$(new_world agents-refresh)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -2342,6 +2351,8 @@ EOF
   expected_hash=$(hash_file_for_test "$root/AGENTS.md")
   [ "$(printf '%s\n' "$baseline" | sed -n '2p')" = "$expected_hash" ] \
     || fail "true startup baseline did not record the original AGENTS hash: $baseline"
+  assert_absent "$home/state/.session-start-agents-refresh" \
+    "a true startup recorded a re-emitted-instructions marker"
 
   compact_equal=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
   assert_not_contains "$compact_equal" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
@@ -2370,12 +2381,35 @@ EOF
     || fail "replacement instructions were not emitted before the bulky digest"
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
     || fail "a drifted compact rebased the original-session baseline"
+  lock_pid=$(cat "$home/state/.lock")
+  marker=$(cat "$home/state/.session-start-agents-refresh")
+  [ "$(printf '%s\n' "$marker" | sed -n '1p')" = "$lock_pid" ] \
+    && [ "$(printf '%s\n' "$marker" | sed -n '2p')" = "$(hash_file_for_test "$root/AGENTS.md")" ] \
+    || fail "the delivered refresh was not recorded against this lock owner and content: $marker"
 
   compact_second=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
-  assert_contains "$compact_second" "FIRSTMATE_TEST_INSTRUCTION=updated" \
-    "a second drifted compact suppressed the required replacement instructions"
+  assert_not_contains "$compact_second" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
+    "a second compact with the same AGENTS bytes re-emitted the replacement instructions"
+  assert_not_contains "$compact_second" "FIRSTMATE_TEST_INSTRUCTION=updated" \
+    "a second compact with the same AGENTS bytes reprinted the current instructions"
+  assert_contains "$compact_second" "AGENTS.md REFRESH" "a withheld AGENTS refresh was not named"
+  assert_contains "$compact_second" "AGENTS.md REFRESH: the current bytes in $root/AGENTS.md were already delivered" \
+    "the withheld AGENTS refresh line did not name the AGENTS.md path"
+  [ "$(cat "$home/state/.session-start-agents-refresh")" = "$marker" ] \
+    || fail "a withheld refresh rewrote the delivery marker"
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
     || fail "a repeated compact rebased the original-session baseline"
+
+  cat > "$root/AGENTS.md" <<'EOF'
+FIRSTMATE_TEST_INSTRUCTION=changed-again
+A further content change must be delivered once more.
+EOF
+  compact_third=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$compact_third" "FIRSTMATE_TEST_INSTRUCTION=changed-again" \
+    "a further AGENTS content change was not delivered"
+  compact_fourth=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_not_contains "$compact_fourth" "FIRSTMATE_TEST_INSTRUCTION=changed-again" \
+    "the new AGENTS content was redelivered on the next compact"
 
   clear_out=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source clear)
   assert_not_contains "$clear_out" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
@@ -2389,23 +2423,66 @@ EOF
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
     || fail "reset rebased the original-session baseline"
 
+  cat > "$root/AGENTS.md" <<'EOF'
+FIRSTMATE_TEST_INSTRUCTION=missing-baseline
+EOF
   rm -f "$home/state/.session-start-agents-baseline"
   compact_first=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
-  assert_contains "$compact_first" "FIRSTMATE_TEST_INSTRUCTION=updated" \
+  assert_contains "$compact_first" "FIRSTMATE_TEST_INSTRUCTION=missing-baseline" \
     "a missing baseline did not trigger first-post-fix replacement instructions"
   assert_absent "$home/state/.session-start-agents-baseline" \
     "a rebuild fabricated a baseline instead of preserving true-start-only ownership"
 
+  cat > "$root/AGENTS.md" <<'EOF'
+FIRSTMATE_TEST_INSTRUCTION=wrong-baseline
+EOF
   printf 'wrong-session\n%s\n' "$(hash_file_for_test "$root/AGENTS.md")" > "$home/state/.session-start-agents-baseline"
   compact_first=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
-  assert_contains "$compact_first" "FIRSTMATE_TEST_INSTRUCTION=updated" \
+  assert_contains "$compact_first" "FIRSTMATE_TEST_INSTRUCTION=wrong-baseline" \
     "a wrong-session baseline did not trigger replacement instructions"
   baseline_after=$(cat "$home/state/.session-start-agents-baseline")
   [ "$baseline_after" = "wrong-session
 $(hash_file_for_test "$root/AGENTS.md")" ] \
     || fail "a wrong-session baseline was rewritten during a rebuild"
 
-  pass "true-start AGENTS baselines stay immutable while every drifted Pi compact re-emits the current contract"
+  pass "true-start AGENTS baselines stay immutable while a drifted Pi compact delivers each content once"
+}
+
+test_agents_refresh_marker_binds_to_the_lock_owner_and_content() {
+  local rec root home fakebin lock_pid marker delivered
+  rec=$(new_world agents-marker)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" pi
+  printf 'AGENTS_MARKER=original\n' > "$root/AGENTS.md"
+  FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --source startup >/dev/null
+  lock_pid=$(cat "$home/state/.lock")
+
+  printf 'AGENTS_MARKER=changed\n' > "$root/AGENTS.md"
+  delivered=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$delivered" "AGENTS_MARKER=changed" \
+    "the first drifted compact did not deliver the complete AGENTS.md"
+  marker=$(cat "$home/state/.session-start-agents-refresh")
+  [ "$(printf '%s\n' "$marker" | sed -n '1p')" = "$lock_pid" ] \
+    && [ "$(printf '%s\n' "$marker" | sed -n '2p')" = "$(hash_file_for_test "$root/AGENTS.md")" ] \
+    || fail "the delivery marker did not bind to the lock owner and content: $marker"
+
+  printf '999999\n%s\n' "$(hash_file_for_test "$root/AGENTS.md")" > "$home/state/.session-start-agents-refresh"
+  delivered=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$delivered" "AGENTS_MARKER=changed" \
+    "a marker written by another pid suppressed the refresh"
+  [ "$(sed -n '1p' "$home/state/.session-start-agents-refresh")" = "$lock_pid" ] \
+    || fail "the other session's marker was not replaced when the refresh was delivered"
+
+  printf '%s\n%s\n' "$lock_pid" "sha256:0000000000000000000000000000000000000000000000000000000000000000" \
+    > "$home/state/.session-start-agents-refresh"
+  delivered=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$delivered" "AGENTS_MARKER=changed" \
+    "a marker naming other content suppressed the refresh"
+
+  pass "the re-emitted instruction marker binds to the lock-owning pid and to the content hash"
 }
 
 test_pi_compact_skips_the_agents_refresh_only_when_the_file_predates_the_session() {
@@ -2428,8 +2505,9 @@ sha256:0000000000000000000000000000000000000000000000000000000000000000'
   # The harness here is a REAL process started after AGENTS.md was last written,
   # so its age is read from the kernel rather than stubbed. Every compaction
   # runs inside that one process: the first while the file still predates it,
-  # the second after the file changed underneath it, and the third with an
-  # elapsed clock that stalled long enough to place the start after that change.
+  # the second after the file changed underneath it, and the third with a
+  # further change and an elapsed clock that stalled long enough to place the
+  # start after that change.
   sleep 6
   # The inner shell must expand its own $$ and variables: it IS the harness.
   # shellcheck disable=SC2016
@@ -2441,6 +2519,7 @@ sha256:0000000000000000000000000000000000000000000000000000000000000000'
       "$FRESHNESS_SESSION_START" --reemit --source compact > "$FRESHNESS_OUT/first"
       printf "%s\n" "FRESHNESS_AGENTS=updated" > "$FRESHNESS_AGENTS_FILE"
       "$FRESHNESS_SESSION_START" --reemit --source compact > "$FRESHNESS_OUT/second"
+      printf "%s\n" "FRESHNESS_AGENTS=stalled" > "$FRESHNESS_AGENTS_FILE"
       sleep 5
       FM_FAKE_STALLED_ETIME=00:00 \
         "$FRESHNESS_SESSION_START" --reemit --source compact > "$FRESHNESS_OUT/stalled"
@@ -2460,7 +2539,7 @@ sha256:0000000000000000000000000000000000000000000000000000000000000000'
     "an AGENTS file changed after the session started was not re-emitted"
   assert_contains "$second" "FRESHNESS_AGENTS=updated" \
     "a compaction after a mid-session AGENTS change did not carry the current instructions"
-  assert_contains "$stalled" "FRESHNESS_AGENTS=updated" \
+  assert_contains "$stalled" "FRESHNESS_AGENTS=stalled" \
     "a stalled elapsed clock moved the session start past a mid-session AGENTS change and hid it"
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
     || fail "the freshness proof rewrote another session's baseline"
@@ -2495,6 +2574,8 @@ EOF
   assert_contains "$out" "READ-ONLY SESSION" "competing live lock owner did not force read-only mode"
   assert_contains "$out" "READ_ONLY_AGENTS=current" \
     "read-only compact trusted another session's equal baseline"
+  assert_absent "$home/state/.session-start-agents-refresh" \
+    "a read-only compact marked the refresh delivered for a lock owner that did not receive it"
   [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline_before" ] \
     || fail "read-only compact mutated the competing session's baseline"
   [ "$(cat "$home/state/.session-start-complete")" = "$completion_before" ] \
@@ -2960,7 +3041,8 @@ test_runtime_bound_leaves_harness_ancestry_headroom
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
 test_compact_reemit_is_bounded_and_names_what_it_omits
 test_bounded_reemit_scratch_block_is_owner_only
-test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact
+test_agents_baseline_stays_at_true_start_and_delivers_each_drifted_pi_compact_once
+test_agents_refresh_marker_binds_to_the_lock_owner_and_content
 test_pi_compact_skips_the_agents_refresh_only_when_the_file_predates_the_session
 test_read_only_pi_compact_refreshes_against_its_own_session_identity
 test_codex_unreachable_reset_sources_do_not_claim_instruction_refresh
