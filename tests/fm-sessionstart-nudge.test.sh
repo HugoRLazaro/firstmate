@@ -482,11 +482,29 @@ while [ $# -gt 0 ]; do
 done
 count=$(( $(wc -l < "$state/launches" 2>/dev/null || printf '0') + 1 ))
 behavior=$(cat "$state/behavior-$count")
-printf 'launch:%s:%s:%s:%s:%s\n' \
-  "$count" "$behavior" "$source_name" "$$" "${FM_SESSIONSTART_SUPERVISOR_PID:-}" >> "$state/launches"
+printf 'launch:%s:%s:%s:%s:%s:%s\n' \
+  "$count" "$behavior" "$source_name" "$$" "${FM_SESSIONSTART_SUPERVISOR_PID:-}" "${FM_SESSIONSTART_SESSION_ID:-}" >> "$state/launches"
 printf 'launch:%s\n' "$count" >> "$state/events"
 case "$behavior" in
   success)
+    printf 'GENERATION_DIGEST_%s source=%s\n' "$count" "$source_name"
+    : > "$state/completed-$count"
+    ;;
+  marker-success)
+    if [ -n "${FM_SESSIONSTART_SESSION_ID:-}" ]; then
+      printf '%s\n%s\n' "${FM_SESSIONSTART_SESSION_ID}" 'sha256:marker-test' \
+        > "${FM_HOME:?}/state/.session-start-agents-refresh.${FM_SESSIONSTART_SESSION_ID}"
+    fi
+    printf 'GENERATION_DIGEST_%s source=%s\n' "$count" "$source_name"
+    : > "$state/completed-$count"
+    ;;
+  marker-slow)
+    if [ -n "${FM_SESSIONSTART_SESSION_ID:-}" ]; then
+      printf '%s\n%s\n' "${FM_SESSIONSTART_SESSION_ID}" 'sha256:marker-test' \
+        > "${FM_HOME:?}/state/.session-start-agents-refresh.${FM_SESSIONSTART_SESSION_ID}"
+    fi
+    : > "$state/started-$count"
+    while [ ! -f "$state/release-$count" ]; do sleep 0.02; done
     printf 'GENERATION_DIGEST_%s source=%s\n' "$count" "$source_name"
     : > "$state/completed-$count"
     ;;
@@ -610,6 +628,8 @@ const release = (index) => writeFileSync(`${state}/release-${index}`, "\n");
 const launchLines = () => readFileSync(`${state}/launches`, "utf8").trim().split("\n").filter(Boolean);
 const pidFor = (index) => Number(launchLines().find((line) => line.startsWith(`launch:${index}:`))?.split(":")[4]);
 const supervisorFor = (index) => Number(launchLines().find((line) => line.startsWith(`launch:${index}:`))?.split(":")[5]);
+const sessionIdFor = (index) => launchLines().find((line) => line.startsWith(`launch:${index}:`))?.split(":")[6];
+const markerPathFor = (sessionId) => `${state}/.session-start-agents-refresh.${sessionId}`;
 const grandchildFor = (index) => Number(readFileSync(`${state}/grandchild-${index}`, "utf8").trim());
 const startupMessages = () => providerCalls.map((call) => call.message).filter(Boolean);
 
@@ -772,6 +792,38 @@ await compactPending;
 assert(sent.length === 1, "cancelled compaction delivered stale context");
 await waitDead(compactPid, "shutdown left the compaction child alive");
 await waitDead(compactGrandchild, "shutdown left a compaction grandchild alive");
+
+// The AGENTS.md refresh marker is bound to the conversation, not the process:
+// a stopped generation discards the marker it wrote before its result is
+// dropped, while a delivered generation keeps it.
+plan(17, "marker-slow");
+const markerCancelled = begin("new", "session-marker-cancelled");
+await waitFor(() => existsSync(`${state}/started-17`), "marker generation never started");
+assert(sessionIdFor(17) === "session-marker-cancelled",
+  "the run wrapper did not receive the generation's session identity");
+assert(readFileSync(markerPathFor("session-marker-cancelled"), "utf8").startsWith("session-marker-cancelled\n"),
+  "the generation did not write its session-bound marker");
+const markerCancelledCall = handlers.get("before_agent_start")({ prompt: "marker cancelled" }, markerCancelled);
+plan(18, "success");
+const markerReplacement = begin("new", "session-marker-replacement");
+const markerReplacementResult = await providerCall(markerReplacement, "marker replacement");
+assert(markerReplacementResult?.message?.content.includes("GENERATION_DIGEST_18"),
+  "the replacement generation lost its context");
+assert((await markerCancelledCall) === undefined, "a cancelled generation delivered startup context");
+assert(!existsSync(markerPathFor("session-marker-cancelled")), "a cancelled generation left its delivery marker behind");
+
+plan(19, "marker-success");
+const markerDelivered = begin("new", "session-marker-delivered");
+await waitFor(() => existsSync(`${state}/completed-19`), "delivered marker generation never completed");
+assert(sessionIdFor(19) === "session-marker-delivered",
+  "the run wrapper did not receive the delivered generation's session identity");
+const markerDeliveredResult = await providerCall(markerDelivered, "marker delivered");
+assert(markerDeliveredResult?.message?.content.includes("GENERATION_DIGEST_19"),
+  "delivered marker generation lost its context");
+assert(existsSync(markerPathFor("session-marker-delivered")) && readFileSync(markerPathFor("session-marker-delivered"), "utf8").startsWith("session-marker-delivered\n"),
+  "a delivered generation's marker was missing or named the wrong session");
+await handlers.get("session_shutdown")({ reason: "quit" }, markerDelivered);
+assert(existsSync(markerPathFor("session-marker-delivered")), "stopping a delivered generation discarded its marker");
 JS
   ) || status=$?
   expect_code 0 "$status" "Pi session-start generation prerequisite"

@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -20,6 +20,7 @@ const root = resolve(extensionDir, "../..");
 const fmHome = process.env.FM_HOME || process.env.FM_ROOT_OVERRIDE || root;
 const state = process.env.FM_STATE_OVERRIDE || `${fmHome}/state`;
 const marker = `${state}/.pi-turnend-extension-loaded`;
+const agentsRefreshMarkerPrefix = `${state}/.session-start-agents-refresh`;
 const extensionVersion = `sha256:${createHash("sha256").update(readFileSync(extensionFile)).digest("hex")}`;
 
 function parentPid(pid: string): string {
@@ -143,6 +144,22 @@ function sessionIdFromContext(ctx: SessionStartContext): string {
   }
 }
 
+function sessionstartMarkerIdentity(sessionId: string): string {
+  return /^[A-Za-z0-9._-]+$/.test(sessionId) ? sessionId : "";
+}
+
+// A conversation that never received the bytes must not be denied them later:
+// the session's own AGENTS.md refresh marker is discarded whenever this
+// extension stops a generation or drops its result without delivering it.
+function discardSessionstartMarker(sessionId: string): void {
+  const identity = sessionstartMarkerIdentity(sessionId);
+  if (!identity) return;
+  try {
+    rmSync(`${agentsRefreshMarkerPrefix}.${identity}`, { force: true });
+  } catch {
+  }
+}
+
 function sessionstartGenerationIsLive(generation: SessionstartGeneration): boolean {
   return activeSessionstartGeneration === generation && !generation.stopping;
 }
@@ -238,7 +255,9 @@ function stopSessionstartGeneration(generation: SessionstartGeneration): Promise
       }
       await waitForSessionstartProcessGroupExit(processGroupId, sessionstartRetireTimeoutMs);
     }
-  })();
+  })().finally(() => {
+    if (!generation.delivered) discardSessionstartMarker(generation.sessionId);
+  });
   return generation.stopPromise;
 }
 
@@ -268,6 +287,7 @@ function runSessionstartHook(generation: SessionstartGeneration): Promise<Sessio
           runner,
           ["--source", generation.source, "--pi-prerequisite"],
         );
+    const sessionstartIdentity = sessionstartMarkerIdentity(generation.sessionId);
     let child: ChildProcess;
     try {
       child = spawn(
@@ -278,6 +298,9 @@ function runSessionstartHook(generation: SessionstartGeneration): Promise<Sessio
           stdio: supervised
             ? ["ignore", "pipe", "ignore", "ipc"]
             : ["ignore", "pipe", "ignore"],
+          env: sessionstartIdentity
+            ? { ...process.env, FM_SESSIONSTART_SESSION_ID: sessionstartIdentity }
+            : process.env,
         },
       );
     } catch {
@@ -440,6 +463,7 @@ async function claimSessionstartMessage(
   if (!sessionstartGenerationIsLive(generation) || generation.delivered) return undefined;
   const currentSessionId = ctx ? sessionIdFromContext(ctx) : "";
   if (generation.sessionId && currentSessionId && generation.sessionId !== currentSessionId) {
+    discardSessionstartMarker(generation.sessionId);
     return undefined;
   }
   generation.delivered = true;
@@ -514,6 +538,7 @@ export default function (pi: ExtensionAPI) {
   const cleanupSessionstartOnProcessExit = (): void => {
     const generation = sessionstartGeneration;
     if (!generation) return;
+    if (!generation.delivered) discardSessionstartMarker(generation.sessionId);
     if (process.platform === "win32") {
       if (generation.child) signalSessionstartChild(generation.child, "SIGKILL");
       return;
