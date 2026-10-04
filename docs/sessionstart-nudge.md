@@ -24,7 +24,8 @@ It takes `--source <name>` when the adapter knows the source natively, and other
 | Source | Action | Why |
 | --- | --- | --- |
 | `startup`, `new` | Full digest | This is a true session start that has not taken the helm; Pi CLI continuations are refined to `resume` by the adapter before reaching this boundary. |
-| `clear`, `compact` | `--reemit` after a proven complete startup, otherwise full digest | This process normally has the helm and lost only its context, but an earlier hook may have been truncated after acquiring the lock. |
+| `clear` | `--reemit` after a proven complete startup, otherwise full digest | This process normally has the helm and lost its whole context, so the re-emit reprints every digest section; an earlier hook may also have been truncated after acquiring the lock. |
+| `compact` | Bounded `--reemit` after a proven complete startup, otherwise full digest | This process has the helm and its compaction summary carries what it knew, so the re-emit leaves both bulk digests on disk and holds a hard byte budget. |
 | `resume`, `reload`, `fork` | Delegate to the nudge wrapper | Prior context is restored, so re-running is redundant when the lock is still ours and an instruction is enough when a new process resumed an old session. |
 | unreadable or unrecognized | Full digest | Taking the helm redundantly is cheap and idempotent; not taking it is the bug this tier exists to fix. |
 
@@ -37,7 +38,8 @@ The full digest clears that completion record after acquiring the lock and repub
 On a run-tier harness only `resume`, `reload`, and `fork` are routed to the nudge wrapper, whose separate ancestry-only check normally stays silent when this process already holds the lock.
 After a background Claude helper-chain recycle breaks that ancestry, the wrapper may emit a redundant nudge even though the shared same-session verdict still owns the lock; the requested session start remains idempotent.
 
-`bin/fm-session-start.sh --reemit` owns which work a re-emit skips, its true-start AGENTS.md baseline, and its supported stale-instruction refresh pairs; its header is the single owner of those mechanics.
+`bin/fm-session-start.sh --reemit` owns which work a re-emit skips, which sections a compaction re-emit leaves on disk, its byte budget and the two payloads outside it, its true-start AGENTS.md baseline, and its supported stale-instruction refresh pairs; its header is the single owner of those mechanics.
+A compaction re-emit is bounded because it is injected after every compaction: a digest larger than the room a compaction frees fills the context again and triggers the next compaction, which is a loop rather than a recovery.
 
 ## Runtime bound
 
@@ -104,7 +106,8 @@ That alternative expands trust and writes outside this repository, so Firstmate 
 It separately proves the run wrapper's silence for the gate environment and an unmarked linked worktree, including the internal Pi prerequisite's explicit silent stand-down.
 It proves the run wrapper's source routing end to end against a real `fm-session-start.sh`, including completion-gated `--reemit` selection, resume delegation, Pi CLI continuation classification, an unrecognized source falling through to the full digest, and bounded loud delivery of an oversized Pi digest.
 The same portable suite proves provider exclusion until settlement, exactly-one execution and context delivery, interruption, process-tree retirement, two rapid replacements, stale completion, eligible empty output, spawn error, wrapper timeout output, truncation, ineligible stand-down, and compaction cancellation through the extension's public event surface.
-`tests/fm-session-start.test.sh` proves the runtime bound through the forced pure-Bash fallback: a TERM-resistant digest that exceeds its budget is force-killed with its grandchild, still emits its completed stages, names the incomplete stage and every stage it never reached, leaves no completion proof, and exits 0.
+`tests/fm-session-start.test.sh` proves that a compaction re-emit keeps the lock verification, queued wakes, supervision block, and closing reminder while leaving both bulk digests on disk, that its budgeted bytes stay inside the default and floor budgets, that an over-budget section is named with the command that reads it, that neither the wake queue nor a drifted AGENTS.md refresh is ever cut, and that a clear re-emit still reprints everything.
+The same suite proves the runtime bound through the forced pure-Bash fallback: a TERM-resistant digest that exceeds its budget is force-killed with its grandchild, still emits its completed stages, names the incomplete stage and every stage it never reached, leaves no completion proof, and exits 0.
 `tests/fm-pi-primary-live-e2e.test.sh` and `tests/fm-opencode-primary-live-e2e.test.sh` exercise native startup paths with first-message and later-message Ahoy regressions.
 `tests/fm-cursor-primary.test.sh` proves the Cursor adapter over real processes: `sessionStart` emits the whole digest as `additional_context` with a caller-supplied `--source`, stays silent in a child worktree, lets the run wrapper stand down on the Cursor-delivered duplicate, and keeps `preCompact` unregistered so the deferred surface cannot be reintroduced unnoticed.
 `FM_CURSOR_PRIMARY_LIVE_E2E=1 tests/fm-cursor-primary-live-e2e.test.sh` proves the injected digest actually reaches model context in a real cursor-agent session.

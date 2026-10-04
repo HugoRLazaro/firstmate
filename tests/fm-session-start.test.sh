@@ -2143,6 +2143,137 @@ EOF
   pass "--reemit reprints the digest without repeating startup's mutating sweeps and still drains queued wakes"
 }
 
+# budgeted_reemit_bytes <re-emit output>: the bytes a bounded re-emit printed
+# outside its two unbudgeted payloads, the AGENTS.md refresh and the wake queue.
+budgeted_reemit_bytes() {
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    /^CURRENT AGENTS.md - INSTRUCTION REFRESH$/ { skip = 1 }
+    /^BOOTSTRAP$/ { skip = 0 }
+    /^WAKE QUEUE$/ { skip = 1 }
+    skip && (/^SUPERVISION OPERATING INSTRUCTIONS/ || /^RE-EMIT BUDGET: /) { skip = 0 }
+    !skip { bytes += length($0) + 1 }
+    END { print bytes + 0 }
+  '
+}
+
+test_compact_reemit_is_bounded_and_names_what_it_omits() {
+  local rec root home fakebin startup compact drifted squeezed cleared i budgeted
+  rec=$(new_world reemit-bounded)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" pi
+  printf '%s\n' 'BOUNDED_AGENTS=original' > "$root/AGENTS.md"
+
+  # A home whose two bulk digests are far larger than the re-emit budget.
+  {
+    printf 'CAPTAIN_MEMORY_MARKER\n'
+    for i in $(seq 1 600); do printf 'captain preference %s: a durable line of curated captain memory.\n' "$i"; done
+  } > "$home/data/captain.md"
+  {
+    printf 'LEARNINGS_MARKER\n'
+    for i in $(seq 1 900); do printf 'learning %s: a dated, evidence-backed fleet-local operational fact.\n' "$i"; done
+  } > "$home/data/learnings.md"
+  printf '## Queued\n- BACKLOG_ROW_MARKER a queued item\n' > "$home/data/backlog.md"
+  for i in 1 2 3 4 5 6; do
+    printf 'kind=ship\n' > "$home/state/task-$i.meta"
+    printf 'working: TASK_STATUS_MARKER %s\n' "$i" > "$home/state/task-$i.status"
+  done
+  printf 'done: ORPHAN_STATUS_MARKER\n' > "$home/state/task-orphan.status"
+
+  startup=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --source startup)
+  assert_contains "$startup" "CAPTAIN_MEMORY_MARKER" "the true-start fixture did not print the context digest"
+  assert_contains "$startup" "LEARNINGS_MARKER" "the true-start fixture did not print the learnings file"
+  assert_contains "$startup" "TASK_STATUS_MARKER 6" "the true-start fixture did not print the fleet-state digest"
+  assert_contains "$startup" "ORPHAN_STATUS_MARKER" "the true-start fixture did not print the orphan status logs"
+  assert_contains "$startup" "BACKLOG_ROW_MARKER" "the true-start fixture did not print the backlog listing"
+  assert_contains "$startup" "READ-ONCE CONTRACT" "the true start lost its read-once contract"
+  assert_not_contains "$startup" "RE-EMIT" "a true start printed re-emit text"
+  [ "$(printf '%s\n' "$startup" | wc -c)" -gt 24576 ] \
+    || fail "the fixture digest is not larger than the re-emit budget, so the bound would prove nothing"
+
+  append_wake "$home/state" signal task-1 "done: queued before the compaction" || fail "seed wake failed"
+  compact=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+
+  assert_contains "$compact" "SESSION START (CONTEXT RE-EMIT) - $home" "a compaction re-emit did not label itself"
+  assert_contains "$compact" "lock acquired" "a compaction re-emit dropped the lock verification"
+  assert_contains "$compact" "done: queued before the compaction" "a compaction re-emit dropped a queued wake"
+  assert_contains "$compact" "WAKE_ACK_REQUIRED:" "a compaction re-emit dropped the wake acknowledgement"
+  assert_contains "$compact" "SUPERVISION OPERATING INSTRUCTIONS - primary harness: pi" \
+    "a compaction re-emit dropped the supervision operating instructions"
+  assert_contains "$compact" "RE-EMIT SCOPE" "a compaction re-emit did not say what it leaves out"
+  assert_contains "$compact" "NEXT STEP" "a compaction re-emit dropped the closing reminder"
+  assert_contains "$compact" "6 task record(s) (*.meta) and 7 status log(s) (*.status)" \
+    "a compaction re-emit did not point at the fleet records it left on disk"
+  assert_contains "$compact" "data/captain.md: present" "a compaction re-emit did not list a present context file"
+  assert_contains "$compact" "data/secondmates.md: ABSENT" "a compaction re-emit hid a meaningful ABSENT context file"
+  assert_not_contains "$compact" "CAPTAIN_MEMORY_MARKER" "a compaction re-emit reprinted data/captain.md"
+  assert_not_contains "$compact" "LEARNINGS_MARKER" "a compaction re-emit reprinted data/learnings.md"
+  assert_not_contains "$compact" "TASK_STATUS_MARKER 6" "a compaction re-emit reprinted the status tails"
+  assert_not_contains "$compact" "ORPHAN_STATUS_MARKER" "a compaction re-emit reprinted the orphan status logs"
+  assert_not_contains "$compact" "BACKLOG_ROW_MARKER" "a compaction re-emit reprinted the backlog listing"
+  assert_not_contains "$compact" "READ-ONCE CONTRACT" \
+    "a compaction re-emit claimed a read-once contract over digests it did not print"
+  assert_not_contains "$compact" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
+    "an unchanged AGENTS file was re-emitted on a bounded compaction"
+  assert_not_contains "$compact" "RE-EMIT BUDGET" "a re-emit that fits its budget reported an omission"
+  budgeted=$(budgeted_reemit_bytes "$compact")
+  [ "$budgeted" -gt 0 ] && [ "$budgeted" -le 24576 ] \
+    || fail "a compaction re-emit printed $budgeted budgeted bytes, over its 24576-byte default budget"
+  [ "$(printf '%s\n' "$compact" | wc -c)" -lt "$(printf '%s\n' "$startup" | wc -c)" ] \
+    || fail "a compaction re-emit was not smaller than the digest it replaces"
+  [ -s "$home/state/.wake-queue" ] || fail "a compaction re-emit removed the wake before its acknowledgement"
+
+  # A drifted AGENTS.md larger than the whole budget is still refreshed complete:
+  # it is one of the two payloads the budget never cuts.
+  {
+    printf 'BOUNDED_AGENTS=updated\n'
+    for i in $(seq 1 500); do printf 'instruction line %s that a stale native cache does not have yet.\n' "$i"; done
+    printf 'BOUNDED_AGENTS_LAST_LINE\n'
+  } > "$root/AGENTS.md"
+  [ "$(wc -c < "$root/AGENTS.md")" -gt 24576 ] || fail "the drifted AGENTS fixture is not larger than the budget"
+  drifted=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$drifted" "BOUNDED_AGENTS=updated" "a bounded compaction dropped the drifted AGENTS refresh"
+  assert_contains "$drifted" "BOUNDED_AGENTS_LAST_LINE" "a bounded compaction cut the AGENTS refresh short"
+  assert_contains "$drifted" "done: queued before the compaction" \
+    "an unacknowledged wake was not presented again beside the AGENTS refresh"
+  assert_not_contains "$drifted" "RE-EMIT BUDGET" "the AGENTS refresh was charged to the re-emit budget"
+  budgeted=$(budgeted_reemit_bytes "$drifted")
+  [ "$budgeted" -le 24576 ] \
+    || fail "a compaction re-emit beside an AGENTS refresh printed $budgeted budgeted bytes"
+
+  # The cap is hard: a budget too small for a section drops that section, names
+  # it and the command that reads it, and still never cuts the wake queue. A
+  # value under the floor is raised to the 8192-byte floor rather than obeyed.
+  squeezed=$(FM_SESSION_START_REEMIT_BUDGET=1 FM_FAKE_HARNESS=pi \
+    run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source compact)
+  assert_contains "$squeezed" "RE-EMIT BUDGET: SUPERVISION OPERATING INSTRUCTIONS omitted" \
+    "an over-budget section was not named where it would have printed"
+  assert_contains "$squeezed" "8192-byte re-emit budget" "a budget under the floor was not raised to the floor"
+  assert_contains "$squeezed" "RE-EMIT BUDGET EXCEEDED" "the closing reminder did not name the omitted sections"
+  assert_contains "$squeezed" "fm-supervision-instructions.sh --harness pi" \
+    "an omitted section did not carry the command that reads it"
+  assert_not_contains "$squeezed" "SUPERVISION OPERATING INSTRUCTIONS - primary harness: pi" \
+    "a section that did not fit the budget was printed anyway"
+  assert_contains "$squeezed" "done: queued before the compaction" "the budget cut a queued wake"
+  assert_contains "$squeezed" "WAKE_ACK_REQUIRED:" "the budget cut the wake acknowledgement"
+  assert_contains "$squeezed" "BOUNDED_AGENTS_LAST_LINE" "the budget cut the AGENTS refresh"
+  assert_contains "$squeezed" "NEXT STEP" "the budget cut the closing reminder"
+  budgeted=$(budgeted_reemit_bytes "$squeezed")
+  [ "$budgeted" -le 8192 ] \
+    || fail "a squeezed compaction re-emit printed $budgeted budgeted bytes, over its 8192-byte floor budget"
+
+  # A clear leaves no summary behind, so its re-emit still reprints both digests.
+  cleared=$(FM_FAKE_HARNESS=pi run_pi_session_start "$home" "$root" "$fakebin:$BASE_PATH" --reemit --source clear)
+  assert_contains "$cleared" "CAPTAIN_MEMORY_MARKER" "a clear re-emit lost the context digest"
+  assert_contains "$cleared" "TASK_STATUS_MARKER 6" "a clear re-emit lost the fleet-state digest"
+  assert_contains "$cleared" "READ-ONCE CONTRACT" "a clear re-emit lost its read-once contract"
+  assert_not_contains "$cleared" "RE-EMIT SCOPE" "a clear re-emit was bounded like a compaction"
+
+  pass "a compaction re-emit keeps the lock, wakes, and supervision block, leaves both bulk digests on disk, and holds a hard byte budget"
+}
+
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact() {
   local rec root home fakebin startup compact_equal compact_first compact_second clear_out resume_out reset_out baseline baseline_after expected_hash refresh_line bootstrap_line
   rec=$(new_world agents-refresh)
@@ -2719,6 +2850,7 @@ test_portable_timeout_escalates_term_resistant_process
 test_runtime_bound_leaves_a_healthy_digest_untouched
 test_runtime_bound_leaves_harness_ancestry_headroom
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
+test_compact_reemit_is_bounded_and_names_what_it_omits
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact
 test_read_only_pi_compact_refreshes_against_its_own_session_identity
 test_codex_unreachable_reset_sources_do_not_claim_instruction_refresh

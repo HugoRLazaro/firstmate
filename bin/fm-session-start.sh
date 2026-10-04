@@ -208,6 +208,47 @@
 #             a lock another live session took meanwhile still produces the
 #             ordinary read-only path.
 #
+#             BOUNDED RE-EMIT. What a re-emit prints depends on what the
+#             session lost, which `--source` names:
+#               compact  the BOUNDED re-emit. A compaction keeps a summary of
+#                        what the session knew, so reprinting the two bulk
+#                        digests returns to context exactly the weight the
+#                        compaction just removed, and a digest larger than the
+#                        room a compaction frees turns into a compaction loop:
+#                        one observed main-home re-emit measured 306KB. So this
+#                        path prints the lock verification, the detect-only
+#                        bootstrap lines, the wake queue, the supervision
+#                        operating instructions, the away posture and public
+#                        commitments, the network checks, and the closing
+#                        reminder. FLEET STATE (backlog listing, state/*.meta,
+#                        status tails, orphan status logs) and CONTEXT (the five
+#                        data/ files) are NOT reprinted: a RE-EMIT SCOPE section
+#                        names them, forbids rebuilding them in bulk, and says
+#                        how to read one source when the work needs it, and
+#                        each data/ file's presence is still listed because
+#                        absence is meaningful.
+#               clear, or no source
+#                        the full reprint. A clear leaves no summary behind, so
+#                        the session has nothing to rebuild the digests from and
+#                        every section prints exactly as at a true start.
+#             The bounded re-emit also has a HARD byte budget, so nothing added
+#             to it later can grow back into the loop:
+#             FM_SESSION_START_REEMIT_BUDGET, default 24576 bytes, with any
+#             value under 8192 raised to that floor because a budget that
+#             cannot hold the fixed text is not a budget. The fixed text is
+#             always printed and counted. Each variable section (bootstrap, the
+#             supervision block, public commitments, network checks) prints only
+#             when it fits with 4096 bytes still reserved for the fixed text
+#             that follows it; a section that does not fit is replaced, where it
+#             would have printed, by a RE-EMIT BUDGET line naming it, its size,
+#             and the command that reads it, and NEXT STEP names every omitted
+#             section again. Two payloads are deliberately OUTSIDE the budget,
+#             because cutting either loses something no pointer can recover:
+#             the wake-queue presentation, whose drain has already advanced the
+#             presentation cursor, and the AGENTS.md instruction refresh below.
+#             NEXT STEP closes with a RE-EMIT SIZE line accounting for the
+#             budgeted bytes and for both of those payloads.
+#
 #   --source  The native session-open source, supplied only by
 #             fm-sessionstart-run.sh. A genuine `startup` that owns the active
 #             session lock records AGENTS.md's SHA-256 baseline only after the
@@ -326,7 +367,11 @@ if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
     printf '●  cannot finish inside the bound is a fleet problem, not a reporting detail.\n'
     printf '%s\n' "$BAR"
   fi
-  rm -f "$SESSION_START_STAGE_FILE" 2>/dev/null || true
+  # The bounded re-emit's scratch block file lives beside the breadcrumb; never
+  # derive it from the /dev/null fallback.
+  if [ "$SESSION_START_STAGE_FILE" != /dev/null ]; then
+    rm -f "$SESSION_START_STAGE_FILE" "$SESSION_START_STAGE_FILE.block" 2>/dev/null || true
+  fi
   exit 0
 fi
 
@@ -360,11 +405,105 @@ QUEUED_LIMIT=${FM_SESSION_START_QUEUED_LIMIT:-20}
 case "$QUEUED_LIMIT" in ''|*[!0-9]*|0) QUEUED_LIMIT=20 ;; esac
 BACKLOG_FIELDS=blocked_by,hold_kind,hold_reason
 
+# The bounded re-emit and its hard budget: see the header's BOUNDED RE-EMIT note.
+REEMIT_BOUNDED=0
+if [ "$REEMIT" -eq 1 ] && [ "$SESSION_SOURCE" = compact ]; then REEMIT_BOUNDED=1; fi
+REEMIT_BUDGET_DEFAULT=24576
+REEMIT_BUDGET_FLOOR=8192
+REEMIT_RESERVE=4096
+REEMIT_BUDGET=${FM_SESSION_START_REEMIT_BUDGET:-$REEMIT_BUDGET_DEFAULT}
+case "$REEMIT_BUDGET" in ''|*[!0-9]*) REEMIT_BUDGET=$REEMIT_BUDGET_DEFAULT ;; esac
+REEMIT_BUDGET=$((10#$REEMIT_BUDGET))
+[ "$REEMIT_BUDGET" -ge "$REEMIT_BUDGET_FLOOR" ] || REEMIT_BUDGET=$REEMIT_BUDGET_FLOOR
+REEMIT_USED=0
+REEMIT_OMITTED=
+REEMIT_WAKE_BYTES=0
+REEMIT_AGENTS_BYTES=0
+
 RULE='================================================================================'
 SUBRULE='--------------------------------------------------------------------------------'
 
 section() { printf '\n%s\n%s\n%s\n' "$RULE" "$1" "$RULE"; }
 subsection() { printf '\n%s\n%s\n' "$1" "$SUBRULE"; }
+
+# block_begin / block_end bracket one printed block of the digest. Outside the
+# bounded re-emit both are no-ops, so every other path still streams each line
+# to stdout the moment it is printed. Inside it, block_begin diverts stdout to a
+# scratch file and block_end weighs what the block printed before releasing it:
+#   fixed    always printed, and counted against the budget
+#   bounded  printed only when it fits with REEMIT_RESERVE left for the fixed
+#            text still to come; otherwise replaced by one RE-EMIT BUDGET line
+#   exempt   always printed and never counted; its size is only recorded for
+#            the closing RE-EMIT SIZE line
+# The scratch file sits beside the stage breadcrumb, so the parent that removes
+# one removes the other even when this child is killed at its runtime bound.
+# With no usable scratch file a fixed or exempt block streams unmeasured, and a
+# bounded block is discarded and reported omitted, so the budget still holds.
+REEMIT_BLOCK_FILE=
+REEMIT_BLOCK_OPEN=0
+if [ "$REEMIT_BOUNDED" -eq 1 ]; then
+  case "${FM_SESSION_START_STAGE_FILE:-}" in
+    ''|/dev/null) ;;
+    *) REEMIT_BLOCK_FILE="$FM_SESSION_START_STAGE_FILE.block" ;;
+  esac
+fi
+
+block_begin() {  # <fixed|bounded|exempt>
+  [ "$REEMIT_BOUNDED" -eq 1 ] || return 0
+  REEMIT_BLOCK_OPEN=0
+  if [ -n "$REEMIT_BLOCK_FILE" ] && : > "$REEMIT_BLOCK_FILE" 2>/dev/null; then
+    exec 7>&1 >"$REEMIT_BLOCK_FILE"
+    REEMIT_BLOCK_OPEN=1
+  elif [ "$1" = bounded ]; then
+    exec 7>&1 >/dev/null
+    REEMIT_BLOCK_OPEN=2
+  fi
+}
+
+block_end() {  # <fixed|bounded|exempt> <name> [<how to read it>]
+  local kind=$1 name=$2 recovery=${3:-} size notice
+  [ "$REEMIT_BOUNDED" -eq 1 ] || return 0
+  [ "$REEMIT_BLOCK_OPEN" -ne 0 ] || return 0
+  exec >&7 7>&-
+  if [ "$REEMIT_BLOCK_OPEN" -eq 1 ]; then
+    size=$(wc -c < "$REEMIT_BLOCK_FILE" 2>/dev/null | tr -d '[:space:]')
+    case "$size" in ''|*[!0-9]*) size=0 ;; esac
+  else
+    size=unmeasured
+  fi
+  case "$kind" in
+    exempt)
+      cat "$REEMIT_BLOCK_FILE"
+      case "$name" in
+        'WAKE QUEUE') REEMIT_WAKE_BYTES=$size ;;
+        *) REEMIT_AGENTS_BYTES=$size ;;
+      esac
+      ;;
+    fixed)
+      cat "$REEMIT_BLOCK_FILE"
+      REEMIT_USED=$((REEMIT_USED + size))
+      ;;
+    bounded)
+      if [ "$size" != unmeasured ] && [ $((REEMIT_USED + size + REEMIT_RESERVE)) -le "$REEMIT_BUDGET" ]; then
+        cat "$REEMIT_BLOCK_FILE"
+        REEMIT_USED=$((REEMIT_USED + size))
+      else
+        if [ "$size" = unmeasured ]; then
+          notice=$(printf '\nRE-EMIT BUDGET: %s omitted - no scratch file was available to weigh it against the %s-byte re-emit budget.\nRead it directly: %s' \
+            "$name" "$REEMIT_BUDGET" "$recovery")
+        else
+          notice=$(printf '\nRE-EMIT BUDGET: %s omitted - its %s bytes do not fit the %s-byte re-emit budget (%s used, %s reserved for the fixed text below).\nRead it directly: %s' \
+            "$name" "$size" "$REEMIT_BUDGET" "$REEMIT_USED" "$REEMIT_RESERVE" "$recovery")
+        fi
+        printf '%s\n' "$notice"
+        REEMIT_USED=$((REEMIT_USED + ${#notice} + 1))
+        REEMIT_OMITTED="${REEMIT_OMITTED}  - ${name}: ${recovery}
+"
+      fi
+      ;;
+  esac
+  REEMIT_BLOCK_OPEN=0
+}
 
 # print_file_or_absent <path> <label>: full contents under a labeled
 # subsection, or an explicit ABSENT marker. Absence is semantically
@@ -383,6 +522,23 @@ print_file_or_absent() {
     fi
   else
     printf 'ABSENT\n'
+  fi
+}
+
+# print_file_presence <path> <label>: the same three-way distinction as
+# print_file_or_absent, without the contents. The bounded re-emit uses it so an
+# ABSENT file still reads as absent when nothing is reprinted.
+print_file_presence() {
+  local path=$1 label=$2 size
+  if [ -f "$path" ]; then
+    if [ -s "$path" ]; then
+      size=$(wc -c < "$path" 2>/dev/null | tr -d '[:space:]')
+      printf '  %s: present (%s bytes) - %s\n' "$label" "${size:-?}" "$path"
+    else
+      printf '  %s: present, empty\n' "$label"
+    fi
+  else
+    printf '  %s: ABSENT\n' "$label"
   fi
 }
 
@@ -614,7 +770,17 @@ if [ "$REEMIT" -eq 0 ] && [ "$SESSION_SOURCE" = startup ]; then
   AGENTS_START_HASH=$(hash_file_sha256 "$FM_ROOT/AGENTS.md" 2>/dev/null || true)
 fi
 
-if [ "$REEMIT" -eq 1 ]; then
+block_begin fixed
+if [ "$REEMIT_BOUNDED" -eq 1 ]; then
+  section "SESSION START (CONTEXT RE-EMIT) - $FM_HOME"
+  printf 'This session already took the helm at its own startup and has only lost context\n'
+  printf 'to a compaction, whose summary carries what the session already knew, so this\n'
+  printf 're-emit is deliberately small. Lock ownership is re-verified and the supervision\n'
+  printf 'operating instructions are reprinted. The sweeps startup already reconciled\n'
+  printf 'are NOT repeated, and the fleet-state and context digests are NOT reprinted: the\n'
+  printf 'RE-EMIT SCOPE section below says how to read one source when the work needs it.\n'
+  printf 'Queued wakes ARE still drained: they arrived after startup and are this turn work.\n'
+elif [ "$REEMIT" -eq 1 ]; then
   section "SESSION START (CONTEXT RE-EMIT) - $FM_HOME"
   printf 'This session already took the helm at its own startup and has only lost its\n'
   printf 'context. Lock ownership is re-verified and the durable records below are\n'
@@ -648,8 +814,11 @@ if [ "$LOCK_RC" -ne 0 ]; then
     printf '%s\n' "$BAR"
   }
 fi
+block_end fixed LOCK
 REBUILDING_SESSION_PID=$(fm_harness_ancestry_pid 2>/dev/null || true)
+block_begin exempt
 print_agents_refresh_if_required "$REBUILDING_SESSION_PID"
+block_end exempt 'AGENTS.md REFRESH'
 
 if [ "$READ_ONLY" -eq 0 ]; then
   if [ "$REEMIT" -eq 0 ]; then
@@ -682,6 +851,7 @@ fi
 # the deferred stage above is running right now, and running it twice would both
 # re-block this digest and race the worker's sweeps against themselves.
 stage bootstrap
+block_begin bounded
 subsection "BOOTSTRAP"
 if [ "$READ_ONLY" -eq 1 ]; then
   BOOT_OUT=$(FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_NETWORK=skip \
@@ -701,6 +871,7 @@ if [ -n "$BOOT_OUT" ]; then
 else
   printf '(silent - all good)\n'
 fi
+block_end bounded BOOTSTRAP "FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_NETWORK=skip $SCRIPT_DIR/fm-bootstrap.sh"
 
 # --- 3. wake-drain ---------------------------------------------------------
 # The inactive-outcome startup scan runs in the deferred worker launched above,
@@ -717,6 +888,7 @@ fi
 # fm-guard.sh directly with non-mutating advisory text, so the same alarms
 # surface without repair commands.
 stage wake-queue
+block_begin exempt
 subsection "WAKE QUEUE"
 if [ "$READ_ONLY" -eq 1 ]; then
   QLEN=0
@@ -745,6 +917,7 @@ else
     printf '(no queued wakes)\n'
   fi
 fi
+block_end exempt 'WAKE QUEUE'
 
 # --- 4. supervision operating instructions ----------------------------------
 stage supervision-instructions
@@ -754,6 +927,7 @@ AFK_MODE=$(fm_afk_mode "$STATE")
 X_MODE_PRESENT=0
 [ -f "$CONFIG/x-mode.env" ] && X_MODE_PRESENT=1
 
+block_begin bounded
 if [ "$PRIMARY_HARNESS" = pi ] || [ "$PRIMARY_HARNESS" = pi-signed ]; then
   PI_EXT="$FM_ROOT/.pi/extensions/fm-primary-pi-watch.ts"
   PI_TURNEND_EXT="$FM_ROOT/.pi/extensions/fm-primary-turnend-guard.ts"
@@ -793,6 +967,8 @@ fi
   --afk "$AFK_PRESENT" \
   --afk-mode "$AFK_MODE" \
   --x-mode "$X_MODE_PRESENT"
+block_end bounded 'SUPERVISION OPERATING INSTRUCTIONS' \
+  "$SCRIPT_DIR/fm-supervision-instructions.sh --harness $PRIMARY_HARNESS --read-only $READ_ONLY --afk $AFK_PRESENT --afk-mode $AFK_MODE --x-mode $X_MODE_PRESENT"
 
 # --- 5. read-once contract -------------------------------------------------
 # Ahead of the two digests it governs, not after them: a truncated tail is
@@ -801,6 +977,31 @@ fi
 # arrives BEFORE its subject, it also names the one condition that voids it -
 # a stage that never ran, which the truncation banner names by stage.
 stage read-once
+block_begin fixed
+if [ "$REEMIT_BOUNDED" -eq 1 ]; then
+  section "RE-EMIT SCOPE"
+  cat <<'EOF'
+A true session start prints two bulk digests that this re-emit leaves out,
+because the compaction summary already carries what they said:
+  FLEET STATE  the backlog listing, every state/*.meta, each task's status
+               tail, and the orphan status logs
+  CONTEXT      data/projects.md, data/secondmates.md, data/captain.md,
+               data/captain-shared.md, and data/learnings.md
+Do NOT bulk-read those sources, and do NOT rerun bin/fm-session-start.sh, to
+rebuild them: that returns to context the weight this re-emit keeps out of it.
+
+Read one source directly only when the work in hand needs it:
+  - one task's current state: bin/fm-crew-state.sh <id>
+  - one task's record or its wake-event history: state/<id>.meta, state/<id>.status
+  - the whole fleet at a glance: bin/fm-fleet-view.sh
+  - the queue: bin/fm-tasks-axi.sh list when compatible tasks-axi is available,
+    or data/backlog.md; one full body with bin/fm-tasks-axi.sh show <id> --full
+  - a captain preference, a learning, a secondmate route, or the project
+    registry: the one data/ file that owns it (listed under CONTEXT below)
+A section this re-emit had no budget for is named where it would have printed,
+and again under NEXT STEP, with the command that reads it.
+EOF
+else
 section "READ-ONCE CONTRACT"
 cat <<'EOF'
 Everything below is printed in full for this session start: every state/*.meta,
@@ -824,11 +1025,28 @@ Go to a source directly only when:
   - or a STARTUP TRUNCATED banner named the stage that would have printed it, in
     which case that stage's sources were never emitted and must be reconciled.
 EOF
+fi
+block_end fixed 'RE-EMIT SCOPE'
 
 # --- 6. fleet-state digest ---------------------------------------------
 # Before CONTEXT: see this file's ORDERING note. Live fleet identity is what a
 # truncated tail must never take.
 stage fleet-state
+block_begin fixed
+if [ "$REEMIT_BOUNDED" -eq 1 ]; then
+  section "FLEET STATE (NOT REPRINTED)"
+  META_COUNT=0
+  for meta in "$STATE"/*.meta; do
+    [ -f "$meta" ] && META_COUNT=$((META_COUNT + 1))
+  done
+  STATUS_COUNT=0
+  for status in "$STATE"/*.status; do
+    [ -f "$status" ] && STATUS_COUNT=$((STATUS_COUNT + 1))
+  done
+  printf '%s task record(s) (*.meta) and %s status log(s) (*.status) are on disk under %s.\n' \
+    "$META_COUNT" "$STATUS_COUNT" "$STATE"
+  printf 'None is reprinted, and neither is the backlog listing: see RE-EMIT SCOPE above.\n'
+else
 section "FLEET STATE"
 print_backlog_compact "$DATA/backlog.md" "data/backlog.md"
 
@@ -874,6 +1092,7 @@ for status in "$STATE"/*.status; do
   print_status_tail "$status"
 done
 [ "$ORPHAN_STATUS_FOUND" -eq 1 ] || printf '(none)\n'
+fi
 
 subsection "AFK"
 # The away posture is the record (bin/fm-afk-contract.sh); the legacy flag
@@ -899,6 +1118,7 @@ elif [ -e "$STATE/.afk" ]; then
 else
   printf 'absent\n'
 fi
+block_end fixed 'FLEET STATE'
 
 # Public commitments made through the myfirstmate relay. A promise to reply in a
 # public thread must survive compaction and restart, so it is surfaced from disk
@@ -909,12 +1129,14 @@ if fm_pf_relay_active "$FM_HOME" \
   && { fm_pf_has_registrations "$STATE" || fm_pf_has_events "$STATE"; }; then
   PUBLIC_FOLLOWUP=$("$SCRIPT_DIR/fm-public-followup.sh" pending 2>/dev/null) || PUBLIC_FOLLOWUP=
   if [ -n "$PUBLIC_FOLLOWUP" ]; then
+    block_begin bounded
     subsection "Public commitments"
     printf '%s\n' "$PUBLIC_FOLLOWUP"
     printf '\nEach line is a public loop this home still holds: a reply still owed, or an open loop with nothing owed.\n'
     printf 'Reconcile terminal results with %s/bin/fm-public-followup.sh consume, then deliver a ready one with\n' "$FM_ROOT"
     printf '%s/bin/fm-public-followup.sh deliver <id>. Hand a delivered loop on with rechain, or close it with\n' "$FM_ROOT"
     printf '%s/bin/fm-public-followup.sh retire <id> --reason "...". Load fmx-respond for the procedure.\n' "$FM_ROOT"
+    block_end bounded 'Public commitments' "$SCRIPT_DIR/fm-public-followup.sh pending (then load fmx-respond)"
   fi
 fi
 
@@ -927,6 +1149,7 @@ fi
 # is a NON-BLOCKING read either way - whatever the worker has published by now is
 # printed, and whatever it has not is named as not yet confirmed.
 stage network-checks
+block_begin bounded
 section "NETWORK CHECKS"
 if [ "$READ_ONLY" -eq 1 ]; then
   printf 'skipped (read-only session) - GitHub authentication, project clone refresh,\n'
@@ -936,6 +1159,7 @@ if [ "$READ_ONLY" -eq 1 ]; then
 else
   "$SCRIPT_DIR/fm-startup-network.sh" harvest --pid $$ 2>&1 || true
 fi
+block_end bounded 'NETWORK CHECKS' "$SCRIPT_DIR/fm-startup-network.sh report"
 
 # --- 8. context digest -----------------------------------------------------
 # Last of the bulk sections deliberately: curated memory is stable session to
@@ -943,15 +1167,29 @@ fi
 # with one targeted read, so it is the cheapest thing for a truncated tail to
 # take (see this file's ORDERING note).
 stage context
+block_begin fixed
+if [ "$REEMIT_BOUNDED" -eq 1 ]; then
+  section "CONTEXT (NOT REPRINTED)"
+  printf 'Not reprinted: see RE-EMIT SCOPE above. Presence is still listed, because an\n'
+  printf 'ABSENT file is meaningful (AGENTS.md section 3) and is not an empty one.\n'
+  print_file_presence "$DATA/projects.md" "data/projects.md"
+  print_file_presence "$DATA/secondmates.md" "data/secondmates.md"
+  print_file_presence "$DATA/captain.md" "data/captain.md"
+  print_file_presence "$DATA/captain-shared.md" "data/captain-shared.md"
+  print_file_presence "$DATA/learnings.md" "data/learnings.md"
+else
 section "CONTEXT"
 print_file_or_absent "$DATA/projects.md" "data/projects.md"
 print_file_or_absent "$DATA/secondmates.md" "data/secondmates.md"
 print_file_or_absent "$DATA/captain.md" "data/captain.md"
 print_file_or_absent "$DATA/captain-shared.md" "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)"
 print_file_or_absent "$DATA/learnings.md" "data/learnings.md"
+fi
+block_end fixed CONTEXT
 
 # --- 9. closing reminder -----------------------------------------------
 stage next-step
+block_begin fixed
 section "NEXT STEP"
 if [ "$READ_ONLY" -eq 1 ]; then
   cat <<'EOF'
@@ -989,10 +1227,26 @@ This script never starts supervision itself.
 
 EOF
 fi
+if [ "$REEMIT_BOUNDED" -eq 1 ]; then
+  cat <<'EOF'
+The re-emit above is complete. Its RE-EMIT SCOPE section governs what may still
+be read from disk.
+EOF
+else
 cat <<'EOF'
 The digest above is complete for this session start. The READ-ONCE CONTRACT
 section near the top of it governs what may still be read from disk.
 EOF
+fi
+block_end fixed 'NEXT STEP'
+if [ "$REEMIT_BOUNDED" -eq 1 ]; then
+  if [ -n "$REEMIT_OMITTED" ]; then
+    printf '\nRE-EMIT BUDGET EXCEEDED - these sections were omitted, and each is read with the command beside it:\n%s' \
+      "$REEMIT_OMITTED"
+  fi
+  printf '\nRE-EMIT SIZE: %s of %s budgeted bytes used; outside the budget: wake queue %s bytes, AGENTS.md refresh %s bytes.\n' \
+    "$REEMIT_USED" "$REEMIT_BUDGET" "$REEMIT_WAKE_BYTES" "$REEMIT_AGENTS_BYTES"
+fi
 
 if [ "$READ_ONLY" -eq 0 ] && [ "$REEMIT" -eq 0 ]; then
   COMPLETION_RECORDED=0
