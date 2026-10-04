@@ -1,0 +1,12 @@
+# Real Pi true startup (live-reemit-block-1-startup.txt, 83169 bytes)
+  CAPTAIN_LOOP_MARKER        1
+  LEARNINGS_LOOP_MARKER      1
+  BACKLOG_LOOP_MARKER        0
+  TASK_STATUS_LOOP_MARKER    3
+# CLI true startup (live-cli-startup-output.txt, 77554 bytes)
+  CLI_CAPTAIN_MARKER         1
+  CLI_LEARNINGS_MARKER       1
+  CLI_STATUS_MARKER          1
+# The plain data/backlog.md fixture row is not listed because the real tasks-axi
+# backend read this lab home's empty tasks-axi backlog instead; a fixture detail, not
+# a product difference.

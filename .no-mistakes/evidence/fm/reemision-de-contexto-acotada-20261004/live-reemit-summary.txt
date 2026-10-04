@@ -1,0 +1,24 @@
+# Real Pi primary (pi 0.87.1), isolated lab home, real /compact events
+# Session identity forwarded by the extension: 01a1090b-29ed-743f-b300-f35eb899421c
+# Lock owner pid: 2378291 (the live Pi process, NOT the marker identity)
+
+block-1 startup digest bytes: 83169
+block-2 compact re-emit bytes: 73733   (includes the complete 60633-byte AGENTS.md refresh, delivered once)
+block-3 compact re-emit bytes: 13239   (same bytes, refresh withheld)
+
+RE-EMIT SIZE lines:
+RE-EMIT SIZE: 12406 of 24576 budgeted bytes used; outside the budget: wake queue 570 bytes, AGENTS.md refresh 60633 bytes.
+RE-EMIT SIZE: 12406 of 24576 budgeted bytes used; outside the budget: wake queue 570 bytes, AGENTS.md refresh withheld (same bytes already delivered).
+
+Withheld line:
+AGENTS.md REFRESH: the current bytes in /tmp/fm-reemit-live.2378238/project/AGENTS.md were already delivered to this session, so they are not reprinted here; read that file directly if needed.
+
+Bulk-digest markers in the compact re-emits (0 = left on disk):
+  CAPTAIN_LOOP_MARKER        block2=0 block3=0
+  LEARNINGS_LOOP_MARKER      block2=0 block3=0
+  BACKLOG_LOOP_MARKER        block2=0 block3=0
+  TASK_STATUS_LOOP_MARKER    block2=0 block3=0
+
+Kept in both compact re-emits: lock verification, queued wake, supervision instructions, closing reminder
+Model reply after compaction 1 (proves the injected refresh reached model context):
+AGENTS_LIVE_MARKER=new-8d5d4c768951

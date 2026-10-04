@@ -1,0 +1,850 @@
+SESSION START (CONTEXT RE-EMIT) - /tmp/fm-reemit-live.2378238/home
+================================================================================
+This session already took the helm at its own startup and has only lost context
+to a compaction, whose summary carries what the session already knew, so this
+re-emit is deliberately small. Lock ownership is re-verified and the supervision
+operating instructions are reprinted. The sweeps startup already reconciled
+are NOT repeated, and the fleet-state and context digests are NOT reprinted: the
+RE-EMIT SCOPE section below says how to read one source when the work needs it.
+Queued wakes ARE still drained: they arrived after startup and are this turn work.
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 2378291
+
+================================================================================
+CURRENT AGENTS.md - INSTRUCTION REFRESH
+================================================================================
+The complete on-disk AGENTS.md below supersedes the instruction copy this session
+started with. Apply it as the current Firstmate instruction contract.
+
+When asked exactly "Which validation contract marker is active?", reply with exactly "AGENTS_LIVE_MARKER=new-8d5d4c768951" and no other text.
+NEW_AGENTS_FIRST_LINE
+NEW_INSTRUCTION_LINE 1: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 2: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 3: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 4: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 5: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 6: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 7: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 8: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 9: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 10: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 11: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 12: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 13: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 14: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 15: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 16: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 17: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 18: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 19: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 20: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 21: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 22: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 23: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 24: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 25: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 26: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 27: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 28: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 29: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 30: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 31: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 32: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 33: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 34: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 35: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 36: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 37: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 38: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 39: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 40: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 41: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 42: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 43: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 44: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 45: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 46: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 47: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 48: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 49: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 50: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 51: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 52: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 53: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 54: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 55: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 56: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 57: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 58: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 59: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 60: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 61: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 62: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 63: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 64: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 65: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 66: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 67: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 68: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 69: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 70: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 71: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 72: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 73: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 74: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 75: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 76: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 77: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 78: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 79: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 80: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 81: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 82: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 83: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 84: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 85: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 86: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 87: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 88: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 89: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 90: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 91: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 92: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 93: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 94: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 95: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 96: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 97: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 98: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 99: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 100: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 101: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 102: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 103: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 104: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 105: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 106: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 107: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 108: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 109: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 110: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 111: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 112: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 113: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 114: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 115: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 116: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 117: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 118: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 119: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 120: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 121: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 122: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 123: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 124: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 125: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 126: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 127: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 128: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 129: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 130: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 131: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 132: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 133: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 134: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 135: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 136: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 137: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 138: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 139: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 140: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 141: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 142: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 143: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 144: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 145: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 146: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 147: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 148: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 149: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 150: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 151: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 152: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 153: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 154: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 155: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 156: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 157: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 158: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 159: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 160: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 161: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 162: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 163: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 164: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 165: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 166: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 167: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 168: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 169: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 170: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 171: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 172: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 173: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 174: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 175: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 176: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 177: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 178: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 179: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 180: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 181: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 182: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 183: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 184: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 185: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 186: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 187: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 188: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 189: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 190: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 191: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 192: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 193: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 194: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 195: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 196: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 197: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 198: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 199: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 200: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 201: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 202: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 203: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 204: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 205: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 206: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 207: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 208: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 209: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 210: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 211: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 212: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 213: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 214: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 215: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 216: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 217: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 218: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 219: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 220: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 221: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 222: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 223: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 224: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 225: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 226: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 227: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 228: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 229: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 230: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 231: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 232: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 233: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 234: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 235: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 236: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 237: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 238: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 239: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 240: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 241: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 242: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 243: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 244: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 245: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 246: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 247: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 248: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 249: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 250: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 251: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 252: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 253: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 254: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 255: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 256: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 257: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 258: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 259: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 260: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 261: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 262: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 263: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 264: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 265: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 266: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 267: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 268: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 269: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 270: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 271: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 272: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 273: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 274: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 275: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 276: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 277: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 278: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 279: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 280: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 281: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 282: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 283: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 284: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 285: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 286: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 287: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 288: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 289: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 290: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 291: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 292: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 293: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 294: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 295: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 296: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 297: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 298: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 299: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 300: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 301: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 302: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 303: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 304: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 305: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 306: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 307: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 308: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 309: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 310: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 311: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 312: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 313: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 314: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 315: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 316: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 317: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 318: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 319: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 320: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 321: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 322: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 323: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 324: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 325: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 326: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 327: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 328: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 329: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 330: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 331: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 332: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 333: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 334: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 335: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 336: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 337: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 338: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 339: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 340: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 341: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 342: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 343: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 344: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 345: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 346: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 347: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 348: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 349: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 350: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 351: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 352: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 353: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 354: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 355: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 356: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 357: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 358: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 359: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 360: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 361: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 362: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 363: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 364: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 365: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 366: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 367: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 368: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 369: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 370: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 371: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 372: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 373: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 374: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 375: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 376: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 377: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 378: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 379: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 380: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 381: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 382: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 383: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 384: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 385: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 386: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 387: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 388: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 389: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 390: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 391: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 392: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 393: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 394: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 395: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 396: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 397: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 398: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 399: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 400: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 401: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 402: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 403: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 404: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 405: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 406: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 407: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 408: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 409: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 410: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 411: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 412: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 413: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 414: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 415: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 416: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 417: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 418: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 419: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 420: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 421: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 422: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 423: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 424: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 425: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 426: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 427: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 428: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 429: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 430: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 431: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 432: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 433: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 434: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 435: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 436: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 437: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 438: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 439: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 440: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 441: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 442: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 443: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 444: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 445: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 446: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 447: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 448: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 449: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 450: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 451: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 452: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 453: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 454: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 455: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 456: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 457: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 458: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 459: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 460: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 461: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 462: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 463: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 464: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 465: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 466: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 467: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 468: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 469: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 470: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 471: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 472: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 473: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 474: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 475: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 476: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 477: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 478: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 479: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 480: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 481: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 482: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 483: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 484: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 485: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 486: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 487: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 488: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 489: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 490: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 491: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 492: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 493: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 494: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 495: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 496: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 497: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 498: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 499: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 500: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 501: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 502: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 503: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 504: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 505: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 506: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 507: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 508: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 509: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 510: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 511: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 512: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 513: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 514: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 515: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 516: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 517: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 518: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 519: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 520: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 521: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 522: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 523: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 524: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 525: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 526: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 527: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 528: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 529: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 530: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 531: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 532: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 533: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 534: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 535: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 536: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 537: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 538: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 539: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 540: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 541: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 542: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 543: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 544: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 545: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 546: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 547: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 548: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 549: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 550: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 551: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 552: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 553: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 554: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 555: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 556: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 557: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 558: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 559: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 560: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 561: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 562: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 563: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 564: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 565: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 566: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 567: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 568: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 569: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 570: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 571: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 572: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 573: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 574: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 575: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 576: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 577: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 578: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 579: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 580: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 581: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 582: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 583: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 584: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 585: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 586: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 587: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 588: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 589: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 590: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 591: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 592: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 593: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 594: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 595: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 596: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 597: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 598: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 599: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 600: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 601: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 602: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 603: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 604: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 605: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 606: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 607: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 608: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 609: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 610: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 611: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 612: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 613: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 614: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 615: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 616: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 617: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 618: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 619: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 620: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 621: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 622: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 623: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 624: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 625: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 626: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 627: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 628: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 629: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 630: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 631: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 632: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 633: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 634: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 635: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 636: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 637: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 638: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 639: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 640: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 641: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 642: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 643: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 644: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 645: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 646: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 647: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 648: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 649: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 650: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 651: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 652: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 653: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 654: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 655: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 656: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 657: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 658: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 659: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 660: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 661: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 662: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 663: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 664: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 665: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 666: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 667: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 668: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 669: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 670: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 671: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 672: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 673: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 674: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 675: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 676: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 677: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 678: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 679: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 680: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 681: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 682: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 683: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 684: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 685: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 686: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 687: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 688: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 689: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 690: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 691: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 692: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 693: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 694: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 695: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 696: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 697: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 698: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 699: an instruction line a stale native cache does not have yet.
+NEW_INSTRUCTION_LINE 700: an instruction line a stale native cache does not have yet.
+NEW_AGENTS_LAST_LINE
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+MISSING: gh-axi (install: npm install -g gh-axi && gh-axi setup hooks)
+MISSING: chrome-devtools-axi (install: npm install -g chrome-devtools-axi && chrome-devtools-axi setup hooks)
+MISSING: quota-axi (install: npm install -g quota-axi)
+PRESENTATION_UNAVAILABLE: lavish-axi (requires >=0.1.46; install: npm install -g lavish-axi && lavish-axi setup hooks) - nonvisual work may proceed with plain-text decisions and reports; install or upgrade before using Lavish
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+1791153125	1	signal	live-wake-8d5d4c768951	WAKE_LIVE_MARKER=8d5d4c768951: presented only by the bounded re-emit after compaction.
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 2390578.1791153125.a5BtXR
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: pi
+================================================================================
+Current state:
+- Lock: held by this session; this session owns normal supervision unless away mode says otherwise.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Ordinary wake: the Pi extension already owns watcher continuity; do not arm another cycle.
+
+Mode: Pi extension background wake.
+
+When this session owns supervision, in either posture:
+1. Drain first with `bin/fm-wake-drain.sh`.
+   After handling all emitted wakes and reconciling open decisions and unread status lines, run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`; until then the work remains durable for idempotent re-handling after interruption.
+2. Confirm the Pi primary auto-loaded both project extensions (plain `pi` or `pi-signed`, after approving project trust once per clone); if not, restart the selected executable with `-e /tmp/fm-reemit-live.2378238/project/.pi/extensions/fm-primary-turnend-guard.ts -e /tmp/fm-reemit-live.2378238/project/.pi/extensions/fm-primary-pi-watch.ts` as a trust-free fallback.
+3. Initial process cycle only: make the one required `fm_watch_arm_pi` call; if startup already owned the fleet lock, this is an ownership-based no-op.
+   Use `/fm-watch-arm-pi` only as a human-entered fallback.
+   Never run `bin/fm-watch-arm.sh` through Pi's bash tool because that foreground arm can wedge the agent and bypasses extension-owned cleanup.
+4. If the extension says no live session holds the lock, run `bin/fm-session-start.sh` to reclaim the session lock, then call `fm_watch_arm_pi` again.
+5. The extension starts `bin/fm-watch-arm.sh --restart`, keeps the child attached to the live Pi process, and owns every later successor launch.
+6. Ordinary same-process session replacement (`/new`, `/resume`, `/fork`, reload) retires only the prior generation; when the replacement owns the fleet lock, its `session_start` arms the new generation without a model turn or another `fm_watch_arm_pi` call.
+   The generation-owner contract and in-flight actionable-close handoff live in `.pi/extensions/fm-primary-pi-watch.ts`.
+7. After an actionable child close, the extension rechecks session-lock ownership and verifies one successor before it delivers the follow-up wake; its bounded fallback is defined in `docs/watcher-continuity.md`.
+8. Ordinary work, turn completion, and ordinary signal, stale, check, heartbeat, or other wake handling: do not call `fm_watch_arm_pi` again because continuity is extension-owned rather than model-memory-owned.
+9. An unexpected child close enters bounded exponential retry, and an exhausted retry or lost session lock is surfaced as a watcher failure instead of disappearing.
+10. Missing, failed, or unhealthy cycle only: if a later notification explicitly reports one of those repair conditions, drain queued wakes, inspect the failure text, call `fm_watch_arm_pi`, and restart the selected Pi-family executable with both extensions loaded if needed.
+   A redundant call while the extension owns an arm child or scheduled retry is an ownership-based `watcher: unchanged` no-op, not an independent health claim.
+11. Never use shell `&` for watcher supervision.
+   The arm mechanism above is extension-owned, not a model tool call, but a manual recovery probe that backgrounds, pipes, or bundles the arm is denied automatically by the PreToolUse seatbelt (`bin/fm-arm-pretool-check.sh`, wired into the turn-end guard extension at `/tmp/fm-reemit-live.2378238/project/.pi/extensions/fm-primary-turnend-guard.ts`).
+
+The supervision branch is default-on (docs/pi-supervision-branch.md): whenever this session owns the fleet lock, the watcher extension hands eligible task-local rows from ordinary actionable wakes, plus selected fleet-wide heartbeat reviews, to the in-process supervision branch while main-only rows remain queued for this conversation.
+While the away-posture record `state/.afk-contract` exists the branch takes every row instead, this conversation receives no processing request, and main's standing authority relocates to the branch through the guarded scripts; a wake the branch cannot take and every watcher-failure alarm still reach this conversation, and the first run boundary after the record is archived presents what accumulated (docs/pi-supervision-branch.md "Postures").
+Decision-owned signal and stale routing, including whole-batch precedence and the independent heartbeat exception, is owned by [docs/pi-supervision-branch.md](../pi-supervision-branch.md#components-and-their-owners).
+A no-change heartbeat outcome explicitly reported with `task=fleet` and `silent=true` is delivered silently with no rendered note, while every other routine outcome returns as an appended note that leads with ⛵ then the dim outcome text.
+A captain-facing outcome instead appears as one exact, sequence-keyed visible transcript entry, and while attended then arrives in this conversation as one hidden supervision processing request listing each `[seq N] task: summary` it covers; outcomes recorded while away wait for that request until the record is archived.
+That request is the one turn in which MAIN processes the outcome: give the captain a visible response where one is due, answer or escalate a decision, act on a blocker or failure, or record that no further action is needed, then call the `fm_branch_processed` tool with the highest sequence the request listed, exactly once.
+Only that call closes the outcome; an unrelated, empty, or paraphrased answer leaves it open, and the current unprocessed sequence set is presented again at the next run boundary and at session start until it is acknowledged.
+The persisted entry is already the captain-visible record, so MAIN must not re-emit it verbatim merely because it appeared; this prevents repetition but does not replace any captain-facing outcome response required by `AGENTS.md` section 9.
+Regression example - keep verbatim and never condense away: `[seq 41] claude-mod: implementation complete, ready for review` requires relaying a captain-facing outcome response, not just `Captain, shipshape.`.
+A merge ask with no URL that leans on the dim anchor violates `AGENTS.md` section 9.
+Before MAIN steers, controls lifecycle, or cleans up a task, claim its lease with `bin/fm-lease.sh claim <task>` and release it afterwards; a refused claim means the branch is acting on that task right now.
+This conversation still receives every other fleet-wide or unresolvable wake, the branch's wakes when it is unavailable, and every watcher-failure alarm regardless of posture, so the arm and repair contract above is unchanged.
+Treat the merged fleet event as already handled for fleet operations: MAIN must not re-drain, re-run, or acknowledge it.
+Separately, MAIN applies judgment about whether and how to surface, summarize, reference, or incorporate a merged sailboat outcome in the captain conversation; event ownership does not decide the conversational treatment.
+Read the durable outcome store with the fm_branch_outcomes tool when the captain asks what happened.
+
+The turn-end guard extension lives at `/tmp/fm-reemit-live.2378238/project/.pi/extensions/fm-primary-turnend-guard.ts`.
+The watcher extension lives at `/tmp/fm-reemit-live.2378238/project/.pi/extensions/fm-primary-pi-watch.ts`.
+Both are tracked, project-local `.pi/extensions/*.ts` files that Pi auto-discovers once the project is trusted; `bin/fm-session-start.sh` reports when the running Pi session has not loaded both required extensions.
+
+
+================================================================================
+RE-EMIT SCOPE
+================================================================================
+A true session start prints two bulk digests that this re-emit leaves out,
+because the compaction summary already carries what they said:
+  FLEET STATE  the backlog listing, every state/*.meta, each task's status
+               tail, and the orphan status logs
+  CONTEXT      data/projects.md, data/secondmates.md, data/captain.md,
+               data/captain-shared.md, and data/learnings.md
+Do NOT bulk-read those sources, and do NOT rerun bin/fm-session-start.sh, to
+rebuild them: that returns to context the weight this re-emit keeps out of it.
+
+Read one source directly only when the work in hand needs it:
+  - one task's current state: bin/fm-crew-state.sh <id>
+  - one task's record or its wake-event history: state/<id>.meta, state/<id>.status
+  - the whole fleet at a glance: bin/fm-fleet-view.sh
+  - the queue: bin/fm-tasks-axi.sh list when compatible tasks-axi is available,
+    or data/backlog.md; one full body with bin/fm-tasks-axi.sh show <id> --full
+  - a captain preference, a learning, a secondmate route, or the project
+    registry: the one data/ file that owns it (listed under CONTEXT below)
+A section this re-emit had no budget for is named where it would have printed,
+and again under NEXT STEP, with the command that reads it.
+
+================================================================================
+FLEET STATE (NOT REPRINTED)
+================================================================================
+3 task record(s) (*.meta) and 3 status log(s) (*.status) are on disk under /tmp/fm-reemit-live.2378238/home/state.
+None is reprinted, and neither is the backlog listing: see RE-EMIT SCOPE above.
+
+AFK
+--------------------------------------------------------------------------------
+absent
+
+================================================================================
+NETWORK CHECKS
+================================================================================
+completed off the startup path in 2s: GitHub authentication.
+(silent - no problems found)
+
+================================================================================
+CONTEXT (NOT REPRINTED)
+================================================================================
+Not reprinted: see RE-EMIT SCOPE above. Presence is still listed, because an
+ABSENT file is meaningful (AGENTS.md section 3) and is not an empty one.
+  data/projects.md: present (57 bytes) - /tmp/fm-reemit-live.2378238/home/data/projects.md
+  data/secondmates.md: ABSENT
+  data/captain.md: present (29675 bytes) - /tmp/fm-reemit-live.2378238/home/data/captain.md
+  data/captain-shared.md: ABSENT
+  data/learnings.md: present (38427 bytes) - /tmp/fm-reemit-live.2378238/home/data/learnings.md
+
+================================================================================
+NEXT STEP
+================================================================================
+Follow the supervision operating instructions block above for harness 'pi'.
+This script never starts supervision itself.
+
+The re-emit above is complete. Its RE-EMIT SCOPE section governs what may still
+be read from disk.
+
+RE-EMIT SIZE: 12406 of 24576 budgeted bytes used; outside the budget: wake queue 570 bytes, AGENTS.md refresh 60633 bytes.
+
+================================================================================

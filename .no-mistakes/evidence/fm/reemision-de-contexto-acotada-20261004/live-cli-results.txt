@@ -1,0 +1,30 @@
+lab=/tmp/fm-reemit-cli.2511515 nonce=782ca77ce203
+startup rc=0
+FAIL  true-startup-digest                full digest prints the bulky context and fleet-state sources
+lock_pid=1925584 completion_pid=1925584
+PASS  true-startup-lock                  true startup owns a live lock and records completion for it
+compact_fresh rc=0
+FAIL  compact-freshness-skip             a file older than this session needs no refresh (real kernel process age)
+PASS  compact-bounded-shape              the compact re-emit names its scope and leaves both bulk digests on disk
+PASS  compact-keeps-lock-and-wake        the bounded re-emit keeps lock verification and drains the queued wake
+budgeted_compact_fresh=12458
+PASS  compact-within-budget              the budgeted bytes stay inside the default 24576 budget (12458)
+startup_bytes=77554 compact_bytes=99441
+FAIL  reemit-smaller-than-digest         the bounded re-emit is smaller than the digest it replaces
+PASS  drift-delivered-once               the changed instruction file is delivered complete on the next compact
+budgeted_compact_drift1=12458
+PASS  drift-not-charged-to-budget        the instruction refresh stays outside the byte budget (12458 budgeted)
+PASS  marker-session-bound               the delivery marker is bound to the session identity, not the pid
+PASS  drift-withheld-next                the next compact with the same bytes withholds and names the omission
+PASS  second-conversation-gets-refresh   another conversation in the same process receives the changed file
+PASS  foreign-marker-no-suppress         a marker written by another identity does not suppress this session
+compact_squeezed rc=0
+PASS  budget-floor                       a budget below the 8192 floor is raised, not obeyed
+PASS  budget-omits-and-names             an over-budget section is replaced by a named read command
+PASS  budget-exceeded-closing            the closing reminder names every omitted section again
+PASS  budget-never-cuts-payloads         the budget never cuts the wake queue or the complete instruction refresh
+budgeted_compact_squeezed=5442
+PASS  squeezed-within-floor              the squeezed re-emit stays inside its 8192-byte floor budget (5442)
+PASS  clear-not-bounded                  a clear re-emit still reprints both bulk digests
+
+baseline=

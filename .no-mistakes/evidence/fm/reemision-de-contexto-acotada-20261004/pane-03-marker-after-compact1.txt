@@ -1,0 +1,63 @@
+
+ pi v0.87.1
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
+ Press ctrl+o to show full startup help and loaded resources.
+
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.
+
+
+[Context]
+  ~/.pi/agent/AGENTS.md, AGENTS.md
+
+[Skills]
+  afk, ahoy, ask-user-authority, bearings, bootstrap-diagnostics, captain-hold-lifecycle, decision-hold-lifecycle, diagnostic-reasoning, edicion, firstmate-codexapp, firstmate-coding-guidelines, firstmate-orca,
+fmx-respond, harness-adapters, mcp-scripting, no-mistakes, process-event-sources, project-management, quiet, quota-array-dispatch, secondmate-provisioning, stow, stuck-crewmate-recovery, typesafe-ai, updatefirstmate
+
+[Extensions]
+  fm-branch-supervision.ts, fm-calm.ts, fm-primary-pi-watch.ts, fm-primary-turnend-guard.ts, pi-mcp-adapter, pi-openrouter-realtime:openrouter-routing
+
+
+ Thinking...
+
+ LIVE_START_READY=8d5d4c768951
+
+
+ [compaction]
+
+ Compacted from 35,749 tokens (ctrl+o to expand)
+
+
+
+ Which validation contract marker is active?
+
+
+ Thinking...
+
+ AGENTS_LIVE_MARKER=new-8d5d4c768951
+
+
+ ⁣FIRSTMATE_OP: v1 turn-end-guard: TURN WOULD END BLIND - supervision is off. The watcher cycle is missing, failed, or unhealthy. Follow the harness recovery instruction below before ending the turn.
+
+ ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ ●  TURN WOULD END BLIND - SUPERVISION IS OFF
+ ●  3 task(s) in flight, but no live watcher holds this home lock (last beat: never).
+ ●  repair a missing or failed watcher cycle with the Pi tool fm_watch_arm_pi, or restart Pi with -e /tmp/fm-reemit-live.2378238/project/.pi/extensions/fm-primary-turnend-guard.ts -e
+ /tmp/fm-reemit-live.2378238/project/.pi/extensions/fm-primary-pi-watch.ts if the extensions are not loaded.
+ ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+ Thinking...
+
+── ⠙ Working ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/tmp/fm-reemit-live.2378238/project (main)
+↑40k ↓9.3k R49k CH43.2% $0.012 10.8%/350k (auto)                                                                                                                                     (opencode-go) deepseek-v4.1-flash • max
+🔌 MCP: 7 servers enabled OR: 466 models
+
+
+
+
+
+
+

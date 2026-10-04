@@ -1,0 +1,3 @@
+agents_ctime_before_pi=2026-10-05 00:32:05.428542451 +0200
+PASS  freshness-skips-predating-file a file older than this real session needs no refresh
+PASS  freshness-delivers-post-start-change a real change after the process started is delivered complete once

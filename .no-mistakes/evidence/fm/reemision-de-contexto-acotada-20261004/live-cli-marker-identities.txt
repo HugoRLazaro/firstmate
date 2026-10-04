@@ -1,0 +1,11 @@
+# Marker files written in the scratch CLI home (one per identity)
+.session-start-agents-refresh.1925584: 1925584 sha256:f42a622b4d6b609bfd32a80afccf9823efa205d2f97012bcba350b6cefcdd299 
+.session-start-agents-refresh.999999: 999999 sha256:43d7c42fbd902dd894687789a683bb012b1d292a5c38e6bfff8916313ea890ee 
+.session-start-agents-refresh.cli-conv-a: cli-conv-a sha256:43d7c42fbd902dd894687789a683bb012b1d292a5c38e6bfff8916313ea890ee 
+.session-start-agents-refresh.cli-conv-b: cli-conv-b sha256:43d7c42fbd902dd894687789a683bb012b1d292a5c38e6bfff8916313ea890ee 
+.session-start-agents-refresh.cli-squeeze: cli-squeeze sha256:f42a622b4d6b609bfd32a80afccf9823efa205d2f97012bcba350b6cefcdd299 
+
+# The planted foreign marker (.session-start-agents-refresh.999999) named the then-current
+# content hash, and the fallback-identity run still delivered the refresh and wrote its own
+# marker under the lock-owner pid (1925584) instead. Session-bound identities are
+# cli-conv-a, cli-conv-b and cli-squeeze; the pid is only the no-identity fallback.

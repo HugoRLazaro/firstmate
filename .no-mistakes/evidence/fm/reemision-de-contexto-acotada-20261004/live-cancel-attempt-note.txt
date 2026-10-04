@@ -1,0 +1,15 @@
+# Live attempt: switch the conversation (/new) while a real Pi compaction re-emit
+# was in flight, so the extension's discard-on-cancel path would drop the marker
+# of a conversation that never received the bytes.
+#
+# Attempt 1: /new was sent while Pi's own compaction was still running; the
+# session_compact digest never started.
+# Attempt 2: /new was sent within ~50 ms of the delivery marker appearing on
+# disk. Pi still processed the whole session_compact handler first: the digest
+# completed and delivered (RE-EMIT SIZE present in the injected output), and the
+# marker correctly stayed because that conversation DID receive the bytes.
+#
+# So the cancel-discard path was not reached from a real Pi command in this run.
+# Its deterministic coverage is tests/fm-sessionstart-nudge.test.sh, which drives
+# the extension's public event surface with real child processes and a stub
+# runner - real extension code, but not a live Pi session.
