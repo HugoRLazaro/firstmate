@@ -253,6 +253,18 @@ case "$*" in
     [ -n "${FM_FAKE_HARNESS_PID:-}" ] || exit 1
     /bin/ps -o ppid= -p "$pid"
     ;;
+  *"etime="*)
+    # A process's age is read from the kernel: only a stable harness pid names
+    # a real process whose age means anything. FM_FAKE_STALLED_ETIME stands in
+    # for the one thing a test host cannot do for real - a paused VM, whose
+    # elapsed clock stopped while its wall clock moved on.
+    [ -n "${FM_FAKE_HARNESS_PID:-}" ] || exit 1
+    if [ -n "${FM_FAKE_STALLED_ETIME:-}" ]; then
+      printf '%s\n' "$FM_FAKE_STALLED_ETIME"
+      exit 0
+    fi
+    exec /bin/ps -o etime= -p "$pid"
+    ;;
 esac
 exit 1
 SH
@@ -2360,6 +2372,66 @@ $(hash_file_for_test "$root/AGENTS.md")" ] \
   pass "true-start AGENTS baselines stay immutable while every drifted Pi compact re-emits the current contract"
 }
 
+test_pi_compact_skips_the_agents_refresh_only_when_the_file_predates_the_session() {
+  local rec root home fakebin out baseline first second stalled
+  rec=$(new_world agents-freshness)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" pi
+  out="${root%/root}/out"
+  mkdir -p "$out"
+  printf '%s\n' 'FRESHNESS_AGENTS=original' > "$root/AGENTS.md"
+  # The only baseline on disk belongs to another session and names other bytes:
+  # what a resumed or manually started session finds.
+  baseline='424242
+sha256:0000000000000000000000000000000000000000000000000000000000000000'
+  printf '%s\n' "$baseline" > "$home/state/.session-start-agents-baseline"
+
+  # The harness here is a REAL process started after AGENTS.md was last written,
+  # so its age is read from the kernel rather than stubbed. Every compaction
+  # runs inside that one process: the first while the file still predates it,
+  # the second after the file changed underneath it, and the third with an
+  # elapsed clock that stalled long enough to place the start after that change.
+  sleep 6
+  # The inner shell must expand its own $$ and variables: it IS the harness.
+  # shellcheck disable=SC2016
+  env -u CLAUDECODE -u GROK_AGENT PI_CODING_AGENT=true FM_PI_HARNESS=pi FM_FAKE_HARNESS=pi \
+    HOME="$home" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$fakebin:$BASE_PATH" \
+    FRESHNESS_OUT="$out" FRESHNESS_AGENTS_FILE="$root/AGENTS.md" FRESHNESS_SESSION_START="$SESSION_START" \
+    bash -c '
+      export FM_FAKE_HARNESS_PID=$$
+      "$FRESHNESS_SESSION_START" --reemit --source compact > "$FRESHNESS_OUT/first"
+      printf "%s\n" "FRESHNESS_AGENTS=updated" > "$FRESHNESS_AGENTS_FILE"
+      "$FRESHNESS_SESSION_START" --reemit --source compact > "$FRESHNESS_OUT/second"
+      sleep 5
+      FM_FAKE_STALLED_ETIME=00:00 \
+        "$FRESHNESS_SESSION_START" --reemit --source compact > "$FRESHNESS_OUT/stalled"
+      :
+    '
+  first=$(cat "$out/first")
+  second=$(cat "$out/second")
+  stalled=$(cat "$out/stalled")
+
+  assert_contains "$first" "SESSION START (CONTEXT RE-EMIT) - $home" "the first compaction fixture did not re-emit"
+  assert_contains "$first" "lock acquired" "the session fixture did not own the lock it was judged by"
+  assert_not_contains "$first" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
+    "an AGENTS file last changed before the session started was re-emitted for want of a baseline"
+  assert_not_contains "$first" "FRESHNESS_AGENTS=original" \
+    "an AGENTS file the session already runs on was printed into the re-emit"
+  assert_contains "$second" "CURRENT AGENTS.md - INSTRUCTION REFRESH" \
+    "an AGENTS file changed after the session started was not re-emitted"
+  assert_contains "$second" "FRESHNESS_AGENTS=updated" \
+    "a compaction after a mid-session AGENTS change did not carry the current instructions"
+  assert_contains "$stalled" "FRESHNESS_AGENTS=updated" \
+    "a stalled elapsed clock moved the session start past a mid-session AGENTS change and hid it"
+  [ "$(cat "$home/state/.session-start-agents-baseline")" = "$baseline" ] \
+    || fail "the freshness proof rewrote another session's baseline"
+
+  pass "a Pi compaction with no baseline of its own skips the AGENTS refresh only while the file predates the session process"
+}
+
 test_read_only_pi_compact_refreshes_against_its_own_session_identity() {
   local rec root home fakebin holder_pid out baseline_before completion_before
   rec=$(new_world agents-refresh-read-only)
@@ -2852,6 +2924,7 @@ test_runtime_bound_leaves_harness_ancestry_headroom
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
 test_compact_reemit_is_bounded_and_names_what_it_omits
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact
+test_pi_compact_skips_the_agents_refresh_only_when_the_file_predates_the_session
 test_read_only_pi_compact_refreshes_against_its_own_session_identity
 test_codex_unreachable_reset_sources_do_not_claim_instruction_refresh
 test_agents_baseline_requires_sha256_and_successful_completion

@@ -255,11 +255,35 @@
 #             digest completion record is published, keyed to that lock's
 #             harness pid. No resume, clear, reset, compact, or other rebuild
 #             creates or replaces it. Pi and pi-signed compaction are the only
-#             supported stale-cache rebuild pair: a missing baseline, a baseline
-#             for another harness pid, or a changed hash causes the complete
-#             current AGENTS.md to print before the bulky digest. The baseline
-#             remains immutable so every later drifted compaction refreshes
-#             again, while an equal baseline emits no instruction refresh.
+#             supported stale-cache rebuild pair: a changed hash against this
+#             session's own baseline causes the complete current AGENTS.md to
+#             print before the bulky digest. The baseline remains immutable so
+#             every later drifted compaction refreshes again, while an equal
+#             baseline emits no instruction refresh.
+#             A session with no baseline of its own - none recorded, or one
+#             recorded for another harness pid, which is what a resumed or
+#             manually started session has - is judged by a freshness proof
+#             instead of refreshing unconditionally: a harness loads its native
+#             instruction copy no earlier than its own process start, so an
+#             AGENTS.md whose bytes and inode last changed more than 3 seconds
+#             before that start is necessarily the copy the session already
+#             runs on, and no refresh is emitted. The change time is the later
+#             of the file's mtime and ctime, so a backdated mtime cannot hide an
+#             edit. The start is the EARLIER of two readings, both of which can
+#             only be late, never early: the wall clock minus POSIX
+#             `ps -o etime`, and the mtime of the state/.lock this same pid
+#             wrote when it took the helm. The second one is a stamp rather
+#             than a subtraction, and it is what bounds a host whose elapsed
+#             clock stops while its wall clock moves on - a paused VM, which
+#             WSL2 is across a host sleep - where the first reading drifts
+#             later by the length of every pause. The proof records nothing
+#             and is repeated on every compaction. Any step that cannot be
+#             read - no harness pid, a lock this pid does not own, an unreadable
+#             or malformed etime, a failed stat, a symlinked AGENTS.md -
+#             refreshes exactly as before, and so does a file changed after the
+#             start. What the proof cannot see is a change made after the
+#             process started and before the earlier of its two readings; a
+#             true `startup` baseline, which compares bytes, has no such gap.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -726,14 +750,87 @@ write_agents_baseline() {  # <lock-pid> <agents-hash>
   return 1
 }
 
+# The freshness proof for a session with no baseline of its own: see the
+# header's --source note for the argument and its limits.
+AGENTS_FRESH_MARGIN_SECS=3
+
+file_change_epoch() {  # <file>: the later of its mtime and ctime, epoch seconds
+  local file=$1 mtime ctime
+  [ -f "$file" ] && [ ! -L "$file" ] || return 1
+  if [ "$(uname -s 2>/dev/null || true)" = Darwin ]; then
+    mtime=$(/usr/bin/stat -f %m "$file" 2>/dev/null) || return 1
+    ctime=$(/usr/bin/stat -f %c "$file" 2>/dev/null) || return 1
+  else
+    mtime=$(stat -c %Y "$file" 2>/dev/null) || return 1
+    ctime=$(stat -c %Z "$file" 2>/dev/null) || return 1
+  fi
+  case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
+  case "$ctime" in ''|*[!0-9]*) return 1 ;; esac
+  if [ "$ctime" -gt "$mtime" ]; then printf '%s\n' "$ctime"; else printf '%s\n' "$mtime"; fi
+}
+
+process_elapsed_secs() {  # <pid>: POSIX `ps -o etime`, [[dd-]hh:]mm:ss, as seconds
+  local pid=$1 etime
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  etime=$(LC_ALL=C ps -o etime= -p "$pid" 2>/dev/null) || return 1
+  printf '%s\n' "$etime" | awk '
+    { gsub(/[[:space:]]/, "") }
+    !/^([0-9]+-)?([0-9]+:)?[0-9]+:[0-9]+$/ { exit 1 }
+    {
+      days = 0
+      dash = index($0, "-")
+      if (dash) { days = substr($0, 1, dash - 1); $0 = substr($0, dash + 1) }
+      n = split($0, part, ":")
+      if (n == 3) secs = part[1] * 3600 + part[2] * 60 + part[3]
+      else secs = part[1] * 60 + part[2]
+      print days * 86400 + secs
+      found = 1
+      exit 0
+    }
+    END { if (!found) exit 1 }
+  '
+}
+
+file_mtime_epoch() {  # <file>
+  local file=$1 mtime
+  [ -f "$file" ] && [ ! -L "$file" ] || return 1
+  if [ "$(uname -s 2>/dev/null || true)" = Darwin ]; then
+    mtime=$(/usr/bin/stat -f %m "$file" 2>/dev/null) || return 1
+  else
+    mtime=$(stat -c %Y "$file" 2>/dev/null) || return 1
+  fi
+  case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$mtime"
+}
+
+# The wall clock is read BEFORE the elapsed time, so the gap between the two
+# reads can only make the estimated start earlier, never later.
+agents_unchanged_since_session_start() {  # <rebuilding-session-pid>
+  local pid=$1 now elapsed changed started helm
+  [ "$(cat "$STATE/.lock" 2>/dev/null || true)" = "$pid" ] || return 1
+  helm=$(file_mtime_epoch "$STATE/.lock") || return 1
+  now=$(date +%s 2>/dev/null) || return 1
+  case "$now" in ''|*[!0-9]*) return 1 ;; esac
+  elapsed=$(process_elapsed_secs "$pid") || return 1
+  case "$elapsed" in ''|*[!0-9]*) return 1 ;; esac
+  changed=$(file_change_epoch "$FM_ROOT/AGENTS.md") || return 1
+  started=$((now - elapsed))
+  [ "$helm" -ge "$started" ] || started=$helm
+  [ $((changed + AGENTS_FRESH_MARGIN_SECS)) -lt "$started" ]
+}
+
 agents_baseline_drifted() {  # <rebuilding-session-pid>
-  local lock_pid=$1 baseline_pid baseline_hash current_hash
-  [ -f "$AGENTS_BASELINE_FILE" ] && [ ! -L "$AGENTS_BASELINE_FILE" ] || return 0
-  baseline_pid=$(sed -n '1p' "$AGENTS_BASELINE_FILE" 2>/dev/null || true)
-  baseline_hash=$(sed -n '2p' "$AGENTS_BASELINE_FILE" 2>/dev/null || true)
-  current_hash=$(hash_file_sha256 "$FM_ROOT/AGENTS.md" 2>/dev/null || true)
-  [ -n "$current_hash" ] || return 0
-  [ "$baseline_pid" = "$lock_pid" ] && [ "$baseline_hash" = "$current_hash" ] && return 1
+  local lock_pid=$1 baseline_pid='' baseline_hash current_hash
+  if [ -f "$AGENTS_BASELINE_FILE" ] && [ ! -L "$AGENTS_BASELINE_FILE" ]; then
+    baseline_pid=$(sed -n '1p' "$AGENTS_BASELINE_FILE" 2>/dev/null || true)
+  fi
+  if [ -n "$baseline_pid" ] && [ "$baseline_pid" = "$lock_pid" ]; then
+    baseline_hash=$(sed -n '2p' "$AGENTS_BASELINE_FILE" 2>/dev/null || true)
+    current_hash=$(hash_file_sha256 "$FM_ROOT/AGENTS.md" 2>/dev/null || true)
+    [ -n "$current_hash" ] && [ "$baseline_hash" = "$current_hash" ] && return 1
+    return 0
+  fi
+  agents_unchanged_since_session_start "$lock_pid" && return 1
   return 0
 }
 
