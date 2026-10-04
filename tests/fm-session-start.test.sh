@@ -2286,6 +2286,42 @@ EOF
   pass "a compaction re-emit keeps the lock, wakes, and supervision block, leaves both bulk digests on disk, and holds a hard byte budget"
 }
 
+# The bounded re-emit buffers each digest block in a scratch file beside the
+# parent's mktemp breadcrumb before releasing what fits the budget. That file
+# carries the same user data as the digest (wake-queue payloads and, on drift,
+# the full AGENTS refresh), so it must be owner-only from creation - including
+# when the parent is killed before its cleanup removes it.
+test_bounded_reemit_scratch_block_is_owner_only() {
+  local rec root home fakebin stage mode
+  rec=$(new_world reemit-block-mode)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" pi
+
+  # The runtime-bound parent creates the breadcrumb with mktemp and hands it to
+  # the child through FM_SESSION_START_STAGE_FILE; the child's scratch block is
+  # the sibling "${breadcrumb}.block". Run that child directly under a
+  # deliberately permissive umask and inspect the file it leaves behind - the
+  # exact file a killed parent leaves on disk.
+  stage=$(mktemp "$TMP_ROOT/.reemit-block-mode.XXXXXX") || fail "stage fixture mktemp failed"
+  (umask 022
+   env -u CLAUDECODE -u GROK_AGENT PI_CODING_AGENT=true FM_PI_HARNESS=pi \
+     FM_FAKE_HARNESS_PID="$SESSION_START_TEST_HARNESS_PID" \
+     FM_SESSION_START_STAGE_FILE="$stage" \
+     HOME="$home" FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$fakebin:$BASE_PATH" \
+     "$SESSION_START" --reemit --source compact >/dev/null) \
+    || fail "the bounded re-emit child failed"
+
+  [ -f "$stage.block" ] || fail "the bounded re-emit wrote no scratch block file"
+  mode=$(stat -c %a "$stage.block" 2>/dev/null || stat -f %Lp "$stage.block" 2>/dev/null)
+  [ "$mode" = 600 ] \
+    || fail "the scratch block file is mode $mode under a permissive umask; another local user can read the re-emitted digest"
+
+  pass "the bounded re-emit buffers its digest blocks in an owner-only scratch file"
+}
+
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact() {
   local rec root home fakebin startup compact_equal compact_first compact_second clear_out resume_out reset_out baseline baseline_after expected_hash refresh_line bootstrap_line
   rec=$(new_world agents-refresh)
@@ -2923,6 +2959,7 @@ test_runtime_bound_leaves_a_healthy_digest_untouched
 test_runtime_bound_leaves_harness_ancestry_headroom
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
 test_compact_reemit_is_bounded_and_names_what_it_omits
+test_bounded_reemit_scratch_block_is_owner_only
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact
 test_pi_compact_skips_the_agents_refresh_only_when_the_file_predates_the_session
 test_read_only_pi_compact_refreshes_against_its_own_session_identity

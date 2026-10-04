@@ -475,7 +475,7 @@ fi
 block_begin() {  # <fixed|bounded|exempt>
   [ "$REEMIT_BOUNDED" -eq 1 ] || return 0
   REEMIT_BLOCK_OPEN=0
-  if [ -n "$REEMIT_BLOCK_FILE" ] && : > "$REEMIT_BLOCK_FILE" 2>/dev/null; then
+  if [ -n "$REEMIT_BLOCK_FILE" ] && (umask 077; : > "$REEMIT_BLOCK_FILE") 2>/dev/null; then
     exec 7>&1 >"$REEMIT_BLOCK_FILE"
     REEMIT_BLOCK_OPEN=1
   elif [ "$1" = bounded ]; then
