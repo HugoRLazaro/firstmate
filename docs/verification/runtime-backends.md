@@ -589,6 +589,42 @@ The four accepted busy events in arm 4 are the spawn seed, `UserPromptSubmit`, `
 `tests/fm-busy-adapter-wiring.test.sh` pins the placement portably: it runs the real spawn against a project with a tracked `.claude/settings.local.json` and asserts the file's hash is unchanged, the worktree stays clean, and the launch reaches the firstmate-owned file with `--settings`.
 The same suite pins the raw-launch boundary: a fresh raw claude launch writes no settings file and classifies unknown, and a raw relaunch retires the prior incarnation's record instead of inheriting it.
 
+## Claude advisor pairing
+
+Verified 2026-10-09 on Claude Code 2.1.295, Linux x86_64, with no model call: every command below exits before a conversation starts.
+
+`bin/fm-advisor-lib.sh`'s pairing probe reads Claude Code's own startup answer for a main model and advisor.
+With empty stdin, an accepted pairing only refuses the missing prompt, while a refused one names the reason first:
+
+```sh
+claude --model claude-haiku-5-5 --advisor claude-opus-5-5 -p </dev/null
+claude --model claude-haiku-5-5 --advisor claude-haiku-4-5 -p </dev/null
+claude --model claude-opus-5-5 --advisor claude-haiku-5-5 -p </dev/null
+```
+
+```text
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+Error: The model "claude-haiku-4-5" cannot be used as an advisor.
+"claude-haiku-5-5" cannot advise "claude-opus-5-5" (the advisor must be at least as capable as the main model). The advisor will not be used for the main model.
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+```
+
+The `advisorModel` key in a settings file of the shape `bin/fm-spawn.sh` writes reaches the session; `/advisor` is a local command in `-p` mode:
+
+```sh
+claude --settings <file with "advisorModel":"claude-opus-5-5"> --model claude-haiku-5-5 \
+  --max-budget-usd 0.0001 --output-format json -p "/advisor" </dev/null
+```
+
+```text
+"duration_api_ms":0 ... "total_cost_usd":0 ... "result":"Advisor: Opus 5.5\n...","local_command":"advisor"
+```
+
+The same command with the key absent printed `Advisor: off`, also at `total_cost_usd` 0.
+
+`tests/fm-spawn-advisor.test.sh` pins the probe matrix and the launch, record, and settings shapes against a fake claude.
+`tests/fm-advisor-pairing-live-e2e.test.sh` refreshes the probe evidence against the installed claude and spends no tokens, so it runs by default wherever claude is installed.
+
 ## Codex hook trust
 
 Verified 2026-09-16 on codex-cli 0.151.0, macOS arm64, in a fresh linked worktree of this repository.

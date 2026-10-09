@@ -310,6 +310,13 @@ TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 assert_contains "$out" 'candidate: agy:-  provider=agy  scope=all_models  remaining=64%  spendPriority=0.4  runway=through_reset  -> eligible' "agy uses its resolver-only authoritative quota provider"
 assert_contains "$out" "  profile: --harness 'agy'" "provider-less agy rule resolves"
 
+ADVISOR_RULE="$TMP_ROOT/advisor-rule.json"
+printf '%s\n' '{"rules":[{"when":"Simple interface work.","use":{"harness":"claude","model":"claude-haiku-5-5","effort":"high","advisor":"claude-opus-5-5"}}]}' > "$ADVISOR_RULE"
+cp "$ADVISOR_RULE" "$RULES"
+reset_log
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" "  profile: --harness 'claude' --model 'claude-haiku-5-5' --effort 'high' --advisor 'claude-opus-5-5'" "a profile advisor reaches the clear profile line"
+
 GEMINI_RULE="$TMP_ROOT/gemini-rule.json"
 printf '%s\n' '{"rules":[{"when":"Gemini work.","use":{"harness":"gemini","model":"gemini-3.8-flash-high","provider":"google"}}]}' > "$GEMINI_RULE"
 cp "$GEMINI_RULE" "$RULES"
@@ -613,6 +620,9 @@ for bad in \
   '{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":[{"harness":"claude","model":"opus"},{"harness":"claude","model":"opus"}]}|default must not contain duplicate harness, model, and effort profiles' \
   '{"rules":[{"when":"x","use":{"harness":"spaceship"}}]}|each use profile must name a verified harness' \
   '{"rules":[{"when":"x","use":{"harness":"grok","effort":"max"}}]}|each use profile effort must be supported by its harness and model' \
+  '{"rules":[{"when":"x","use":{"harness":"codex","advisor":"claude-opus-5-5"}}]}|each use profile advisor must be a model alias or id on a claude profile' \
+  '{"rules":[{"when":"x","use":{"harness":"claude","advisor":"opus x"}}]}|each use profile advisor must be a model alias or id on a claude profile' \
+  '{"rules":[{"when":"x","use":{"harness":"claude"}}],"default":{"harness":"claude","advisor":""}}|each default profile advisor must be a model alias or id on a claude profile' \
   '{"rules":[{"when":"x","use":{"harness":"opencode","model":"anthropic/claude-sonnet-4-5"}}]}|use profiles whose harness lacks one authoritative provider family require provider: opencode' \
   '{"rules":[{"when":"x","use":{"harness":"rovo"}}]}|use profiles whose harness lacks one authoritative provider family require provider: rovo' \
   '{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":{"harness":"pi","model":"anthropic/claude-sonnet-5"}}|default profiles whose harness lacks one authoritative provider family require provider: pi'; do
