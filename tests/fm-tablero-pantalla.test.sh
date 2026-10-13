@@ -38,11 +38,13 @@ fi
 TABLERO="$ROOT/bin/fm-tablero.sh"
 TMP_ROOT=$(fm_test_tmproot fm-tablero-pantalla-tests)
 SERVIDOR_PID=""
+SERVIDOR_DIAS_PID=""
 
 # shellcheck disable=SC2329 # invoked indirectly through the EXIT/INT/TERM trap below.
 cleanup() {
-  [ -n "$SERVIDOR_PID" ] || return 0
-  kill "$SERVIDOR_PID" 2>/dev/null || true
+  [ -n "$SERVIDOR_PID$SERVIDOR_DIAS_PID" ] || return 0
+  [ -z "$SERVIDOR_PID" ] || kill "$SERVIDOR_PID" 2>/dev/null || true
+  [ -z "$SERVIDOR_DIAS_PID" ] || kill "$SERVIDOR_DIAS_PID" 2>/dev/null || true
   fm_test_cleanup
 }
 trap cleanup EXIT INT TERM
@@ -152,5 +154,36 @@ assert_grep "Sí, adelante con lo recomendado." "$HOME_DIR/data/backlog.md" \
 grep -rqF "móvil" "$HOME_DIR/state/inbox/" \
   || fail "el mensaje escrito en el chat de la página tiene que llegar al buzón"
 pass "lo escrito en la página llega al backlog y al buzón de firstmate"
+
+# El selector de día necesita tarjetas en dos días: un home propio, con una
+# pregunta en cada uno y otra pendiente fuera del día que se enseña.
+HOME_DIAS="$TMP_ROOT/home-dias"
+mkdir -p "$HOME_DIAS/data" "$HOME_DIAS/state"
+ln -s "$ROOT/bin" "$HOME_DIAS/bin"
+cp "$ROOT/.tasks.toml" "$HOME_DIAS/.tasks.toml"
+cat > "$HOME_DIAS/data/backlog.md" <<'MD'
+# Backlog
+
+## In flight
+- [ ] hoy-ahora-20261013 - Obra de hoy en marcha (repo: firstmate) (kind: ship) (since 2026-10-13)
+
+## Queued
+- [ ] hoy-espera-20261013 - Pregunta de hoy (repo: firstmate) (kind: captain) (since 2026-10-13) (hold: Di cuál: a o b?) (hold-kind: captain)
+  Captain hold set: 2026-10-13T08:00:00Z
+- [ ] ayer-espera-20261012 - Pregunta de ayer (repo: firstmate) (kind: captain) (since 2026-10-12) (hold: Di cuál: a o b?) (hold-kind: captain)
+  Captain hold set: 2026-10-12T08:00:00Z
+- [ ] ayer-plan-20261012 - Plan de ayer (repo: firstmate) (kind: ship) (since 2026-10-12)
+MD
+PUERTO_DIAS=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+FM_HOME="$HOME_DIAS" FM_TABLERO_BIND=127.0.0.1 FM_TABLERO_PORT="$PUERTO_DIAS" "$TABLERO" start >/dev/null \
+  || fail "arrancar el tablero del selector de día"
+SERVIDOR_DIAS_PID=$(cat "$HOME_DIAS/state/tablero/servidor.pid")
+
+if TABLERO_BASE="http://127.0.0.1:$PUERTO_DIAS" node "$ROOT/tests/assets/tablero-dias.cjs"; then
+  pass "el selector de día en un navegador de verdad: el día por defecto, el cambio, lo recordado y el móvil"
+else
+  fail "el selector de día en un navegador de verdad"
+fi
+FM_HOME="$HOME_DIAS" "$TABLERO" stop >/dev/null
 
 exit 0

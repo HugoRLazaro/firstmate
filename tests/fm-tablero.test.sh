@@ -818,6 +818,125 @@ print("capitan")
 FM_HOME="$HOME_J" "$TABLERO" stop >/dev/null
 pass "el tablero honra el vocabulario de estado documentado"
 
+# ------------------------------------------------ escenario: el tablero por días
+
+# Tarjetas de tres días, una sin fecha y una con una fecha que no existe. Lo que
+# se enseña, los recuentos de lo visible y lo que queda fuera salen de los ids y
+# de las etapas, nunca de lo que la pantalla decida pintar.
+HOME_DIAS=$(nuevo_home dias)
+backlog_de "$HOME_DIAS" '# Backlog
+
+## In flight
+- [ ] hoy-ahora-20261013 - Obra de hoy en marcha (repo: firstmate) (kind: ship) (since 2026-10-13)
+
+## Queued
+- [ ] hoy-espera-20261013 - Pregunta de hoy (repo: firstmate) (kind: captain) (since 2026-10-13) (hold: Di cuál: a o b?) (hold-kind: captain)
+  Captain hold set: 2026-10-13T08:00:00Z
+- [ ] hoy-bloquea-20261013 - Trabajo parado de hoy (repo: firstmate) (kind: ship) (since 2026-10-13) (hold: Confirma si lo subo?) (hold-kind: ship)
+  Captain hold set: 2026-10-13T08:05:00Z
+- [ ] ayer-espera-20261012 - Pregunta de ayer (repo: firstmate) (kind: captain) (since 2026-10-12) (hold: Di cuál: a o b?) (hold-kind: captain)
+  Captain hold set: 2026-10-12T08:00:00Z
+- [ ] ayer-bloquea-20261012 - Trabajo parado de ayer (repo: firstmate) (kind: ship) (since 2026-10-12) (hold: Confirma si lo subo?) (hold-kind: ship)
+  Captain hold set: 2026-10-12T08:05:00Z
+- [ ] antier-plan-20261011 - Plan de antier (repo: firstmate) (kind: ship) (since 2026-10-11)
+- [ ] sin-fecha-espera - Pregunta sin fecha (repo: firstmate) (kind: captain) (since 2026-10-11) (hold: Di cuál: a o b?) (hold-kind: captain)
+  Captain hold set: 2026-10-11T08:00:00Z
+- [ ] fecha-invalida-20261399 - Plan con fecha imposible (repo: firstmate) (kind: ship) (since 2026-10-11)
+
+## Done
+- [x] hoy-hecha-20261013 - Terminada hoy (repo: firstmate) (kind: ship) (done 2026-10-13)
+  local main
+'
+PUERTO_DIAS=$(puerto_libre)
+arrancar "$HOME_DIAS" "$PUERTO_DIAS"
+
+# Cada programa recibe el payload en `d` y deja calculadas las tarjetas visibles
+# (`vistas`) y los contadores, para que cada caso diga sólo lo que espera.
+DIAS_PY='import json, sys
+d = json.load(sys.stdin)
+vistas = sorted(t["id"] for c in d["columnas"] for t in c["tarjetas"])
+cuenta = d["cuenta"]
+fuera = d["fuera"]
+'
+
+comprobar "$PUERTO_DIAS" "por defecto se enseña el día más reciente con tarjetas" "$DIAS_PY"'
+assert d["dia_activo"] == d["dia_defecto"] == "2026-10-13", (d["dia_activo"], d["dia_defecto"])
+assert vistas == ["hoy-ahora-20261013", "hoy-bloquea-20261013", "hoy-espera-20261013", "hoy-hecha-20261013"], vistas
+assert cuenta["preguntan"] == 2 and cuenta["bloquean"] == 1, cuenta
+assert cuenta["ahora"] == 1 and cuenta["hecho"] == 1 and cuenta["plan"] == 0, cuenta
+assert fuera == {"tarjetas": 5, "esperan": 3, "bloquean": 1}, fuera
+assert [(x["id"], x["tarjetas"], x["esperan"], x["bloquean"]) for x in d["dias"]] == [
+    ("2026-10-13", 4, 2, 1), ("2026-10-12", 2, 2, 1), ("2026-10-11", 1, 0, 0)], d["dias"]
+assert d["sin_fecha"]["tarjetas"] == 2 and d["sin_fecha"]["esperan"] == 1, d["sin_fecha"]
+'
+
+comprobar_json "http://127.0.0.1:$PUERTO_DIAS/api/estado?dia=reciente" "reciente es el mismo día que el defecto" "$DIAS_PY"'
+assert d["dia_activo"] == "2026-10-13", d["dia_activo"]
+assert vistas == ["hoy-ahora-20261013", "hoy-bloquea-20261013", "hoy-espera-20261013", "hoy-hecha-20261013"], vistas
+'
+
+comprobar_json "http://127.0.0.1:$PUERTO_DIAS/api/estado?dia=2026-10-12" "un día concreto enseña sólo sus tarjetas y cuenta lo que queda fuera" "$DIAS_PY"'
+assert d["dia_activo"] == "2026-10-12", d["dia_activo"]
+assert vistas == ["ayer-bloquea-20261012", "ayer-espera-20261012"], vistas
+assert cuenta["preguntan"] == 2 and cuenta["bloquean"] == 1, cuenta
+assert fuera == {"tarjetas": 7, "esperan": 3, "bloquean": 1}, fuera
+'
+
+comprobar_json "http://127.0.0.1:$PUERTO_DIAS/api/estado?dia=2026-10-11" "un día anterior con tarjetas también se puede elegir" "$DIAS_PY"'
+assert d["dia_activo"] == "2026-10-11", d["dia_activo"]
+assert vistas == ["antier-plan-20261011"], vistas
+assert cuenta["preguntan"] == 0 and cuenta["plan"] == 1, cuenta
+assert fuera == {"tarjetas": 8, "esperan": 5, "bloquean": 2}, fuera
+'
+
+comprobar_json "http://127.0.0.1:$PUERTO_DIAS/api/estado?dia=todo" "todo enseña todas las tarjetas y no deja nada fuera" "$DIAS_PY"'
+assert d["dia_activo"] == "todo", d["dia_activo"]
+assert len(vistas) == 9, vistas
+assert cuenta["preguntan"] == 5 and cuenta["bloquean"] == 2 and cuenta["plan"] == 2, cuenta
+assert fuera == {"tarjetas": 0, "esperan": 0, "bloquean": 0}, fuera
+'
+
+comprobar_json "http://127.0.0.1:$PUERTO_DIAS/api/estado?dia=sin-fecha" "sin fecha enseña las tarjetas sin fecha válida" "$DIAS_PY"'
+assert d["dia_activo"] == "sin-fecha", d["dia_activo"]
+assert vistas == ["fecha-invalida-20261399", "sin-fecha-espera"], vistas
+assert cuenta["preguntan"] == 1 and cuenta["plan"] == 1, cuenta
+assert fuera == {"tarjetas": 7, "esperan": 4, "bloquean": 2}, fuera
+'
+
+comprobar_json "http://127.0.0.1:$PUERTO_DIAS/api/estado?dia=todo" "cada tarjeta lleva su día, o null si no tiene fecha válida" "$DIAS_PY"'
+por_id = {t["id"]: t["dia"] for c in d["columnas"] for t in c["tarjetas"]}
+assert por_id["hoy-espera-20261013"] == "2026-10-13", por_id
+assert por_id["ayer-bloquea-20261012"] == "2026-10-12", por_id
+assert por_id["fecha-invalida-20261399"] is None and por_id["sin-fecha-espera"] is None, por_id
+'
+
+# Un valor que no es un día válido, o un día sin tarjetas, no puede dejar el
+# tablero vacío ni dar un error: cae en el día por defecto.
+for pedido in basura 2026-13-45 2026-10-09; do
+  comprobar_json "http://127.0.0.1:$PUERTO_DIAS/api/estado?dia=$pedido" \
+    "un día que no existe ($pedido) cae en el día por defecto" "$DIAS_PY"'
+assert d["dia_activo"] == "2026-10-13", d["dia_activo"]
+assert len(vistas) == 4, vistas
+'
+done
+
+# Sin ninguna fecha válida, el defecto es todo: el tablero no se queda en blanco.
+HOME_SIN_FECHA=$(nuevo_home dias-sin-fecha)
+backlog_de "$HOME_SIN_FECHA" '# Backlog
+
+## Queued
+- [ ] solo-tarea - Tarea sin fecha (repo: firstmate) (kind: ship) (since 2026-10-13)
+'
+PUERTO_SIN_FECHA=$(puerto_libre)
+arrancar "$HOME_SIN_FECHA" "$PUERTO_SIN_FECHA"
+comprobar "$PUERTO_SIN_FECHA" "sin ninguna fecha, el defecto es todo" "$DIAS_PY"'
+assert d["dia_activo"] == d["dia_defecto"] == "todo", (d["dia_activo"], d["dia_defecto"])
+assert vistas == ["solo-tarea"], vistas
+assert d["dias"] == [], d["dias"]
+'
+FM_HOME="$HOME_SIN_FECHA" "$TABLERO" stop >/dev/null
+FM_HOME="$HOME_DIAS" "$TABLERO" stop >/dev/null
+
 # ------------------------------------------- escenario: arrancar, parar, estado
 
 assert_contains "$(FM_HOME="$HOME_D" FM_TABLERO_BIND=127.0.0.1 FM_TABLERO_PORT="$PUERTO_D" "$TABLERO" status)" \
