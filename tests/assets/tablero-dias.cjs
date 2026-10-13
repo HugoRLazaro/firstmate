@@ -83,6 +83,13 @@ async function main() {
   };
   const tarjetasEnPantalla = () => pagina.$$eval(".card", (n) => n.length);
   const esperanEnPantalla = () => pagina.textContent("#waitN").then((t) => Number(t.trim()));
+  const diaGuardado = () => pagina.evaluate(() => {
+    try {
+      return JSON.parse(localStorage.getItem("tablero-supervision-vista")).dia;
+    } catch (e) {
+      return null;
+    }
+  });
 
   // ------------------------------------------------ por defecto, sin tocar nada
 
@@ -124,6 +131,7 @@ async function main() {
   // ------------------------------------------- el aviso lleva a lo que queda fuera
 
   if (pendientesFuera > 0) {
+    const guardadoAntes = await hasta("reciente", diaGuardado);
     await pagina.click("#diaFuera");
     const leerDia = () => pagina.inputValue("#diaSelect");
     comprobar("pulsar el aviso pasa el selector a Todo", (await hasta("todo", leerDia)) === "todo", await leerDia());
@@ -142,8 +150,24 @@ async function main() {
       (await hasta(false, () => pagina.isVisible("#diaFuera"))) === false,
       await pagina.textContent("#diaFuera")
     );
-    await pagina.selectOption("#diaSelect", defecto);
-    await hasta(tarjetas(porDefecto), tarjetasEnPantalla);
+    // Otra preferencia guardada mientras se mira (aquí, la vista) no arrastra el «todo».
+    await pagina.click('.switch button[data-view="lista"]');
+    await pagina.click('.switch button[data-view="etapas"]');
+    await pagina.waitForTimeout(5000);
+    comprobar("un refresco no devuelve la vista del aviso al día guardado", (await leerDia()) === "todo", await leerDia());
+    comprobar(
+      "pulsar el aviso no cambia el día guardado",
+      guardadoAntes === "reciente" && (await diaGuardado()) === guardadoAntes,
+      [guardadoAntes, await diaGuardado()]
+    );
+    await pagina.reload({ waitUntil: "networkidle" });
+    await pagina.waitForSelector(".board .col", { timeout: 15000 });
+    comprobar("al volver a entrar tras pulsar el aviso sigue el día más reciente", (await leerDia()) === defecto, await leerDia());
+    comprobar(
+      "al volver a entrar tras pulsar el aviso se ven sólo las tarjetas de ese día",
+      (await hasta(tarjetas(porDefecto), tarjetasEnPantalla)) === tarjetas(porDefecto),
+      await tarjetasEnPantalla()
+    );
   }
 
   // ----------------------------------------------------------- elegir un día
@@ -171,6 +195,7 @@ async function main() {
     (await hasta(datosOtro.cuenta.preguntan, esperanEnPantalla)) === datosOtro.cuenta.preguntan,
     await esperanEnPantalla()
   );
+  comprobar("elegir un día en el selector sí cambia el día guardado", (await hasta(otro.id, diaGuardado)) === otro.id, await diaGuardado());
   await captura("dias-elegido");
 
   // ----------------------------------------------- lo elegido sobrevive al refresco
@@ -191,13 +216,7 @@ async function main() {
   // El día más reciente se guarda como «reciente», no como fecha: lo que cambie
   // mañana es lo que enseña el tablero, no lo que se quedó de hoy.
   await pagina.selectOption("#diaSelect", defecto);
-  const guardado = await pagina.evaluate(() => {
-    try {
-      return JSON.parse(localStorage.getItem("tablero-supervision-vista")).dia;
-    } catch (e) {
-      return null;
-    }
-  });
+  const guardado = await hasta("reciente", diaGuardado);
   comprobar("elegir el día más reciente se guarda como «reciente»", guardado === "reciente", guardado);
 
   // ----------------------------------------- el refresco no cierra el desplegable

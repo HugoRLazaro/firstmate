@@ -56,6 +56,7 @@ let arrastrando = null;
 let tareaQuitar = null;
 let temporizadorToast = 0;
 let diaElegido = null;          // "reciente", un día ISO, "todo" o "sin-fecha"; null = aún no has elegido
+let diaMirado = null;           // lo que abre el aviso de otros días: se mira, no se guarda
 
 /* ------------------------------------------------------------ preferencias */
 
@@ -775,7 +776,7 @@ function pintarDias(datos) {
 
 async function cargar(urgente) {
   let datos;
-  const pedido = diaElegido;
+  const pedido = diaMirado || diaElegido;
   try {
     const consulta = pedido ? "?dia=" + encodeURIComponent(pedido) : "";
     datos = await pedir("/api/estado" + consulta);
@@ -785,11 +786,11 @@ async function cargar(urgente) {
   }
   // Un sondeo que salió antes de que eligieras otro día no se aplica: si llega
   // tarde, volvería a poner el día viejo, y el siguiente ya trae tu elección.
-  if (pedido !== diaElegido) return;
+  if (pedido !== (diaMirado || diaElegido)) return;
   // Si el día guardado ya no tiene tarjetas, el servidor enseña el más reciente:
   // se guarda eso, para no volver a pedir un día vacío en cada refresco.
   const guardar = valorGuardado(datos.dia_activo, datos);
-  if (guardar !== diaElegido) {
+  if (!diaMirado && guardar !== diaElegido) {
     diaElegido = guardar;
     guardarPreferencias();
   }
@@ -820,16 +821,17 @@ function conectar() {
   diaElegido = typeof guardado.dia === "string" ? guardado.dia : null;
   leerBorradores();
 
-  const elegirDia = (valor) => {
-    diaElegido = valorGuardado(valor, estado);
+  const diaSelect = document.getElementById("diaSelect");
+  diaSelect.addEventListener("change", () => {
+    diaMirado = null;
+    diaElegido = valorGuardado(diaSelect.value, estado);
     guardarPreferencias();
     cargar(true);
-  };
-  const diaSelect = document.getElementById("diaSelect");
-  diaSelect.addEventListener("change", () => elegirDia(diaSelect.value));
+  });
   document.getElementById("diaFuera").addEventListener("click", () => {
     diaSelect.focus();
-    elegirDia("todo");
+    diaMirado = "todo";
+    cargar(true);
   });
 
   document.querySelectorAll(".switch button").forEach((b) => {
