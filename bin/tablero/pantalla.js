@@ -763,7 +763,7 @@ function pintarDias(datos) {
       ? "1 tarjeta espera tu respuesta en otro día"
       : fuera.esperan + " tarjetas esperan tu respuesta en otros días";
     if (fuera.bloquean > 0) texto += " (" + fuera.bloquean + (fuera.bloquean === 1 ? " bloquea trabajo)" : " bloquean trabajo)");
-    nota.textContent = texto;
+    nota.textContent = texto + " · Ver todo";
     nota.hidden = false;
   } else {
     nota.hidden = true;
@@ -820,10 +820,16 @@ function conectar() {
   diaElegido = typeof guardado.dia === "string" ? guardado.dia : null;
   leerBorradores();
 
-  document.getElementById("diaSelect").addEventListener("change", (ev) => {
-    diaElegido = valorGuardado(ev.currentTarget.value, estado);
+  const elegirDia = (valor) => {
+    diaElegido = valorGuardado(valor, estado);
     guardarPreferencias();
     cargar(true);
+  };
+  const diaSelect = document.getElementById("diaSelect");
+  diaSelect.addEventListener("change", () => elegirDia(diaSelect.value));
+  document.getElementById("diaFuera").addEventListener("click", () => {
+    diaSelect.focus();
+    elegirDia("todo");
   });
 
   document.querySelectorAll(".switch button").forEach((b) => {

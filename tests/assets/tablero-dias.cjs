@@ -121,6 +121,31 @@ async function main() {
   );
   await captura("dias-defecto");
 
+  // ------------------------------------------- el aviso lleva a lo que queda fuera
+
+  if (pendientesFuera > 0) {
+    await pagina.click("#diaFuera");
+    const leerDia = () => pagina.inputValue("#diaSelect");
+    comprobar("pulsar el aviso pasa el selector a Todo", (await hasta("todo", leerDia)) === "todo", await leerDia());
+    comprobar(
+      "tras pulsar el aviso se ven todas las tarjetas que esperan tu respuesta",
+      (await hasta(todo.cuenta.preguntan, esperanEnPantalla)) === todo.cuenta.preguntan,
+      await esperanEnPantalla()
+    );
+    comprobar(
+      "tras pulsar el aviso están en pantalla las tarjetas de todos los días",
+      (await hasta(tarjetas(todo), tarjetasEnPantalla)) === tarjetas(todo),
+      await tarjetasEnPantalla()
+    );
+    comprobar(
+      "tras pulsar el aviso ya no queda ninguna pregunta fuera",
+      (await hasta(false, () => pagina.isVisible("#diaFuera"))) === false,
+      await pagina.textContent("#diaFuera")
+    );
+    await pagina.selectOption("#diaSelect", defecto);
+    await hasta(tarjetas(porDefecto), tarjetasEnPantalla);
+  }
+
   // ----------------------------------------------------------- elegir un día
 
   await pagina.selectOption("#diaSelect", "todo");
@@ -207,8 +232,8 @@ async function main() {
   if (await movil.isVisible("#diaFuera")) {
     const aviso = await movil.locator("#diaFuera").boundingBox();
     comprobar(
-      "el aviso de lo que queda fuera cabe en el móvil",
-      aviso !== null && aviso.x >= 0 && aviso.x + aviso.width <= 420,
+      "el aviso de lo que queda fuera cabe en el móvil y se toca bien (44 px o más)",
+      aviso !== null && aviso.height >= 44 && aviso.x >= 0 && aviso.x + aviso.width <= 420,
       aviso
     );
   }

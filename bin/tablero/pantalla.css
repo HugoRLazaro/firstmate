@@ -624,10 +624,13 @@
   }
   .dias select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .dias-fuera {
-    margin: 0; padding: 8px 13px;
+    margin: 0; padding: 8px 13px; min-height: 44px; max-width: 100%;
     background: var(--red-bg); color: var(--red);
-    border-radius: 12px; font-size: 13px; font-weight: 650; line-height: 1.4;
+    border: 0; border-radius: 12px; font-size: 13px; font-weight: 650; line-height: 1.4;
+    text-align: left; cursor: pointer;
   }
+  .dias-fuera:hover { text-decoration: underline; }
+  .dias-fuera:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .dias-fuera[hidden] { display: none; }
   .accion-nota { margin-top: 7px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
   .menu .menu-ya { margin-left: auto; font-size: 12px; font-weight: 600; }
