@@ -132,9 +132,16 @@ async function main() {
 
   if (pendientesFuera > 0) {
     const guardadoAntes = await hasta("reciente", diaGuardado);
-    await pagina.click("#diaFuera");
     const leerDia = () => pagina.inputValue("#diaSelect");
-    comprobar("pulsar el aviso pasa el selector a Todo", (await hasta("todo", leerDia)) === "todo", await leerDia());
+    const textoElegido = () => pagina.$eval("#diaSelect", (s) => (s.selectedOptions[0] ? s.selectedOptions[0].textContent : ""));
+    const marcado = async () => (await textoElegido()).includes("sin guardar");
+    const marcas = () => pagina.$$eval("#diaSelect option", (n) => n.filter((o) => o.textContent.includes("sin guardar")).length);
+    await pagina.click("#diaFuera");
+    comprobar(
+      "pulsar el aviso deja el selector marcado como vista sin guardar",
+      (await hasta(true, marcado)) === true,
+      await textoElegido()
+    );
     comprobar(
       "tras pulsar el aviso se ven todas las tarjetas que esperan tu respuesta",
       (await hasta(todo.cuenta.preguntan, esperanEnPantalla)) === todo.cuenta.preguntan,
@@ -154,7 +161,11 @@ async function main() {
     await pagina.click('.switch button[data-view="lista"]');
     await pagina.click('.switch button[data-view="etapas"]');
     await pagina.waitForTimeout(5000);
-    comprobar("un refresco no devuelve la vista del aviso al día guardado", (await leerDia()) === "todo", await leerDia());
+    comprobar(
+      "un refresco no devuelve la vista del aviso al día guardado",
+      (await marcado()) && (await tarjetasEnPantalla()) === tarjetas(todo),
+      [await textoElegido(), await tarjetasEnPantalla()]
+    );
     comprobar(
       "pulsar el aviso no cambia el día guardado",
       guardadoAntes === "reciente" && (await diaGuardado()) === guardadoAntes,
@@ -163,11 +174,35 @@ async function main() {
     await pagina.reload({ waitUntil: "networkidle" });
     await pagina.waitForSelector(".board .col", { timeout: 15000 });
     comprobar("al volver a entrar tras pulsar el aviso sigue el día más reciente", (await leerDia()) === defecto, await leerDia());
+    comprobar("al volver a entrar ya no está la marca de vista sin guardar", (await marcas()) === 0, await textoElegido());
     comprobar(
       "al volver a entrar tras pulsar el aviso se ven sólo las tarjetas de ese día",
       (await hasta(tarjetas(porDefecto), tarjetasEnPantalla)) === tarjetas(porDefecto),
       await tarjetasEnPantalla()
     );
+
+    // Un selector nativo no avisa si se vuelve a elegir lo que ya enseña: mientras
+    // se mira no puede estar ya en «Todo», o elegirlo a mano no guardaría nada.
+    await hasta(true, () => pagina.isVisible("#diaFuera"));
+    await pagina.click("#diaFuera");
+    await hasta(true, marcado);
+    comprobar(
+      "mientras se mira, «Todo» sigue sin elegir en el selector",
+      (await leerDia()) !== "todo" && (await marcado()),
+      [await leerDia(), await textoElegido()]
+    );
+    await pagina.selectOption("#diaSelect", "todo");
+    comprobar("elegir «Todo» a mano mientras se mira sí lo guarda", (await hasta("todo", diaGuardado)) === "todo", await diaGuardado());
+    comprobar(
+      "al elegir a mano desaparece la marca de vista sin guardar",
+      (await hasta(0, marcas)) === 0 && (await leerDia()) === "todo",
+      [await marcas(), await leerDia()]
+    );
+    await pagina.reload({ waitUntil: "networkidle" });
+    await pagina.waitForSelector(".board .col", { timeout: 15000 });
+    comprobar("al volver a entrar se recuerda el «Todo» elegido a mano", (await leerDia()) === "todo", await leerDia());
+    await pagina.selectOption("#diaSelect", defecto);
+    await hasta(tarjetas(porDefecto), tarjetasEnPantalla);
   }
 
   // ----------------------------------------------------------- elegir un día

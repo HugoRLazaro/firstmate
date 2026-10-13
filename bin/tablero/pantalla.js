@@ -743,6 +743,7 @@ function pintarDias(datos) {
   const opciones = [{ valor: "todo", texto: textoDia("Todo", total, esperanTodas) }];
   dias.forEach((d) => opciones.push({ valor: d.id, texto: textoDia(d.etiqueta, d.tarjetas, d.esperan) }));
   if (sinFecha.tarjetas > 0) opciones.push({ valor: "sin-fecha", texto: textoDia("Sin fecha", sinFecha.tarjetas, sinFecha.esperan) });
+  if (diaMirado) opciones.unshift({ valor: "", texto: "Todo · vista sin guardar", fija: true });
 
   const select = document.getElementById("diaSelect");
   const firma = JSON.stringify(opciones);
@@ -752,10 +753,11 @@ function pintarDias(datos) {
       const op = document.createElement("option");
       op.value = o.valor;
       op.textContent = o.texto;
+      op.disabled = Boolean(o.fija);
       return op;
     }));
   }
-  select.value = datos.dia_activo;
+  select.value = diaMirado ? "" : datos.dia_activo;
 
   const fuera = datos.fuera || {};
   const nota = document.getElementById("diaFuera");
