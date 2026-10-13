@@ -21,9 +21,12 @@
 #   - moving and removing a card only ASK: the request reaches the inbox and the
 #     backlog is left exactly as it was
 #   - start/stop/status, and the refusal to listen on 0.0.0.0
+#   - the day filter: each card's day comes from its id, the newest day is shown
+#     by default, the counts follow what is shown, the waiting cards left out are
+#     reported, and a day that matches no card never leaves the board empty
 #
-# The page itself (rendering, tabs, console, refresh keeping the draft) is
-# proved with a real browser in tests/fm-tablero-pantalla.test.sh.
+# The page itself (rendering, tabs, console, refresh keeping the draft, the day
+# selector) is proved with a real browser in tests/fm-tablero-pantalla.test.sh.
 set -u
 
 # shellcheck source=tests/lib.sh

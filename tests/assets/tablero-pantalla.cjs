@@ -1,4 +1,4 @@
-// tests/assets/tablero-pantalla.mjs - drives the work board page in a real browser.
+// tests/assets/tablero-pantalla.cjs - drives the work board page in a real browser.
 //
 // tests/fm-tablero-pantalla.test.sh is the only supported caller: it seeds a home,
 // starts the server and passes the URL in. Everything a stub cannot prove lives

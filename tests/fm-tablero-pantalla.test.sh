@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # tests/fm-tablero-pantalla.test.sh - the work board in a real browser.
 #
-# tests/assets/tablero-pantalla.cjs owns what is checked; this script only finds
-# the browser, seeds a home whose columns and conversation are known, starts the
-# real server through the shipped command, and hands the URL over. Everything a
-# stub cannot prove is here: that the five columns and the two tabs render, that
+# tests/assets/tablero-pantalla.cjs owns what is checked on the page and
+# tests/assets/tablero-dias.cjs what is checked on its day selector; this script
+# only finds the browser, seeds one home for each whose cards are known, starts
+# the real server through the shipped command, and hands the URL over. Everything
+# a stub cannot prove is here: that the five columns and the two tabs render, that
 # the console stays clean, that a poll does not eat what the captain is writing,
-# and that answering from a card really closes the decision in the backlog.
+# that answering from a card really closes the decision in the backlog, and that
+# the day shown, the remembered choice and the notice of waiting cards on other
+# days behave in the page itself.
 #
 # Chromium comes from a Playwright install; where there is none this case skips
 # rather than passing quietly over a page nothing looked at.

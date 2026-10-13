@@ -13,10 +13,15 @@ Serves, over HTTP on loopback and the machine's Tailscale address only:
   GET  /pantalla.js         its behaviour
   GET  /api/estado[?dia=]   the five columns, derived from this home's real state,
                             each card with the state of what the captain wrote in it;
-                            `dia` is an ISO day, `todo`, `sin-fecha` or `reciente` (the
-                            newest day with cards, the default); the payload names the day
-                            it shows (`dia_activo`), the days it can show (`dias`,
-                            `sin_fecha`) and how many waiting cards it hides (`fuera`)
+                            a card's day is the valid `-YYYYMMDD` date its task id ends
+                            in, and a card whose id has none has no day; `dia` is an ISO
+                            day, `todo`, `sin-fecha` or `reciente` (the default: the
+                            newest day with cards, or every card when none has a day),
+                            and a value that matches no card falls back to `reciente`;
+                            the payload names the day it shows (`dia_activo`), the day
+                            `reciente` stands for (`dia_defecto`), the days it can show
+                            (`dias`, `sin_fecha`) and how many waiting cards it hides
+                            (`fuera`)
   GET  /api/conversacion    the durable conversation, paired question -> answer
   POST /api/responder       {"tarea","texto"}            -> bin/fm-inbox.sh note
                                                             + bin/fm-captain-hold.sh answer
