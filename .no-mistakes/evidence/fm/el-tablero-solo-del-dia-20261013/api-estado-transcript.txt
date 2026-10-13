@@ -1,0 +1,156 @@
+GET /api/estado
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+
+GET /api/estado?dia=reciente
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+
+GET /api/estado?dia=2026-10-12
+  dia_activo: 2026-10-12 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 11, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 0, 'subir': 1, 'plan': 1, 'hecho': 0}
+    ahora   []
+    espera  ['portales-decidir-20261012']
+    subir   ['motor-arrastrado-20261012']
+    plan    ['plan-de-ayer-20261012']
+    hecho   []
+
+GET /api/estado?dia=2026-10-10
+  dia_activo: 2026-10-10 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 12, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 0, 'subir': 0, 'plan': 0, 'hecho': 1}
+    ahora   []
+    espera  ['aditivas-decidir-20261010']
+    subir   []
+    plan    []
+    hecho   ['resumen-ancho-20261010']
+
+GET /api/estado?dia=todo
+  dia_activo: todo | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 0, 'esperan': 0, 'bloquean': 0}
+  cuenta: {'preguntan': 3, 'bloquean': 0, 'ahora': 3, 'subir': 1, 'plan': 4, 'hecho': 3}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013', 'barra-por-sobres']
+    espera  ['decidir-color-20261013', 'portales-decidir-20261012', 'aditivas-decidir-20261010']
+    subir   ['motor-arrastrado-20261012']
+    plan    ['plan-de-hoy-20261013', 'plan-de-ayer-20261012', 'avisar-herramienta-rota', 'fecha-imposible-20261345']
+    hecho   ['cerrado-hoy-20261013', 'resumen-ancho-20261010', 'radar-frases']
+
+GET /api/estado?dia=sin-fecha
+  dia_activo: sin-fecha | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 10, 'esperan': 3, 'bloquean': 0}
+  cuenta: {'preguntan': 0, 'bloquean': 0, 'ahora': 1, 'subir': 0, 'plan': 2, 'hecho': 1}
+    ahora   ['barra-por-sobres']
+    espera  []
+    subir   []
+    plan    ['avisar-herramienta-rota', 'fecha-imposible-20261345']
+    hecho   ['radar-frases']
+
+GET /api/estado?dia=2026-10-09
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+
+GET /api/estado?dia=basura
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+
+GET /api/estado?dia=2026-13-45
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+
+GET /api/estado?dia=
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+
+GET /api/estado?dia=%27%3B--
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+
+GET /api/estado?dia=2026-10-12&dia=todo
+  dia_activo: 2026-10-12 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 11, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 0, 'subir': 1, 'plan': 1, 'hecho': 0}
+    ahora   []
+    espera  ['portales-decidir-20261012']
+    subir   ['motor-arrastrado-20261012']
+    plan    ['plan-de-ayer-20261012']
+    hecho   []
+
+GET /api/estado?otro=1
+  dia_activo: 2026-10-13 | dia_defecto: 2026-10-13
+  dias: [('2026-10-13', '13 de octubre', 5, 1, 0), ('2026-10-12', '12 de octubre', 3, 1, 0), ('2026-10-10', '10 de octubre', 2, 1, 0)]
+  sin_fecha: {'id': 'sin-fecha', 'etiqueta': 'Sin fecha', 'tarjetas': 4, 'esperan': 0, 'bloquean': 0}
+  fuera: {'tarjetas': 9, 'esperan': 2, 'bloquean': 0}
+  cuenta: {'preguntan': 1, 'bloquean': 0, 'ahora': 2, 'subir': 0, 'plan': 1, 'hecho': 1}
+    ahora   ['tablero-solo-del-dia-20261013', 'informe-semanal-20261013']
+    espera  ['decidir-color-20261013']
+    subir   []
+    plan    ['plan-de-hoy-20261013']
+    hecho   ['cerrado-hoy-20261013']
+

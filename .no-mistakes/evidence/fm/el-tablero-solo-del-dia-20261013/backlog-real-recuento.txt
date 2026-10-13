@@ -1,0 +1,13 @@
+Copy of the captain's real data/backlog.md served by this change (counts only, no card text):
+GET /api/estado
+  dia_activo: 2026-10-13 | cards shown: 40 | days of the cards shown: ['2026-10-13']
+  dias: [('13 de octubre', 40, 14), ('12 de octubre', 6, 5), ('11 de octubre', 20, 12), ('10 de octubre', 1, 0)]
+  sin_fecha: 0 | fuera: {'tarjetas': 27, 'esperan': 17, 'bloquean': 15} | cuenta: {'preguntan': 14, 'bloquean': 1, 'ahora': 14, 'subir': 0, 'plan': 2, 'hecho': 10}
+GET /api/estado?dia=todo
+  dia_activo: todo | cards shown: 67 | days of the cards shown: ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13']
+  dias: [('13 de octubre', 40, 14), ('12 de octubre', 6, 5), ('11 de octubre', 20, 12), ('10 de octubre', 1, 0)]
+  sin_fecha: 0 | fuera: {'tarjetas': 0, 'esperan': 0, 'bloquean': 0} | cuenta: {'preguntan': 31, 'bloquean': 16, 'ahora': 15, 'subir': 0, 'plan': 11, 'hecho': 10}
+GET /api/estado?dia=sin-fecha
+  dia_activo: 2026-10-13 | cards shown: 40 | days of the cards shown: ['2026-10-13']
+  dias: [('13 de octubre', 40, 14), ('12 de octubre', 6, 5), ('11 de octubre', 20, 12), ('10 de octubre', 1, 0)]
+  sin_fecha: 0 | fuera: {'tarjetas': 27, 'esperan': 17, 'bloquean': 15} | cuenta: {'preguntan': 14, 'bloquean': 1, 'ahora': 14, 'subir': 0, 'plan': 2, 'hecho': 10}

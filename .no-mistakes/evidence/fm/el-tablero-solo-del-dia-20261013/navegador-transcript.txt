@@ -1,0 +1,36 @@
+PASS 1 default: selector on newest day (13 de octubre)  -> {"value":"2026-10-13","texto":"13 de octubre · 5 tarjetas · 1 esperan"}
+PASS 1 default: every 13 Oct open card is on screen  -> []
+PASS 1 default: no card of another day or undated is on screen  -> []
+PASS 1 default: card count equals the 13 Oct cards (5 of 15)  -> [5,15]
+PASS 1 default: selector options list Todo, each day, Sin fecha  -> ["Todo · 15 tarjetas · 4 esperan","13 de octubre · 5 tarjetas · 1 esperan","12 de octubre · 4 tarjetas · 2 esperan","10 de octubre · 2 tarjetas · 1 esperan","Sin fecha · 4 tarjetas"]
+PASS 1 default: first request carried no day (server default)  -> "/api/estado"
+PASS 5 notice: hidden waiting cards announced next to selector  -> "3 tarjetas esperan tu respuesta en otros días (1 bloquea trabajo) · Ver todo"
+PASS 5 pill: blocked work on another day still announced in header  -> "1 cosa de trabajo parada esperándote en otro día"
+PASS 2 pick 12 Oct: only that day's cards  -> 4
+PASS 2 pick 12 Oct: waiting counter follows the day  -> "2"
+PASS 2 pick 12 Oct: choice stored in the browser  -> "2026-10-12"
+PASS 2 pick 12 Oct: polls do not move the board back  -> [{"value":"2026-10-12","texto":"12 de octubre · 4 tarjetas · 2 esperan"},4]
+PASS 2 pick 12 Oct: reload reopens on 12 Oct  -> {"value":"2026-10-12","texto":"12 de octubre · 4 tarjetas · 2 esperan"}
+PASS 3 Todo: all 15 cards of every day and undated  -> 15
+PASS 3 Todo: nothing left outside, notice hidden
+PASS 4 Sin fecha: only undated cards, incl. the id whose 8 digits are not a date  -> 4
+PASS 6 picking the newest day stores 'reciente'  -> "reciente"
+PASS 5 notice click: all 15 cards shown, incl. the 3 hidden questions  -> [15,"4"]
+PASS 5 notice click: selector marked 'vista sin guardar'  -> {"value":"","texto":"Todo · vista sin guardar"}
+PASS 5 notice click: stored choice untouched  -> "reciente"
+PASS 5 notice click: polls keep the look-only view and still do not save  -> [15,"reciente"]
+PASS 5 notice click: reload returns to 13 Oct, mark gone  -> [{"value":"2026-10-13","texto":"13 de octubre · 5 tarjetas · 1 esperan"},["Todo · 15 tarjetas · 4 esperan","13 de octubre · 5 tarjetas · 1 esperan","12 de octubre · 4 tarjetas · 2 esperan","10 de octubre · 2 tarjetas · 1 esperan","Sin fecha · 4 tarjetas"]]
+PASS 5b manual Todo while looking: saved  -> "todo"
+PASS 5b manual Todo while looking: mark disappears, selector on Todo  -> {"value":"todo","texto":"Todo · 15 tarjetas · 4 esperan"}
+PASS 5b manual Todo: remembered after reload  -> {"value":"todo","texto":"Todo · 15 tarjetas · 4 esperan"}
+PASS 7 stale remembered day (1 Oct, no cards): board falls back to 13 Oct, not empty  -> [{"value":"2026-10-13","texto":"13 de octubre · 5 tarjetas · 1 esperan"},5,"reciente"]
+PASS 7 garbage remembered day: board falls back to 13 Oct  -> [{"value":"2026-10-13","texto":"13 de octubre · 5 tarjetas · 1 esperan"},"reciente"]
+PASS 7 corrupt stored preferences: board still opens on 13 Oct  -> {"value":"2026-10-13","texto":"13 de octubre · 5 tarjetas · 1 esperan"}
+PASS 8 phone: first visit shows only 13 Oct  -> {"value":"2026-10-13","texto":"13 de octubre · 5 tarjetas · 1 esperan"}
+PASS 8 phone: no horizontal overflow, selector and notice fit and are 44px tall  -> {"desborde":0,"caja":{"x":49,"y":290.640625,"width":347,"height":44},"cajaNota":{"x":16,"y":342.640625,"width":388,"height":52.375}}
+PASS 9 answering a 12 Oct question from the page lowers the hidden-waiting count  -> {"tarjetas":10,"esperan":2,"bloquean":1}
+PASS 9 the answer reached the backlog in the captain's words  -> "- [x] portales-decidir-20261012 - Portales: plan de cambios en la entrada (repo: licitaciones-platform) (kind: captain) (done 2026-10-13) (hold: D1 Catalunya: completo o parcial? Di cuál.) (hold-kind:"
+PASS 9 back on 13 Oct the notice now counts 2  -> "2 tarjetas esperan tu respuesta en otros días (1 bloquea trabajo) · Ver todo"
+PASS 10 a newer day appears: the open board moves to 14 Oct on its own (stored 'reciente')  -> [{"value":"2026-10-14","texto":"14 de octubre · 1 tarjeta"},"reciente"]
+PASS 10 desktop reload also opens on 14 Oct  -> {"value":"2026-10-14","texto":"14 de octubre · 1 tarjeta"}
+PASS console: no errors or warnings across the whole session  -> []
