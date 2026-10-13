@@ -212,6 +212,14 @@ async function main() {
       aviso
     );
   }
+  await movil.click("#tabChat");
+  comprobar(
+    "en la pestaña de conversación el selector de día no ocupa sitio",
+    !(await movil.isVisible("#diaSelect")),
+    "sigue visible"
+  );
+  await movil.click("#tabTablero");
+  comprobar("al volver al tablero el selector vuelve", await movil.isVisible("#diaSelect"));
   await captura("dias-estrecho", false, movil);
 
   comprobar("la consola no tiene ni un error ni un aviso", consola.length === 0, consola.slice(0, 4));

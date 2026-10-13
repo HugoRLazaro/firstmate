@@ -775,13 +775,17 @@ function pintarDias(datos) {
 
 async function cargar(urgente) {
   let datos;
+  const pedido = diaElegido;
   try {
-    const consulta = diaElegido ? "?dia=" + encodeURIComponent(diaElegido) : "";
+    const consulta = pedido ? "?dia=" + encodeURIComponent(pedido) : "";
     datos = await pedir("/api/estado" + consulta);
   } catch (e) {
     aviso("No se pudo leer el estado: " + e.message);
     return;
   }
+  // Un sondeo que salió antes de que eligieras otro día no se aplica: si llega
+  // tarde, volvería a poner el día viejo, y el siguiente ya trae tu elección.
+  if (pedido !== diaElegido) return;
   // Si el día guardado ya no tiene tarjetas, el servidor enseña el más reciente:
   // se guarda eso, para no volver a pedir un día vacío en cada refresco.
   const guardar = valorGuardado(datos.dia_activo, datos);
