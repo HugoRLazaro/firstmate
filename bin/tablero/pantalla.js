@@ -4,8 +4,11 @@
  * Todo lo que se ve sale de GET /api/estado, que lee el estado real del home.
  * La pantalla no inventa columnas ni estados: pinta lo que el servidor calcula.
  * Lo único que guarda el navegador es lo tuyo y de esta sesión: qué vista
- * prefieres, qué columnas tienes plegadas y los borradores que aún no has
- * enviado, para que un refresco no se lleve por delante lo que estás escribiendo.
+ * prefieres, qué día eliges, qué columnas tienes plegadas y los borradores que
+ * aún no has enviado, para que un refresco no se lleve por delante lo que estás
+ * escribiendo.
+ * El día se guarda como «reciente» mientras sea el más nuevo con tarjetas, así
+ * que mañana el tablero enseña mañana, no el 13 de octubre para siempre.
  */
 
 const MS = 4000;              // cada cuánto se vuelve a preguntar al servidor
@@ -52,6 +55,8 @@ let borradores = {};
 let arrastrando = null;
 let tareaQuitar = null;
 let temporizadorToast = 0;
+let diaElegido = null;          // "reciente", un día ISO, "todo" o "sin-fecha"; null = aún no has elegido
+let diaMirado = null;           // lo que abre el aviso de otros días: se mira, no se guarda
 
 /* ------------------------------------------------------------ preferencias */
 
@@ -63,7 +68,7 @@ function leerPreferencias() {
 
 function guardarPreferencias() {
   try {
-    localStorage.setItem(PREFERENCIAS, JSON.stringify({ vista, plegadas: [...plegadas], abiertas: [...abiertas], pestana: pestanaActual() }));
+    localStorage.setItem(PREFERENCIAS, JSON.stringify({ vista, dia: diaElegido, plegadas: [...plegadas], abiertas: [...abiertas], pestana: pestanaActual() }));
   } catch (e) { /* sin memoria del navegador: sigue funcionando */ }
 }
 
@@ -164,15 +169,23 @@ function pintar(datos) {
   document.getElementById("waitT").textContent =
     (datos.cuenta.preguntan || 0) === 1 ? "espera tu respuesta" : "esperan tu respuesta";
 
+  // La pastilla no se apaga por elegir otro día: lo que queda en otro día sigue
+  // parando trabajo, y se dice aparte para no confundirlo con lo que se ve.
   const pill = document.getElementById("blockPill");
-  if (datos.cuenta.bloquean > 0) {
-    document.getElementById("blockT").textContent =
-      datos.cuenta.bloquean === 1 ? "1 cosa de trabajo parada esperándote" : datos.cuenta.bloquean + " cosas de trabajo paradas esperándote";
+  const aqui = datos.cuenta.bloquean || 0;
+  const fuera = (datos.fuera && datos.fuera.bloquean) || 0;
+  if (aqui + fuera > 0) {
+    let texto;
+    if (aqui > 0) texto = aqui === 1 ? "1 cosa de trabajo parada esperándote" : aqui + " cosas de trabajo paradas esperándote";
+    else texto = fuera === 1 ? "1 cosa de trabajo parada esperándote en otro día" : fuera + " cosas de trabajo paradas esperándote en otros días";
+    if (aqui > 0 && fuera > 0) texto += " · " + fuera + " en otros días";
+    document.getElementById("blockT").textContent = texto;
     pill.hidden = false;
   } else {
     pill.hidden = true;
   }
 
+  pintarDias(datos);
   aviso(textoAviso(datos));
 }
 
@@ -704,18 +717,87 @@ function ajustarAlto() {
   chatSend.disabled = !chatInput.value.trim();
 }
 
+/* ------------------------------------------------------------------------ día */
+
+let firmaDias = "";             // las opciones del selector; solo se reconstruyen si cambian
+
+// "reciente" en vez del valor cuando es el día por defecto: así el tablero de
+// mañana enseña mañana, y un tablero sin fechas no se queda guardado en «todo».
+function valorGuardado(valor, datos) {
+  if (datos && valor === datos.dia_defecto) return "reciente";
+  return valor;
+}
+
+function textoDia(nombre, tarjetas, esperan) {
+  const partes = [nombre, tarjetas + (tarjetas === 1 ? " tarjeta" : " tarjetas")];
+  if (esperan) partes.push(esperan + " esperan");
+  return partes.join(" · ");
+}
+
+function pintarDias(datos) {
+  const dias = datos.dias || [];
+  const sinFecha = datos.sin_fecha || { tarjetas: 0, esperan: 0 };
+  const total = dias.reduce((n, d) => n + d.tarjetas, sinFecha.tarjetas);
+  const esperanTodas = dias.reduce((n, d) => n + d.esperan, sinFecha.esperan);
+
+  const opciones = [{ valor: "todo", texto: textoDia("Todo", total, esperanTodas) }];
+  dias.forEach((d) => opciones.push({ valor: d.id, texto: textoDia(d.etiqueta, d.tarjetas, d.esperan) }));
+  if (sinFecha.tarjetas > 0) opciones.push({ valor: "sin-fecha", texto: textoDia("Sin fecha", sinFecha.tarjetas, sinFecha.esperan) });
+  if (diaMirado) opciones.unshift({ valor: "", texto: "Todo · vista sin guardar", fija: true });
+
+  const select = document.getElementById("diaSelect");
+  const firma = JSON.stringify(opciones);
+  if (firma !== firmaDias) {
+    firmaDias = firma;
+    select.replaceChildren(...opciones.map((o) => {
+      const op = document.createElement("option");
+      op.value = o.valor;
+      op.textContent = o.texto;
+      op.disabled = Boolean(o.fija);
+      return op;
+    }));
+  }
+  select.value = diaMirado ? "" : datos.dia_activo;
+
+  const fuera = datos.fuera || {};
+  const nota = document.getElementById("diaFuera");
+  if (fuera.esperan > 0) {
+    let texto = fuera.esperan === 1
+      ? "1 tarjeta espera tu respuesta en otro día"
+      : fuera.esperan + " tarjetas esperan tu respuesta en otros días";
+    if (fuera.bloquean > 0) texto += " (" + fuera.bloquean + (fuera.bloquean === 1 ? " bloquea trabajo)" : " bloquean trabajo)");
+    nota.textContent = texto + " · Ver todo";
+    nota.hidden = false;
+  } else {
+    nota.hidden = true;
+    nota.textContent = "";
+  }
+}
+
 /* -------------------------------------------------------------------- carga */
 
 async function cargar(urgente) {
   let datos;
+  const pedido = diaMirado || diaElegido;
   try {
-    datos = await pedir("/api/estado");
+    const consulta = pedido ? "?dia=" + encodeURIComponent(pedido) : "";
+    datos = await pedir("/api/estado" + consulta);
   } catch (e) {
     aviso("No se pudo leer el estado: " + e.message);
     return;
   }
+  // Un sondeo que salió antes de que eligieras otro día no se aplica: si llega
+  // tarde, volvería a poner el día viejo, y el siguiente ya trae tu elección.
+  if (pedido !== (diaMirado || diaElegido)) return;
+  // Si el día guardado ya no tiene tarjetas, el servidor enseña el más reciente:
+  // se guarda eso, para no volver a pedir un día vacío en cada refresco.
+  const guardar = valorGuardado(datos.dia_activo, datos);
+  if (!diaMirado && guardar !== diaElegido) {
+    diaElegido = guardar;
+    guardarPreferencias();
+  }
   subEl.textContent = datos.generado_texto ? "Actualizado el " + datos.generado_texto + "." : "";
-  const huella = JSON.stringify({ c: datos.columnas, n: datos.cuenta, a: datos.aviso, u: datos.ausencia });
+  const huella = JSON.stringify({ c: datos.columnas, n: datos.cuenta, a: datos.aviso, u: datos.ausencia, v: datos.dia_activo, d: datos.dias, s: datos.sin_fecha, f: datos.fuera });
   if (!urgente && huella === huellaEstado) return;
   huellaEstado = huella;
   estado = datos;
@@ -738,7 +820,21 @@ function conectar() {
   vista = guardado.vista === "lista" ? "lista" : "etapas";
   plegadas = new Set(Array.isArray(guardado.plegadas) ? guardado.plegadas : ["hecho"]);
   abiertas = new Set(Array.isArray(guardado.abiertas) ? guardado.abiertas : []);
+  diaElegido = typeof guardado.dia === "string" ? guardado.dia : null;
   leerBorradores();
+
+  const diaSelect = document.getElementById("diaSelect");
+  diaSelect.addEventListener("change", () => {
+    diaMirado = null;
+    diaElegido = valorGuardado(diaSelect.value, estado);
+    guardarPreferencias();
+    cargar(true);
+  });
+  document.getElementById("diaFuera").addEventListener("click", () => {
+    diaSelect.focus();
+    diaMirado = "todo";
+    cargar(true);
+  });
 
   document.querySelectorAll(".switch button").forEach((b) => {
     b.setAttribute("aria-pressed", b.dataset.view === vista ? "true" : "false");

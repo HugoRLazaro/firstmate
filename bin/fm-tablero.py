@@ -11,8 +11,17 @@ Serves, over HTTP on loopback and the machine's Tailscale address only:
   GET  /                    the page
   GET  /pantalla.css        its stylesheet
   GET  /pantalla.js         its behaviour
-  GET  /api/estado          the five columns, derived from this home's real state,
-                            each card with the state of what the captain wrote in it
+  GET  /api/estado[?dia=]   the five columns, derived from this home's real state,
+                            each card with the state of what the captain wrote in it;
+                            a card's day is the valid `-YYYYMMDD` date its task id ends
+                            in, and a card whose id has none has no day; `dia` is an ISO
+                            day, `todo`, `sin-fecha` or `reciente` (the default: the
+                            newest day with cards, or every card when none has a day),
+                            and a value that matches no card falls back to `reciente`;
+                            the payload names the day it shows (`dia_activo`), the day
+                            `reciente` stands for (`dia_defecto`), the days it can show
+                            (`dias`, `sin_fecha`) and how many waiting cards it hides
+                            (`fuera`)
   GET  /api/conversacion    the durable conversation, paired question -> answer
   POST /api/responder       {"tarea","texto"}            -> bin/fm-inbox.sh note
                                                             + bin/fm-captain-hold.sh answer
@@ -71,6 +80,7 @@ import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 PAGINA = Path(__file__).resolve().parent / "tablero"
 MAX_CUERPO = 64 * 1024
@@ -576,8 +586,65 @@ def _texto_generado(ahora: datetime) -> str:
     return f"{ahora.day} de {MESES[ahora.month - 1]}, {ahora:%H:%M}"
 
 
-def tablero(home: Path, ahora: datetime | None = None) -> dict:
-    """El payload de /api/estado: lo que la pantalla pinta, tal cual sale del home."""
+DIA_DE_ID = re.compile(r"-(\d{8})$")
+RECIENTE = "reciente"
+TODOS = "todo"
+SIN_FECHA = "sin-fecha"
+
+
+def dia_de_tarea(tarea_id: str) -> str | None:
+    """El día (ISO) que lleva el sufijo de ocho cifras del id, o None si no hay fecha válida."""
+    m = DIA_DE_ID.search(tarea_id)
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%Y%m%d").date().isoformat()
+    except ValueError:
+        return None
+
+
+def _etiqueta_dia(iso: str) -> str:
+    fecha = datetime.fromisoformat(iso)
+    return f"{fecha.day} de {MESES[fecha.month - 1]}"
+
+
+def _resumen(tarjetas: list[dict]) -> dict:
+    return {
+        "tarjetas": len(tarjetas),
+        "esperan": sum(1 for t in tarjetas if t["etapa"] == "espera"),
+        "bloquean": sum(1 for t in tarjetas if t["etapa"] == "espera" and t["tipo"] == "bloquea"),
+    }
+
+
+def _dia_activo(pedido: str | None, dias: list[dict], hay_sin_fecha: bool) -> str:
+    """El día que se enseña: el pedido si todavía tiene tarjetas, si no el más reciente."""
+    defecto = dias[0]["id"] if dias else TODOS
+    if pedido in (None, "", RECIENTE):
+        return defecto
+    if pedido == TODOS:
+        return TODOS
+    if pedido == SIN_FECHA:
+        return SIN_FECHA if hay_sin_fecha else defecto
+    if any(d["id"] == pedido for d in dias):
+        return pedido
+    return defecto
+
+
+def _del_dia(tarjeta: dict, activo: str) -> bool:
+    if activo == TODOS:
+        return True
+    if activo == SIN_FECHA:
+        return tarjeta["dia"] is None
+    return tarjeta["dia"] == activo
+
+
+def tablero(home: Path, ahora: datetime | None = None, dia: str | None = None) -> dict:
+    """El payload de /api/estado: lo que la pantalla pinta, tal cual sale del home.
+
+    `dia` elige qué día se enseña (ISO, `todo`, `sin-fecha` o `reciente`); lo que no
+    existe cae en el día más reciente con tarjetas, así que nunca sale un tablero vacío
+    por un día que ya no está.
+    """
     ahora = ahora or datetime.now()
     state_dir = _estado_dir(home)
     aviso = None
@@ -602,15 +669,29 @@ def tablero(home: Path, ahora: datetime | None = None) -> dict:
         encargado = (state_dir / f"{tarea['id']}.meta").exists()
         tarjeta = clasificar(tarea, nuevas.get(tarea["id"]), encargado, hoy)
         tarjeta["pregunta"] = charla.get(tarjeta["id"], {})
+        tarjeta["dia"] = dia_de_tarea(tarea["id"])
         tarjetas.append(tarjeta)
+
+    por_dia: dict[str, list[dict]] = {}
+    for tarjeta in tarjetas:
+        if tarjeta["dia"] is not None:
+            por_dia.setdefault(tarjeta["dia"], []).append(tarjeta)
+    dias = [
+        {"id": iso, "etiqueta": _etiqueta_dia(iso), **_resumen(por_dia[iso])}
+        for iso in sorted(por_dia, reverse=True)
+    ]
+    sin_fecha = [t for t in tarjetas if t["dia"] is None]
+    activo = _dia_activo(dia, dias, bool(sin_fecha))
+    visibles = [t for t in tarjetas if _del_dia(t, activo)]
+    ocultas = [t for t in tarjetas if not _del_dia(t, activo)]
 
     columnas = []
     for etapa in ETAPAS:
-        mias = [t for t in tarjetas if t["etapa"] == etapa["id"]]
+        mias = [t for t in visibles if t["etapa"] == etapa["id"]]
         columnas.append({**etapa, "tarjetas": mias})
 
-    preguntan = sum(1 for t in tarjetas if t["etapa"] == "espera")
-    bloquean = sum(1 for t in tarjetas if t["etapa"] == "espera" and t["tipo"] == "bloquea")
+    preguntan = sum(1 for t in visibles if t["etapa"] == "espera")
+    bloquean = sum(1 for t in visibles if t["etapa"] == "espera" and t["tipo"] == "bloquea")
     return {
         "generado_texto": _texto_generado(ahora),
         "aviso": aviso,
@@ -618,12 +699,17 @@ def tablero(home: Path, ahora: datetime | None = None) -> dict:
         "cuenta": {
             "preguntan": preguntan,
             "bloquean": bloquean,
-            "ahora": sum(1 for t in tarjetas if t["etapa"] == "ahora"),
-            "subir": sum(1 for t in tarjetas if t["etapa"] == "subir"),
-            "plan": sum(1 for t in tarjetas if t["etapa"] == "plan"),
-            "hecho": sum(1 for t in tarjetas if t["etapa"] == "hecho"),
+            "ahora": sum(1 for t in visibles if t["etapa"] == "ahora"),
+            "subir": sum(1 for t in visibles if t["etapa"] == "subir"),
+            "plan": sum(1 for t in visibles if t["etapa"] == "plan"),
+            "hecho": sum(1 for t in visibles if t["etapa"] == "hecho"),
         },
         "columnas": columnas,
+        "dia_activo": activo,
+        "dia_defecto": dias[0]["id"] if dias else TODOS,
+        "dias": dias,
+        "sin_fecha": {"id": SIN_FECHA, "etiqueta": "Sin fecha", **_resumen(sin_fecha)},
+        "fuera": _resumen(ocultas),
     }
 
 
@@ -923,7 +1009,8 @@ class Manejador(BaseHTTPRequestHandler):
         elif ruta == "/pantalla.js":
             self._archivo(PAGINA / "pantalla.js", "text/javascript; charset=utf-8")
         elif ruta == "/api/estado":
-            self._json(tablero(self.home))
+            dia = parse_qs(urlsplit(self.path).query).get("dia", [None])[0]
+            self._json(tablero(self.home, dia=dia))
         elif ruta == "/api/conversacion":
             self._json({"mensajes": emparejar(leer_conversacion(self.home))})
         else:

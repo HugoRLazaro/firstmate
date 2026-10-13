@@ -1,4 +1,4 @@
-// tests/assets/tablero-pantalla.mjs - drives the work board page in a real browser.
+// tests/assets/tablero-pantalla.cjs - drives the work board page in a real browser.
 //
 // tests/fm-tablero-pantalla.test.sh is the only supported caller: it seeds a home,
 // starts the server and passes the URL in. Everything a stub cannot prove lives
@@ -16,30 +16,9 @@
 
 "use strict";
 
-const { existsSync, mkdirSync, readdirSync } = require("node:fs");
-const { homedir } = require("node:os");
-const { join } = require("node:path");
+const { mkdirSync } = require("node:fs");
 const { chromium } = require("playwright");
-
-// Playwright resolves its browser to one exact revision, and a machine can well
-// have an older one installed (the npx cache and the browser cache age
-// independently). Any Chromium of that cache drives the same protocol, so a
-// missing pinned revision falls back to whichever one is actually there.
-function chromiumInstalado() {
-  const cache = process.env.PLAYWRIGHT_BROWSERS_PATH || join(homedir(), ".cache", "ms-playwright");
-  if (!existsSync(cache)) return "";
-  const candidatos = [];
-  for (const entrada of readdirSync(cache)) {
-    if (entrada.startsWith("chromium-")) {
-      candidatos.push(join(cache, entrada, "chrome-linux64", "chrome"));
-      candidatos.push(join(cache, entrada, "chrome-linux", "chrome"));
-    }
-    if (entrada.startsWith("chromium_headless_shell-")) {
-      candidatos.push(join(cache, entrada, "chrome-headless-shell-linux64", "chrome-headless-shell"));
-    }
-  }
-  return candidatos.find((ruta) => existsSync(ruta)) || "";
-}
+const { lanzarNavegador } = require("./tablero-navegador.cjs");
 
 const BASE = process.env.TABLERO_BASE;
 const CAPTURAS = process.env.TABLERO_CAPTURAS || "";
@@ -64,14 +43,7 @@ const ANCHOS = [
 const ESTRECHO = { ancho: 420, alto: 900, nombre: "420" };
 
 async function main() {
-let navegador;
-try {
-  navegador = await chromium.launch();
-} catch (error) {
-  const binario = chromiumInstalado();
-  if (!binario) throw error;
-  navegador = await chromium.launch({ executablePath: binario });
-}
+const navegador = await lanzarNavegador(chromium);
 const contexto = await navegador.newContext({ viewport: { width: 1560, height: 1000 } });
 const pagina = await contexto.newPage();
 
@@ -90,7 +62,7 @@ pagina.on("request", (p) => {
 let sondeos = 0;
 let peticiones = 0;
 pagina.on("request", (p) => {
-  if (p.url().endsWith("/api/estado")) sondeos += 1;
+  if (new URL(p.url()).pathname === "/api/estado") sondeos += 1;
   if (p.url().endsWith("/api/peticion")) peticiones += 1;
 });
 
@@ -193,7 +165,7 @@ let idRespondida = null;
 {
   // El sello de actualización cambia cada minuto, pero un cambio solo del reloj no
   // puede repintar el tablero ni quitarle el foco al textarea que el capitán tiene abierto.
-  await pagina.route("**/api/estado", async (ruta) => {
+  await pagina.route((url) => url.pathname === "/api/estado", async (ruta) => {
     const cuerpo = await (await ruta.fetch()).json();
     cuerpo.generado_texto = "1 de enero, 00:00";
     await ruta.fulfill({ json: cuerpo });
