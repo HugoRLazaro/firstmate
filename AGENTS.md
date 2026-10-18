@@ -146,7 +146,7 @@ When that section reports its checks still in progress it names exactly what is 
 
 1. **Lock** - acquires the per-home session lock first, before anything mutates shared state, then starts the deferred startup stage above.
 2. **Bootstrap** - detect-only checks always run, and routine confirmations stay silent; without the lock the worktree-tangle check uses read-only advisory wording without a checkout repair command.
-   Home-local stale Herdr projection cleanup and the six mutating sweeps run only when this session holds the lock.
+   Home-local stale Herdr projection cleanup and its mutating sweeps (listed in `bin/fm-bootstrap.sh`'s header) run only when this session holds the lock.
    The secondmate liveness sweep relaunches only from the recovery-grade `dead` or `missing` states, preserves ambiguous, unreadable, or unreachable remote targets, and reports skipped or failed guarantees as `SECONDMATE_LIVENESS:` lines (`bin/fm-bootstrap.sh`; `docs/remote-secondmates.md`).
 3. **Wake queue** - when locked, drains and presents the durable wake queue as this turn's first work queue, plus any `OPEN DECISIONS`, `UNREAD STATUS`, and `RECORD DIVERGENCE` sections that section 8 says how to handle (`bin/fm-wake-drain.sh`).
    A main drain's one-shot `STATUS OUTCOME BACKSTOP` is handled as a recovered wake even when no queue row remains.
@@ -194,7 +194,7 @@ Honor lock-refused read-only mode exactly as section 3 requires.
 
 Reconcile only this home's recorded direct reports and their recorded backend inventory; never sweep a shared endpoint namespace for matching names or claim another home's work.
 For an ordinary direct report whose endpoint is dead or metadata has no window, load `stuck-crewmate-recovery` and preserve the recorded worktree and unlanded work while reconciling ownership.
-For a dead secondmate direct report, load `secondmate-provisioning` and reconcile only that secondmate, never its whole child tree from the main home.
+For a dead secondmate direct report, load `secondmate-provisioning` and reconcile only that secondmate; never reconstruct or supervise any secondmate's child tree from the main home.
 
 If `state/.afk-contract` or `state/.afk` is present, follow section 8's away-mode and quiet-mode stub before resuming supervision.
 Surface only captain-relevant decisions, review-ready PRs, failures, and credential needs; otherwise resume the emitted supervision protocol silently.
@@ -276,7 +276,7 @@ When the configured tasks-axi backlog gate applies, the spawn itself moves the w
 After spawning, confirm the worker is processing the brief and handle any trust dialog through `harness-adapters`.
 A persistent secondmate is recorded in the secondmate registry and runtime state, never as a backlog work item.
 
-Steer a worker with ordinary text through fail-closed `fm-send`, which turns it into a durable steering-inbox record the watcher re-rings and escalates until acknowledged (`bin/fm-send.sh`; `bin/fm-task-inbox-lib.sh`).
+Steer a worker with ordinary text through fail-closed `fm-send`, which turns it into a durable steering-inbox record the watcher re-rings and escalates until acknowledged, except explicit fire-and-forget records (`bin/fm-send.sh`; `bin/fm-task-inbox-lib.sh`).
 After an unconfirmed remote delivery, only the exact `FM_PENDING_REPLY_EXISTING_CORR=<id>` resend command printed by `fm-send` is safe.
 When a steer answers an open keyed decision or blocker, pass `fm-send`'s `--resolve-key` so the answer itself closes that decision record at answer time.
 `fm-send` is the data plane for text the worker should read; never use its key or text paths for interrupt, exit, or other lifecycle control, because routing-marked lifecycle text becomes chat the worker reasons about instead of executing.
