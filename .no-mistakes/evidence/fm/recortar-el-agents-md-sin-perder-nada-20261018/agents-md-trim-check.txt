@@ -1,0 +1,20 @@
+== size: base vs target
+base   628 lines 85551 bytes
+target 564 lines 66975 bytes
+== review-round fixes present
+197:For a dead secondmate direct report, load `secondmate-provisioning` and reconcile only that secondmate; never reconstruct or supervise any secondmate's child tree from the main home.
+149:   Home-local stale Herdr projection cleanup and its mutating sweeps (listed in `bin/fm-bootstrap.sh`'s header) run only when this session holds the lock.
+279:Steer a worker with ordinary text through fail-closed `fm-send`, which turns it into a durable steering-inbox record the watcher re-rings and escalates until acknowledged, except explicit fire-and-forget records (`bin/fm-send.sh`; `bin/fm-task-inbox-lib.sh`).
+== path pointers: target refs that do not exist
+(checked 69 refs)
+== path pointers in base dropped from target
+.claude/settings.local.json
+bin/fm-backend.sh
+bin/fm-lock.sh
+bin/fm-procevent-when.sh
+bin/fm-procevent.sh
+docs/codex-app-backend.md
+docs/orca-backend.md
+docs/tmux-backend.md
+docs/trace-context.md
+docs/zellij-backend.md

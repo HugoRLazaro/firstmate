@@ -1,0 +1,13 @@
+== compact after trim: refresh header + RE-EMIT SIZE
+18:CURRENT AGENTS.md - INSTRUCTION REFRESH
+588:BOOTSTRAP
+707:RE-EMIT SIZE: 12586 of 24576 budgeted bytes used; outside the budget: wake queue 216 bytes, AGENTS.md refresh 67331 bytes.
+== emitted refresh body == trimmed AGENTS.md byte-for-byte?
+trimmed AGENTS.md fully contained in refresh output: True
+== the three review-round fixes reach the session
+  never reconstruct or supervise any secondmate's child tree: 1
+  listed in `bin/fm-bootstrap.sh`'s header: 1
+  except explicit fire-and-forget records: 1
+== second compact (same bytes): withheld line
+16:AGENTS.md REFRESH: the current bytes in /tmp/fm-session-start-tests.ChILev/trimmed-agents/root/AGENTS.md were already delivered to this session, so they are not reprinted here; read that file directly if needed.
+137:RE-EMIT SIZE: 12586 of 24576 budgeted bytes used; outside the budget: wake queue 216 bytes, AGENTS.md refresh withheld (same bytes already delivered).
