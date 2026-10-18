@@ -67,7 +67,7 @@ README.md            public overview and development notes
 skills/              standalone public installer-facing skills, committed; not loaded by firstmate
 bin/                 helper scripts, committed; read each script's header before first use
 .env                 optional Relay pairing token (section 14), mail-plane credentials, and TYPESAFE_API_KEY for bin/fm-dispatch-resolve.sh; LOCAL, gitignored (docs/configuration.md)
-config/              local operating choices; LOCAL, gitignored; docs/configuration.md owns each file's schema, default, and secondmate inheritance
+config/              local operating choices; LOCAL, gitignored; docs/configuration.md owns each file's schema and default; bin/fm-config-inherit-lib.sh declares which files secondmate homes inherit
   crew-harness       crewmate harness override; absent or "default" = same as firstmate (section 4)
   claude-permission-mode  Claude worker permission posture: absent or "bypass", or "auto"
   crew-dispatch.json firstmate-maintained, human-editable per-task dispatch profiles (section 4)
