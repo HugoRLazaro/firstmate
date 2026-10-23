@@ -26,7 +26,8 @@
 # The Python environment cache is VERIFY_MAIN_CACHE under this home's state,
 # never the runners' default cache, so this script cannot prune a venv that a
 # runner is using. Each step runs under bin/fm-memory.sh run, which caps its
-# memory.
+# memory where a systemd user manager answers; where none does, the step runs
+# uncapped and fm-memory.sh says so on stderr, which lands in the run's log.
 #
 # Outcomes:
 #   green        both steps exit 0 and the head is still the verified commit:
