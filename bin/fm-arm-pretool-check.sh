@@ -132,7 +132,8 @@ fi
 # that cannot contain fm-watch even after that normalization can never be a
 # deniable watcher command and is fast-allowed without the Node policy owner.
 # The wait guard (long sleeps and merge retry loops) follows the same rule: a
-# command containing sleep or fm-pr-merge also goes to the policy owner.
+# command containing sleep, fm-pr-merge, or the merge-wait script also goes to
+# the policy owner.
 # We mirror the classifier's cheapest byte transforms here (drop line-
 # continuation and escape backslashes, quotes, and newlines) so obfuscated
 # protected paths such as fm-watc\<newline>h-arm.sh or fm-"watch"-arm.sh still
@@ -161,7 +162,7 @@ case "$CMD" in
   *"\$'"*|*'$"'*) ;;
   *)
     case "$PREFILTER" in
-      *fm-watch*|*sleep*|*fm-pr-merge*) ;;
+      *fm-watch*|*sleep*|*fm-pr-merge*|*fusion-en-segundo-plano*) ;;
       *) exit 0 ;;
     esac
     ;;

@@ -3,8 +3,9 @@
 # Behavior tests for bin/fm-merge-bg.sh, the one-call path that hands a
 # captain-authorized PR merge to the background and returns at once.
 #
-# Every run uses a throwaway firstmate home (FM_HOME) with stub arm and
-# background scripts, so no real state, forge, or watcher is touched.
+# Every run uses a throwaway firstmate home (FM_HOME, also the code root through
+# FM_ROOT_OVERRIDE) with stub arm and background scripts, so no real state,
+# forge, or watcher is touched.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -12,6 +13,17 @@ set -u
 
 HELPER="$ROOT/bin/fm-merge-bg.sh"
 PR_URL=https://github.com/example/repo/pull/7
+
+# now_ms prints a millisecond timestamp; BSD date lacks %N, so it falls back to
+# whole seconds there.
+now_ms() {
+  local stamp
+  stamp=$(date +%s%N 2>/dev/null)
+  case "$stamp" in
+    *N*|"") echo $(( $(date +%s) * 1000 )) ;;
+    *) echo $(( stamp / 1000000 )) ;;
+  esac
+}
 
 # new_home prints a home with a recording arm stub and a background stub that
 # writes its own pid, then becomes a long sleep that the test kills by that pid.
@@ -64,12 +76,12 @@ test_refuses_bad_arguments_before_arming() {
 test_returns_at_once_and_records_the_launch() {
   local home start end ms out rc i pid
   home=$(new_home) || fail "could not build the test home"
-  start=$(date +%s%N)
-  out=$(FM_HOME="$home" "$HELPER" task-a "$PR_URL" 2>&1)
+  start=$(now_ms)
+  out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$home" "$HELPER" task-a "$PR_URL" 2>&1)
   rc=$?
-  end=$(date +%s%N)
+  end=$(now_ms)
   [ "$rc" -eq 0 ] || fail "launch must exit 0, got $rc: $out"
-  ms=$(( (end - start) / 1000000 ))
+  ms=$(( end - start ))
   [ "$ms" -lt 2000 ] || fail "launch must return in under 2 s, took ${ms} ms"
   case "$out" in
     lanzado:*) : ;;
@@ -85,6 +97,7 @@ test_returns_at_once_and_records_the_launch() {
   done
   [ -s "$home/state/bg.pid" ] || fail "the detached background script never started"
   pid=$(cat "$home/state/bg.pid")
+  kill -0 "$pid" 2>/dev/null || fail "the background merge must outlive the launch call"
   kill "$pid" 2>/dev/null || true
   pass "launch arms, detaches the background merge, returns in ${ms} ms, and records the launch"
 }

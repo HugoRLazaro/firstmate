@@ -140,6 +140,11 @@ matrix_case E14 allow '$FM_HOME/bin/fm-teardown.sh &'
 matrix_case E15 allow '$FM_HOME/bin/fm-watch-arm.sh'
 matrix_case E16 allow '~/firstmate/bin/fm-watch-checkpoint.sh --seconds 180'
 matrix_case E17 allow 'for f in 1; do echo fm-watch; done'
+matrix_case W01 deny 'sleep 300'
+matrix_case W02 deny 'for f in a b; do bin/fm-pr-merge.sh "$f"; done'
+matrix_case W03 deny 'data/fusion-en-segundo-plano.sh task-a https://github.com/o/r/pull/1'
+matrix_case W04 allow 'sleep 5'
+matrix_case W05 allow 'sleep 300 &'
 
 MATRIX_TMP=$(mktemp -d "${TMPDIR:-/tmp}/fm-arm-policy-matrix.XXXXXX")
 FM_TEST_CLEANUP_DIRS+=("$MATRIX_TMP")
@@ -183,7 +188,7 @@ run_matrix_entry() {
   fi
 
   [ "$rc" -eq 2 ] || fail "$id via $entry must deny, got exit $rc"
-  jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.systemMessage | test("\\[(watcher-(background|pipeline|redirection|bundled|nested|direct)|broad-watcher-kill|unclassifiable-protected-command)\\]"))' "$err_file" >/dev/null 2>&1 \
+  jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.systemMessage | test("\\[(watcher-(background|pipeline|redirection|bundled|nested|direct)|broad-watcher-kill|unclassifiable-protected-command|long-sleep|merge-retry-loop|foreground-merge-wait)\\]"))' "$err_file" >/dev/null 2>&1 \
     || fail "$id via $entry deny must carry a stable reason code on stderr: $(cat "$err_file")"
   if [ "$entry" = claude ]; then
     [ ! -s "$out_file" ] || fail "$id via claude deny must leave stdout empty: $(cat "$out_file")"
@@ -450,7 +455,7 @@ assert_wait_verdict() {  # <allow|deny> <command>
   if [ "$expected" = deny ]; then
     [ "$rc" -eq 2 ] || fail "wait guard must deny '$command' (exit $rc): $out"
     case "$out" in
-      *"[long-sleep]"*|*"[merge-retry-loop]"*) : ;;
+      *"[long-sleep]"*|*"[merge-retry-loop]"*|*"[foreground-merge-wait]"*) : ;;
       *) fail "wait guard denial for '$command' must carry a reason code: $out" ;;
     esac
     case "$out" in
@@ -481,12 +486,16 @@ test_wait_guard() {
   assert_wait_verdict deny 'for f in a b; do bin/fm-pr-merge.sh "$f"; done'
   assert_wait_verdict deny 'while true; do bin/fm-pr-merge.sh https://github.com/o/r/pull/1; sleep 60; done'
   assert_wait_verdict deny 'bin/fm-pr-merge.sh https://github.com/o/r/pull/1; bin/fm-pr-merge.sh https://github.com/o/r/pull/1; sleep 5'
+  assert_wait_verdict deny 'data/fusion-en-segundo-plano.sh task-a https://github.com/o/r/pull/1'
+  assert_wait_verdict deny 'bash data/fusion-en-segundo-plano.sh task-a https://github.com/o/r/pull/1'
   assert_wait_verdict allow 'sleep 5'
   assert_wait_verdict allow 'sleep 30; echo waited; sleep 20'
   assert_wait_verdict allow 'sleep 59'
   assert_wait_verdict allow 'sleep 0.5m'
   assert_wait_verdict allow 'sleep "$N"'
   assert_wait_verdict allow 'sleep 300 &'
+  assert_wait_verdict allow 'nohup data/fusion-en-segundo-plano.sh task-a https://github.com/o/r/pull/1 &'
+  assert_wait_verdict allow 'bin/fm-merge-bg.sh task-a https://github.com/o/r/pull/1'
   assert_wait_verdict allow '(sleep 300) &'
   assert_wait_verdict allow 'nohup sleep 300 &'
   assert_wait_verdict allow 'for i in 1 2; do sleep 300; done &'

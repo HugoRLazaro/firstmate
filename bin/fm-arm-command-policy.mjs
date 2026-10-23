@@ -26,8 +26,9 @@ const REASONS = {
   "broad-watcher-kill": "a broad process kill targeting the firstmate watcher is forbidden",
   "unclassifiable-protected-command": "unsupported or malformed shell syntax contains a protected watcher command",
   "watcher-direct": "bin/fm-watch.sh must not be run directly; arm the watcher with bin/fm-watch-arm.sh or run bin/fm-watch-checkpoint.sh instead",
-  "long-sleep": "a foreground wait of 60 seconds or more blocks the primary chat; hand a merge to bin/fm-merge-bg.sh <task-id> <pr-url>, which arms the watch, returns at once, and merges when the checks are green; send a rebase to the task's worker; any other long wait belongs in a background process",
+  "long-sleep": "a foreground wait of 60 seconds or more blocks the primary chat; hand a merge to bin/fm-merge-bg.sh <task-id> <pr-url>, which arms the watch, returns at once, and merges when the checks are green; send a rebase to the task's worker; any other long wait must run as a background command ending in & (cmd &) or nohup cmd &",
   "merge-retry-loop": "retrying a merge inside the chat blocks it; run bin/fm-merge-bg.sh <task-id> <pr-url> once instead, which arms the watch, returns at once, and merges when the checks are green",
+  "foreground-merge-wait": "the local merge-wait script blocks the chat for its whole timeout when run in the foreground; run the merge through bin/fm-merge-bg.sh <task-id> <pr-url>, which starts that script detached and returns at once",
 };
 
 function parseArguments(argv) {
@@ -901,8 +902,8 @@ function blessedProgram(analysis, context) {
   return true;
 }
 
-// Wait guard: foreground sleeps that total a minute or more, or a merge retried
-// inside a loop, block the primary chat. Nodes that run in the background,
+// Wait guard: foreground sleeps that total a minute or more, a merge retried
+// inside a loop, or the merge-wait script run in the foreground block the chat. Nodes that run in the background,
 // through `&` or a backgrounded compound, never block it and are exempt.
 const LONG_SLEEP_SECONDS = 60;
 const WAIT_PREFIX_WORDS = new Set(["do", "then", "else", "elif", "if", "while", "until", "time", "!"]);
@@ -910,6 +911,7 @@ const BLOCK_OPENERS = new Set(["for", "while", "until", "if"]);
 const LOOP_OPENERS = new Set(["for", "while", "until"]);
 const BLOCK_CLOSERS = new Set(["done", "fi"]);
 const DURATION_UNITS = { "": 1, s: 1, m: 60, h: 3600, d: 86400 };
+const MERGE_WAIT_SCRIPT = "fusion-en-segundo-plano.sh";
 
 // Total seconds of a sleep's operands, or null when any operand is not a
 // literal duration (the guard cannot prove it short, so it allows it).
@@ -964,9 +966,11 @@ function scanWaits(command, inBackground, inLoop, facts, depth) {
       facts.merges += 1;
       if (loop) facts.mergeInLoop = true;
     }
+    const shell = shellInvocation(position);
+    const run = shell?.kind === "script" ? shell.payload : position.command;
+    if (run && basename(run.value) === MERGE_WAIT_SCRIPT && !background) facts.mergeWaitScript = true;
 
     for (const payload of position.wrapperPayloads) scanWaits(payload, background, loop, facts, depth + 1);
-    const shell = shellInvocation(position);
     if (shell?.kind === "command" && shell.payload?.literal) scanWaits(shell.payload.value, background, loop, facts, depth + 1);
     for (const token of tokens) {
       if (token.type === "group") scanWaits(token.content, background, loop, facts, depth + 1);
@@ -978,9 +982,10 @@ function scanWaits(command, inBackground, inLoop, facts, depth) {
 }
 
 function waitDecision(command) {
-  const facts = { longSleep: false, sleepSeconds: 0, sleeps: 0, merges: 0, mergeInLoop: false };
+  const facts = { longSleep: false, sleepSeconds: 0, sleeps: 0, merges: 0, mergeInLoop: false, mergeWaitScript: false };
   scanWaits(command, false, false, facts, 0);
   if (facts.longSleep || facts.sleepSeconds >= LONG_SLEEP_SECONDS) return deny("long-sleep");
+  if (facts.mergeWaitScript) return deny("foreground-merge-wait");
   if (facts.mergeInLoop || (facts.merges >= 2 && facts.sleeps > 0)) return deny("merge-retry-loop");
   return null;
 }
