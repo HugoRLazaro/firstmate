@@ -437,6 +437,69 @@ test_allow_is_silent_both_modes() {
   pass "allow is silent on both stdout and stderr in default and --claude mode"
 }
 
+# --- long waits and merge retry loops never run inside the chat -------------
+#
+# A wait of 60 seconds or more blocks the primary's chat, and a retry loop that
+# repeats a merge blocks it the same way. Both are denied with a reason that
+# names bin/fm-merge-bg.sh. Short waits and anything backgrounded stay allowed.
+
+assert_wait_verdict() {  # <allow|deny> <command>
+  local expected=$1 command=$2 out rc
+  out=$("$CHECK" --claude --command "$command" 2>&1)
+  rc=$?
+  if [ "$expected" = deny ]; then
+    [ "$rc" -eq 2 ] || fail "wait guard must deny '$command' (exit $rc): $out"
+    case "$out" in
+      *"[long-sleep]"*|*"[merge-retry-loop]"*) : ;;
+      *) fail "wait guard denial for '$command' must carry a reason code: $out" ;;
+    esac
+    case "$out" in
+      *bin/fm-merge-bg.sh*) : ;;
+      *) fail "wait guard denial for '$command' must name bin/fm-merge-bg.sh: $out" ;;
+    esac
+  else
+    [ "$rc" -eq 0 ] && [ -z "$out" ] || fail "wait guard must allow '$command' (exit $rc): $out"
+  fi
+  pass "wait guard $expected: $command"
+}
+
+test_wait_guard() {
+  assert_wait_verdict deny 'sleep 300'
+  assert_wait_verdict deny 'sleep 60'
+  assert_wait_verdict deny 'sleep 5m'
+  assert_wait_verdict deny 'sleep 1h'
+  assert_wait_verdict deny 'sleep 1.5m'
+  assert_wait_verdict deny 'sleep 30 30'
+  assert_wait_verdict deny 'sleep 30; echo waited; sleep 40'
+  assert_wait_verdict deny 'sleep infinity'
+  assert_wait_verdict deny 'echo ready && sleep 120'
+  assert_wait_verdict deny 'if true; then sleep 90; fi'
+  assert_wait_verdict deny 'timeout 400 sleep 300'
+  assert_wait_verdict deny 'sleep 300 | cat'
+  assert_wait_verdict deny 'for i in 1 2 3; do sleep 300; done'
+  assert_wait_verdict deny 'bash -c "sleep 300"'
+  assert_wait_verdict deny 'for f in a b; do bin/fm-pr-merge.sh "$f"; done'
+  assert_wait_verdict deny 'while true; do bin/fm-pr-merge.sh https://github.com/o/r/pull/1; sleep 60; done'
+  assert_wait_verdict deny 'bin/fm-pr-merge.sh https://github.com/o/r/pull/1; bin/fm-pr-merge.sh https://github.com/o/r/pull/1; sleep 5'
+  assert_wait_verdict allow 'sleep 5'
+  assert_wait_verdict allow 'sleep 30; echo waited; sleep 20'
+  assert_wait_verdict allow 'sleep 59'
+  assert_wait_verdict allow 'sleep 0.5m'
+  assert_wait_verdict allow 'sleep "$N"'
+  assert_wait_verdict allow 'sleep 300 &'
+  assert_wait_verdict allow '(sleep 300) &'
+  assert_wait_verdict allow 'nohup sleep 300 &'
+  assert_wait_verdict allow 'for i in 1 2; do sleep 300; done &'
+  assert_wait_verdict allow 'sleep 5; bin/fm-pr-merge.sh https://github.com/o/r/pull/1'
+  assert_wait_verdict allow 'bin/fm-pr-merge.sh https://github.com/o/r/pull/1'
+  assert_wait_verdict allow 'git commit -m "wait sleep 300 then merge"'
+  assert_wait_verdict allow 'echo sleep 300'
+  assert_wait_verdict allow 'grep -n sleep bin/fm-watch-arm.sh'
+  assert_wait_verdict allow 'gh pr create --body "sleep 300 and bin/fm-pr-merge.sh"'
+  assert_wait_verdict allow 'for f in bin/fm-pr-merge.sh bin/a.sh; do shellcheck "$f"; done'
+  assert_wait_verdict allow $'cat <<\'EOF\'\nsleep 300\nEOF'
+}
+
 # --- harness wiring: each adapter invokes the shared checker -----------------
 
 # --- shellcheck (belt-and-suspenders; CI/CONTRIBUTING.md also runs this) -----
@@ -471,4 +534,5 @@ test_failopen_missing_node
 test_claude_mode_stdout_empty_on_deny
 test_default_mode_stdout_has_grok_json_on_deny
 test_allow_is_silent_both_modes
+test_wait_guard
 test_shellcheck_clean
