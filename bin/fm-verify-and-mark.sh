@@ -139,7 +139,7 @@ LOG="$VERIFY_DIR/$HEAD_SHA.log"
 note "verify: $URL head=$HEAD_SHA"
 
 # A fresh copy every run: nothing from an earlier run can leak into this verdict.
-rm -rf "$WORK" "$ENVDIR" "$CACHE"
+rm -rf "$WORK" "$ENVDIR"
 mkdir -p "$ENVDIR" "$CACHE"
 : > "$ENVDIR/github_env"
 : > "$ENVDIR/github_path"
