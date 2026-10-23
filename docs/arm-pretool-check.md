@@ -139,6 +139,8 @@ Every semantic deny includes one stable code in square brackets before its prose
 | `broad-watcher-kill` | An actual broad process kill targets the watcher. |
 | `unclassifiable-protected-command` | Malformed or unsupported syntax contains a protected command and cannot be safely classified. |
 | `watcher-direct` | A direct `bin/fm-watch.sh` execution; the watcher must be reached through `bin/fm-watch-arm.sh` or `bin/fm-watch-checkpoint.sh`. |
+| `long-sleep` | A foreground `sleep` whose literal operands total 60 seconds or more, `infinity` included; it blocks the chat. Backgrounded sleeps and non-literal operands are allowed. |
+| `merge-retry-loop` | A foreground `bin/fm-pr-merge.sh` call inside a loop, or two foreground merge calls alongside a foreground sleep; it retries a merge inside the chat. |
 
 Reason codes are the stable contract for tests and adapters.
 Prose may improve without changing adapter behavior.

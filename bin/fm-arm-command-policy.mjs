@@ -26,6 +26,8 @@ const REASONS = {
   "broad-watcher-kill": "a broad process kill targeting the firstmate watcher is forbidden",
   "unclassifiable-protected-command": "unsupported or malformed shell syntax contains a protected watcher command",
   "watcher-direct": "bin/fm-watch.sh must not be run directly; arm the watcher with bin/fm-watch-arm.sh or run bin/fm-watch-checkpoint.sh instead",
+  "long-sleep": "a foreground wait of 60 seconds or more blocks the primary chat; hand a merge to bin/fm-merge-bg.sh <task-id> <pr-url>, which arms the watch, returns at once, and merges when the checks are green; send a rebase to the task's worker; any other long wait belongs in a background process",
+  "merge-retry-loop": "retrying a merge inside the chat blocks it; run bin/fm-merge-bg.sh <task-id> <pr-url> once instead, which arms the watch, returns at once, and merges when the checks are green",
 };
 
 function parseArguments(argv) {
@@ -899,7 +901,93 @@ function blessedProgram(analysis, context) {
   return true;
 }
 
+// Wait guard: foreground sleeps that total a minute or more, or a merge retried
+// inside a loop, block the primary chat. Nodes that run in the background,
+// through `&` or a backgrounded compound, never block it and are exempt.
+const LONG_SLEEP_SECONDS = 60;
+const WAIT_PREFIX_WORDS = new Set(["do", "then", "else", "elif", "if", "while", "until", "time", "!"]);
+const BLOCK_OPENERS = new Set(["for", "while", "until", "if"]);
+const LOOP_OPENERS = new Set(["for", "while", "until"]);
+const BLOCK_CLOSERS = new Set(["done", "fi"]);
+const DURATION_UNITS = { "": 1, s: 1, m: 60, h: 3600, d: 86400 };
+
+// Total seconds of a sleep's operands, or null when any operand is not a
+// literal duration (the guard cannot prove it short, so it allows it).
+function sleepSeconds(words) {
+  let total = 0;
+  for (const word of words) {
+    if (!word.literal) return null;
+    if (word.value === "infinity" || word.value === "inf") return Infinity;
+    const match = /^(\d+(?:\.\d*)?|\.\d+)([smhd]?)$/.exec(word.value);
+    if (!match) return null;
+    total += Number(match[1]) * DURATION_UNITS[match[2]];
+  }
+  return total;
+}
+
+function scanWaits(command, inBackground, inLoop, facts, depth) {
+  if (depth > 12) return;
+  const lexed = new Lexer(command).tokenize();
+  if (lexed.error) return;
+  const { nodes, separators } = splitProgram(lexed.tokens);
+
+  const flags = nodes.map((_, index) => ({ background: separators[index] === "&", loop: false }));
+  const open = [];
+  nodes.forEach((tokens, index) => {
+    const keyword = tokens[0]?.type === "word" ? tokens[0].value : "";
+    if (BLOCK_OPENERS.has(keyword)) {
+      open.push({ index, loop: LOOP_OPENERS.has(keyword) });
+    } else if (BLOCK_CLOSERS.has(keyword) && open.length > 0) {
+      const start = open.pop();
+      for (let k = start.index; k <= index; k += 1) {
+        flags[k].loop ||= start.loop;
+        flags[k].background ||= separators[index] === "&";
+      }
+    }
+  });
+
+  nodes.forEach((tokens, index) => {
+    const background = inBackground || flags[index].background;
+    const loop = inLoop || flags[index].loop;
+    let start = 0;
+    while (start < tokens.length && tokens[start].type === "word" && WAIT_PREFIX_WORDS.has(tokens[start].value)) start += 1;
+    const position = commandPosition(tokens.slice(start));
+    const name = position.command ? basename(position.command.value) : "";
+
+    if (name === "sleep" && !background) {
+      facts.sleeps += 1;
+      const seconds = sleepSeconds(position.words.slice(position.index + 1));
+      if (seconds === Infinity) facts.longSleep = true;
+      else if (seconds !== null) facts.sleepSeconds += seconds;
+    }
+    if (name === "fm-pr-merge.sh" && !background) {
+      facts.merges += 1;
+      if (loop) facts.mergeInLoop = true;
+    }
+
+    for (const payload of position.wrapperPayloads) scanWaits(payload, background, loop, facts, depth + 1);
+    const shell = shellInvocation(position);
+    if (shell?.kind === "command" && shell.payload?.literal) scanWaits(shell.payload.value, background, loop, facts, depth + 1);
+    for (const token of tokens) {
+      if (token.type === "group") scanWaits(token.content, background, loop, facts, depth + 1);
+      if (token.type === "word") {
+        for (const substitution of token.subs) scanWaits(substitution.content, background, loop, facts, depth + 1);
+      }
+    }
+  });
+}
+
+function waitDecision(command) {
+  const facts = { longSleep: false, sleepSeconds: 0, sleeps: 0, merges: 0, mergeInLoop: false };
+  scanWaits(command, false, false, facts, 0);
+  if (facts.longSleep || facts.sleepSeconds >= LONG_SLEEP_SECONDS) return deny("long-sleep");
+  if (facts.mergeInLoop || (facts.merges >= 2 && facts.sleeps > 0)) return deny("merge-retry-loop");
+  return null;
+}
+
 function decision(command, root, home) {
+  const wait = waitDecision(command);
+  if (wait) return wait;
   const context = { root: path.normalize(root), home: path.normalize(home), protectedVariables: new Set(), watcherPatterns: new Set(), watcherPids: new Set() };
   const analysis = analyzeProgram(command, context);
   if (analysis.broadKill) return deny("broad-watcher-kill");
