@@ -1,0 +1,7 @@
+ok - green verification is recorded as green and publishes nothing
+ok - red verification publishes no status at all
+ok - a verification that cannot run fails and publishes nothing
+ok - a workflow that no longer runs the mirrored steps stops the run
+ok - an unreadable pull request head publishes nothing
+ok - a head that moved during verification publishes nothing
+ok - a URL that is not a GitHub pull request is refused before any work
