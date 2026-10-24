@@ -1183,6 +1183,14 @@ crew_dispatch_validate() {
       | map(select(. as $p | effort_ok($p.h; $p.m; $p.e) | not))
       | map("\(.h):\(.e)")
       | unique;
+    # The optional advisor is a claude-only axis naming a model alias or id
+    # (bin/fm-advisor-lib.sh owns the accepted value; fm-spawn probes the pairing).
+    def bad_advisors:
+      configured_profiles
+      | map(select(type == "object" and has("advisor")))
+      | map(select(((.advisor | type) != "string") or ((.advisor | test("^[A-Za-z0-9][A-Za-z0-9._-]*$")) | not) or .harness != "claude"))
+      | map("\(.harness | tostring):\(.advisor | tostring)")
+      | unique;
     if type != "object" then "top-level value must be an object"
     elif has("rules") and (.rules | type) != "array" then "rules must be an array"
     elif [(.rules // [])[]? | select(type != "object")] | length > 0 then "each rule must be an object"
@@ -1218,6 +1226,7 @@ crew_dispatch_validate() {
         | unique) as $bad_harnesses
       | if ($bad_harnesses | length) > 0 then "unverified harness: " + ($bad_harnesses | join(", "))
         elif (bad_efforts | length) > 0 then "invalid effort: " + (bad_efforts | join(", "))
+        elif (bad_advisors | length) > 0 then "invalid advisor (claude profiles only, a model alias or id): " + (bad_advisors | join(", "))
         else empty
         end
     end
@@ -1233,7 +1242,8 @@ crew_dispatch_validate() {
       + (if ($p.model? != null) then "/" + ($p.model | tostring)
          elif ($p.effort? != null) then "/default"
          else "" end)
-      + (if ($p.effort? != null) then "/" + ($p.effort | tostring) else "" end);
+      + (if ($p.effort? != null) then "/" + ($p.effort | tostring) else "" end)
+      + (if ($p.advisor? != null) then " advisor=" + ($p.advisor | tostring) else "" end);
     def profile_set($value; $selector):
       if ($value | type) == "array" then
         (($selector // "quota-balanced") + "[" + ([$value[] | profile(.)] | join(", ")) + "]")

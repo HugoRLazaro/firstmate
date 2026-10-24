@@ -5,7 +5,7 @@
 # Usage: fm-control.sh <task-id> interrupt
 #        fm-control.sh <task-id> exit
 #        fm-control.sh <task-id> relaunch [--harness <name>] [--model <name>]
-#                                         [--effort <level>]
+#                                         [--effort <level>] [--advisor <model>]
 #                                         (--note <text> | --note-file <path>)
 #
 # Why this exists, and how it differs from fm-send.sh. bin/fm-send.sh is the
@@ -40,6 +40,12 @@
 #              plus its optional model and effort tokens) exactly as any other
 #              respawn does, while a ship or scout keeps the exact adapter
 #              already recorded for it.
+#              A recorded Claude advisor carries over while the replacement
+#              stays on claude, an explicit --advisor replaces it, and
+#              `--advisor default` clears it. Whatever advisor the replacement
+#              will carry is checked against its main model with
+#              bin/fm-advisor-lib.sh's free probe before the old agent is
+#              stopped, so a refused pairing changes nothing.
 #              A prefixed raw-command basename cannot reconstruct its launch
 #              command, so relaunch requires an explicit --harness for it.
 #              --note is required for a ship or scout, whose replacement
@@ -142,6 +148,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-control-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
+# shellcheck source=bin/fm-advisor-lib.sh
+. "$SCRIPT_DIR/fm-advisor-lib.sh"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 
@@ -200,9 +208,11 @@ fi
 NEW_HARNESS=
 NEW_MODEL=
 NEW_EFFORT=
+NEW_ADVISOR=
 HARNESS_SET=0
 MODEL_SET=0
 EFFORT_SET=0
+ADVISOR_SET=0
 NOTE=
 NOTE_SET=0
 control_want_value=
@@ -215,6 +225,7 @@ for control_arg in "$@"; do
       harness) NEW_HARNESS=$control_arg; HARNESS_SET=1 ;;
       model) NEW_MODEL=$control_arg; MODEL_SET=1 ;;
       effort) NEW_EFFORT=$control_arg; EFFORT_SET=1 ;;
+      advisor) NEW_ADVISOR=$control_arg; ADVISOR_SET=1 ;;
       note) NOTE=$control_arg; NOTE_SET=1 ;;
       note_file)
         [ -f "$control_arg" ] || die "--note-file '$control_arg' is not a readable file"
@@ -232,6 +243,8 @@ for control_arg in "$@"; do
     --model=*) NEW_MODEL=${control_arg#--model=}; MODEL_SET=1 ;;
     --effort) control_want_value=effort ;;
     --effort=*) NEW_EFFORT=${control_arg#--effort=}; EFFORT_SET=1 ;;
+    --advisor) control_want_value=advisor ;;
+    --advisor=*) NEW_ADVISOR=${control_arg#--advisor=}; ADVISOR_SET=1 ;;
     --note) control_want_value=note ;;
     --note=*) NOTE=${control_arg#--note=}; NOTE_SET=1 ;;
     --note-file) control_want_value=note_file ;;
@@ -249,12 +262,15 @@ if [ -n "$control_want_value" ]; then
 fi
 
 if [ "$VERB" != relaunch ]; then
-  [ "$HARNESS_SET" = 0 ] && [ "$MODEL_SET" = 0 ] && [ "$EFFORT_SET" = 0 ] && [ "$NOTE_SET" = 0 ] \
-    || die "--harness, --model, --effort, and --note apply to 'relaunch' only"
+  [ "$HARNESS_SET" = 0 ] && [ "$MODEL_SET" = 0 ] && [ "$EFFORT_SET" = 0 ] && [ "$ADVISOR_SET" = 0 ] && [ "$NOTE_SET" = 0 ] \
+    || die "--harness, --model, --effort, --advisor, and --note apply to 'relaunch' only"
 fi
 [ "$HARNESS_SET" = 0 ] || [ -n "$NEW_HARNESS" ] || die "--harness requires a non-empty value"
 [ "$MODEL_SET" = 0 ] || [ -n "$NEW_MODEL" ] || die "--model requires a non-empty value"
 [ "$EFFORT_SET" = 0 ] || [ -n "$NEW_EFFORT" ] || die "--effort requires a non-empty value"
+[ "$ADVISOR_SET" = 0 ] || [ -n "$NEW_ADVISOR" ] || die "--advisor requires a non-empty value"
+[ "$ADVISOR_SET" = 0 ] || [ "$NEW_ADVISOR" = default ] || fm_advisor_value_valid "$NEW_ADVISOR" \
+  || die "--advisor must be a Claude model alias or id (letters, digits, '.', '_', '-'), or default"
 case "$NEW_EFFORT" in
   ''|default|low|medium|high|xhigh|max|ultra) ;;
   *) die "--effort must be one of default, low, medium, high, xhigh, max, ultra" ;;
@@ -704,6 +720,26 @@ resolve_relaunch_profile() {
   if [ "$TARGET_EFFORT" = ultra ]; then
     "$SCRIPT_DIR/fm-harness.sh" validate-native-effort "$TARGET_HARNESS" "$TARGET_MODEL" "$TARGET_EFFORT" || return 1
   fi
+  # The optional Claude advisor (bin/fm-advisor-lib.sh) follows the task while
+  # it stays on claude; fm-spawn --relaunch owns the launch, and this side only
+  # proves the pairing while the running agent is still untouched.
+  PRIOR_ADVISOR=$(fm_meta_get "$META" advisor)
+  if [ "$ADVISOR_SET" = 1 ]; then
+    TARGET_ADVISOR=$NEW_ADVISOR
+    [ "$TARGET_ADVISOR" != default ] || TARGET_ADVISOR=
+  elif [ "$TARGET_HARNESS" = claude ] && [ "$PRIOR_HARNESS" = claude ]; then
+    TARGET_ADVISOR=$PRIOR_ADVISOR
+  else
+    TARGET_ADVISOR=
+  fi
+  if [ -n "$TARGET_ADVISOR" ]; then
+    [ "$KIND" != secondmate ] \
+      || die "--advisor applies only to claude ship and scout tasks, never to a secondmate"
+    [ "$TARGET_HARNESS" = claude ] \
+      || die "--advisor applies only to a claude relaunch, not '$TARGET_HARNESS'"
+    fm_advisor_probe "$TARGET_MODEL" "$TARGET_ADVISOR" \
+      || die "task $ID was not relaunched: its replacement's advisor pairing was refused, and the running agent is untouched"
+  fi
 }
 
 # safe_checkpoint: prove, before anything is stopped, that the work a relaunch
@@ -863,6 +899,11 @@ do_relaunch() {
   spawn_args=("$ID" --relaunch --harness "$TARGET_HARNESS")
   [ "$TARGET_MODEL" = default ] || spawn_args+=(--model "$TARGET_MODEL")
   [ "$TARGET_EFFORT" = default ] || spawn_args+=(--effort "$TARGET_EFFORT")
+  if [ -n "$TARGET_ADVISOR" ]; then
+    spawn_args+=(--advisor "$TARGET_ADVISOR")
+  elif [ -n "$PRIOR_ADVISOR" ]; then
+    spawn_args+=(--advisor default)
+  fi
   if FM_CONTROL_RELAUNCH_TX="$RELAUNCH_TX" \
       "$SCRIPT_DIR/fm-spawn.sh" "${spawn_args[@]}" >/dev/null; then
     RELAUNCH_META_PUBLISHED=1
