@@ -38,7 +38,11 @@
 #
 # Durable record: state/<task-id>.verify (the latest run: outcome, head, base,
 # time, and log path) and state/verify/<task-id>/<head>.log (the full log of
-# that commit's run).
+# that commit's run). The clean copy (state/verify/<task-id>/repo, replaced on
+# every run) and the venv cache (state/verify/<task-id>/venv-cache, kept across
+# this task's runs) belong to this task alone, no cache is shared between tasks,
+# and bin/fm-teardown.sh removes both when the task is torn down; the record and
+# the logs are kept.
 #
 # Exit: 0 green; 1 red; 2 usage; 3 unverified; 4 moved.
 set -eu

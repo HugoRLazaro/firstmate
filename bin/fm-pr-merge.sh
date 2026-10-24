@@ -11,14 +11,16 @@
 # A GitHub merge is refused unless every pre-merge condition holds, each read
 # live at merge time rather than taken from recorded metadata: the pull request
 # is open, not a draft, mergeable, free of conflicts, and every check the base
-# branch's protection requires is green at the exact current head commit, where
+# branch's protection requires has reported and is green at the exact current
+# head commit, where
 # github_checks_not_green below owns what makes a check green and judges each
 # one by its current run. A check the protection does not require that is not
 # green prints a warning and does not block, because GitHub's own rule decides
 # which checks gate a merge; this script does not second-guess it. When the
 # protection cannot be read, or names no check, every check that is not green
 # blocks as before, and while the away-posture record exists every check blocks
-# regardless of the protection. Every failing condition is reported, not
+# regardless of the protection; the posture that decides this is the one read
+# under the away-record lock. Every failing condition is reported, not
 # just the first. The verified head is then passed to gh as
 # --match-head-commit, so a push that lands between that read and the merge
 # fails the merge instead of landing commits nothing verified. Reading that
@@ -588,9 +590,11 @@ github_required_checks() {
 }
 
 # Pre-merge conditions for a GitHub pull request, read from one live view.
-# Sets FM_PR_MERGE_HEAD to the verified head on success.
+# Sets FM_PR_MERGE_HEAD to the verified head on success, and
+# FM_PR_GITHUB_VERIFIED_AWAY to the away posture that selected the gate.
+FM_PR_GITHUB_VERIFIED_AWAY=
 github_verify_mergeable() {
-  local json fields line red name covered required gate_all conclusion
+  local json fields line red name covered required gate_all conclusion reported missing
   local total=0 named=0 refusals=''
   local state='' draft='' mergeable='' merge_state='' live_head='' base=''
 
@@ -641,12 +645,24 @@ FIELDS
     echo "error: could not read the GitHub pull request state before merging" >&2
     return 1
   fi
-  # Only the protection's required checks gate the merge. An unreadable or empty
-  # protection, or an away-posture record, keeps every red check blocking.
+  # Only the protection's required checks gate the merge, and each one must have
+  # reported. An unreadable or empty protection, or an away-posture record, keeps
+  # every red check blocking.
   required=''
   gate_all=1
   if [ "$FM_PR_AWAY_POSTURE" != true ] && required=$(github_required_checks "$base"); then
     gate_all=0
+  fi
+  missing=''
+  if [ "$gate_all" -eq 0 ]; then
+    if ! reported=$(printf '%s' "$json" | jq -r '.statusCheckRollup[] | (.name // .context // empty)' 2>/dev/null); then
+      echo "error: could not read the GitHub pull request state before merging" >&2
+      return 1
+    fi
+    while IFS= read -r name; do
+      grep -qxF -- "$name" <<<"$reported" || missing="$missing$name
+"
+    done <<<"$required"
   fi
 
   case "$state" in
@@ -681,12 +697,18 @@ FIELDS
       done
     fi
     [ "$covered" -eq 1 ] || {
-      refusals="$refusals  - check '$name' is not green
+      if grep -qxF -- "$name" <<<"$missing"; then
+        refusals="$refusals  - required check '$name' has not reported at this head
 "
+      else
+        refusals="$refusals  - check '$name' is not green
+"
+      fi
       uncovered="${uncovered:+$uncovered, }$name"
     }
   done <<EOF
 $red
+$missing
 EOF
 
   if [ -n "$refusals" ]; then
@@ -699,6 +721,7 @@ EOF
     "$URL" "$live_head" >&2
   FM_PR_MERGE_HEAD=$live_head
   FM_PR_GITHUB_BASE=$base
+  FM_PR_GITHUB_VERIFIED_AWAY=$FM_PR_AWAY_POSTURE
 }
 
 # Read one live GitHub pull request view after gh returns. The selected
@@ -1186,6 +1209,11 @@ case "$PROVIDER" in
     away_status=0
     require_current_away_authority || away_status=$?
     [ "$away_status" -eq 0 ] || exit "$away_status"
+    # The gate follows the posture read under the lock: a record published
+    # during the preflight above re-runs the verification with every check gating.
+    if [ "$FM_PR_AWAY_POSTURE" != "$FM_PR_GITHUB_VERIFIED_AWAY" ]; then
+      github_verify_mergeable || exit 1
+    fi
     refuse_github_queue_while_away || exit 2
     merge_status=0
     merge_output=$(gh pr merge "$PR_NUMBER" --repo "$PR_OWNER/$PR_REPO" \

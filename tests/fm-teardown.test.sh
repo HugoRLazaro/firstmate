@@ -3548,6 +3548,37 @@ test_leaked_tasktmp_process_is_reaped() {
   pass "a leaked descendant process rooted under the task's per-task tasktmp is reaped by teardown too"
 }
 
+# fm-verify-and-mark.sh leaves a clean copy and a venv cache under
+# state/verify/<id>/. Teardown removes those two, keeps the verdict record and
+# the run logs as evidence, and leaves another task's copy alone.
+test_teardown_removes_verify_copy_and_keeps_its_evidence() {
+  local case_dir rc
+  case_dir=$(make_case verify-artifacts)
+  write_meta "$case_dir" no-mistakes ship
+  land_shippable_commit "$case_dir"
+  mkdir -p "$case_dir/state/verify/task-x1/repo/.git" \
+    "$case_dir/state/verify/task-x1/venv-cache/venv/bin" \
+    "$case_dir/state/verify/task-y2/repo" "$case_dir/state/verify/task-y2/venv-cache"
+  printf 'outcome=green\n' > "$case_dir/state/task-x1.verify"
+  printf 'green\n' > "$case_dir/state/verify/task-x1/abc.log"
+
+  rc=0
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+
+  expect_code 0 "$rc" "verify-artifacts: teardown should succeed"
+  [ ! -e "$case_dir/state/verify/task-x1/repo" ] \
+    || fail "verify-artifacts: the verification copy survived teardown"
+  [ ! -e "$case_dir/state/verify/task-x1/venv-cache" ] \
+    || fail "verify-artifacts: the verification venv cache survived teardown"
+  [ -f "$case_dir/state/task-x1.verify" ] \
+    || fail "verify-artifacts: teardown removed the verification record"
+  [ -f "$case_dir/state/verify/task-x1/abc.log" ] \
+    || fail "verify-artifacts: teardown removed the verification log"
+  [ -d "$case_dir/state/verify/task-y2/repo" ] && [ -d "$case_dir/state/verify/task-y2/venv-cache" ] \
+    || fail "verify-artifacts: teardown touched another task's verification copy"
+  pass "teardown removes the task's verification copy and cache and keeps its record and logs"
+}
+
 # The 2026-10-01 out-of-memory incident's shape: a worker started a detached
 # job (`setsid nohup`) from its data/<id>/ directory, in neither the worktree
 # nor the tasktmp, and it kept its memory after the task was closed.
@@ -4245,6 +4276,7 @@ test_another_branchs_parked_run_is_never_touched
 test_own_autonomous_run_is_left_alone
 test_leaked_worktree_process_is_reaped
 test_leaked_tasktmp_process_is_reaped
+test_teardown_removes_verify_copy_and_keeps_its_evidence
 test_leaked_data_dir_job_is_reaped_and_named
 test_teardown_never_reaps_its_own_ancestors
 test_lsof_absent_reaps_tmux_process_group

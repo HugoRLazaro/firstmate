@@ -2494,6 +2494,50 @@ test_github_merge_gates_only_on_required_checks() {
   assert_no_grep 'pr merge' "$case_dir/gh.log" \
     "github-required-only-away: gh pr merge ran while away with a red check"
   pass "fm-pr-merge keeps every red check blocking while the away posture is active"
+
+  case_dir=$(make_case github-required-absent)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run unit-gate COMPLETED SUCCESS 2026-10-24T03:00:00Z)"
+  printf '%s\n' '{"checks":[{"context":"resultado","app_id":15368}],"contexts":["resultado"]}' \
+    > "$case_dir/github-protection"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/94 \
+    --attended-override -- --admin \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-required-absent: a required check that never reported must refuse"
+  assert_grep "required check 'resultado' has not reported at this head" "$case_dir/stderr" \
+    "github-required-absent: the absent required check was not named"
+  assert_no_grep 'every required check green' "$case_dir/stderr" \
+    "github-required-absent: the verified line claimed every required check green"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-required-absent: gh pr merge ran without the required check"
+  pass "fm-pr-merge refuses when a required check has not reported at the head"
+
+  case_dir=$(make_case github-required-only-away-after-view)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run resultado COMPLETED SUCCESS 2026-10-24T03:00:00Z)" \
+    "$(check_run unit-gate COMPLETED FAILURE 2026-10-24T03:00:00Z)"
+  printf '%s\n' '{"checks":[{"context":"resultado","app_id":15368}],"contexts":["resultado"]}' \
+    > "$case_dir/github-protection"
+  write_away_record "$case_dir" --grant task-x1
+  mv "$case_dir/state/.afk-contract" "$case_dir/away-record-after-view"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/95 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-required-only-away-after-view: a record published during the preflight must keep every red check blocking"
+  assert_grep "check 'unit-gate' is not green" "$case_dir/stderr" \
+    "github-required-only-away-after-view: the red check was not named under the locked posture"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-required-only-away-after-view: gh pr merge ran with a red check after the away record appeared"
+  pass "fm-pr-merge selects the gate from the away posture read under the away-record lock"
 }
 
 # When the base branch advances, GitHub cancels a pull request's in-flight run
