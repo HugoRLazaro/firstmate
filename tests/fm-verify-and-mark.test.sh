@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Behavior tests for bin/fm-verify-and-mark.sh. A green verification publishes
-# one success status on the verified head under firstmate/verify-main, and the
-# verification sees the base, a sanitized environment, and its own cache. A red
-# run, an unverifiable run, a workflow that no longer runs the mirrored steps, an
-# unreadable head, and a head that moved all publish nothing, and a failed post
-# is reported as such. The status context is never resultado.
+# Behavior tests for bin/fm-verify-and-mark.sh. A green verification is recorded
+# as green, and the verification sees the base, a sanitized environment, and its
+# own cache. Nothing is ever published to GitHub: no run, red or green, posts a
+# status, and a red run, an unverifiable run, a workflow that no longer runs the
+# mirrored steps, an unreadable head, and a head that moved are each recorded.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -110,7 +109,6 @@ if [ "$1" = repo ] && [ "$2" = clone ]; then
 fi
 if [ "$1" = api ] && [[ "$*" == *"--method POST"* ]]; then
   printf '%s\n' "$*" >> @CTRL@/posts.log
-  [ ! -f @CTRL@/post_fail ] || exit 1
   echo '{}'
   exit 0
 fi
@@ -141,21 +139,15 @@ assert_no_post() {
 
 record_of() { cat "$TMP_ROOT/$1/state/$TASK.verify" 2>/dev/null || true; }
 
-test_green_publishes_one_success_on_verified_head() {
-  local name=green dir head posts
+test_green_records_verdict_without_publishing() {
+  local name=green dir
   make_fixture "$name" >/dev/null
   dir=$TMP_ROOT/$name
-  head=$(cat "$dir/ctrl/head")
   run_verify "$name"
   expect_code 0 "$RUN_CODE" "green verification"
 
-  posts=$(posts_of "$name")
-  assert_equals 1 "$(printf '%s\n' "$posts" | grep -c .)" "green must publish exactly one status"
-  assert_contains "$posts" "repos/acme/project/statuses/$head" "status is not on the verified head"
-  assert_contains "$posts" "-f state=success" "green status is not success"
-  assert_contains "$posts" "-f context=firstmate/verify-main" "green status uses the wrong context"
-  assert_contains "$posts" "-f target_url=$PR_URL" "status does not link the pull request"
-  assert_not_contains "$posts" "context=resultado" "the required check name must never be written"
+  assert_no_post "$name" "green verification"
+  assert_not_contains "$(cat "$dir/ctrl/gh.log")" "statuses" "green verification asked GitHub for a status"
   assert_contains "$(record_of "$name")" "outcome=green" "record does not say green"
 
   local verify_log
@@ -166,7 +158,7 @@ test_green_publishes_one_success_on_verified_head() {
   assert_contains "$verify_log" "cache=$dir/state/verify/" "the verification cache is not owned by this home"
   assert_no_grep "python=unset" "$dir/ctrl/verify.log" "the verification did not receive the project Python"
 
-  pass "green verification publishes one success on the verified head under its own context"
+  pass "green verification is recorded as green and publishes nothing"
 }
 
 test_red_publishes_nothing() {
@@ -225,16 +217,6 @@ test_moved_head_publishes_nothing() {
   pass "a head that moved during verification publishes nothing"
 }
 
-test_failed_post_is_reported() {
-  local name=postfail
-  make_fixture "$name" >/dev/null
-  : > "$TMP_ROOT/$name/ctrl/post_fail"
-  run_verify "$name"
-  expect_code 5 "$RUN_CODE" "failed post"
-  assert_contains "$(record_of "$name")" "outcome=post-failed" "record does not say the post failed"
-  pass "a verified commit whose status cannot be posted is reported as post-failed"
-}
-
 test_bad_arguments_are_refused() {
   local name=usage
   make_fixture "$name" >/dev/null
@@ -245,11 +227,10 @@ test_bad_arguments_are_refused() {
   pass "a URL that is not a GitHub pull request is refused before any work"
 }
 
-test_green_publishes_one_success_on_verified_head
+test_green_records_verdict_without_publishing
 test_red_publishes_nothing
 test_unverifiable_environment_publishes_nothing
 test_workflow_drift_stops_before_verifying
 test_unreadable_head_publishes_nothing
 test_moved_head_publishes_nothing
-test_failed_post_is_reported
 test_bad_arguments_are_refused

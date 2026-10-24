@@ -10,17 +10,22 @@
 # --squash, --merge, --rebase, or --method after the optional -- separator.
 # A GitHub merge is refused unless every pre-merge condition holds, each read
 # live at merge time rather than taken from recorded metadata: the pull request
-# is open, not a draft, mergeable, free of conflicts, and every unwaived check
-# is green at the exact current head commit, where github_checks_not_green below
-# owns what makes a check green and judges each one by its current run.
-# Every failing condition is reported, not
+# is open, not a draft, mergeable, free of conflicts, and every check the base
+# branch's protection requires is green at the exact current head commit, where
+# github_checks_not_green below owns what makes a check green and judges each
+# one by its current run. A check the protection does not require that is not
+# green prints a warning and does not block, because GitHub's own rule decides
+# which checks gate a merge; this script does not second-guess it. When the
+# protection cannot be read, or names no check, every check that is not green
+# blocks as before, and while the away-posture record exists every check blocks
+# regardless of the protection. Every failing condition is reported, not
 # just the first. The verified head is then passed to gh as
 # --match-head-commit, so a push that lands between that read and the merge
 # fails the merge instead of landing commits nothing verified. Reading that
 # state needs gh and jq, and either one absent stops the merge before any
 # state is recorded. An attended --allow-red <check-name> may be passed once,
 # with the name as a separate argument; it waives only checks with that exact
-# name, still requires every other check green, and still binds the head. It is
+# name, still requires every required check green, and still binds the head. It is
 # refused while the away-posture record exists, and it never
 # applies on GitLab, where a merge already requires the head pipeline to have
 # succeeded. After gh returns success, GitHub's live state is read back and
@@ -568,10 +573,24 @@ github_checks_not_green() {
   ' 2>/dev/null || return 1
 }
 
+# github_required_checks <base>: the check names the base branch's protection
+# requires, one per line, read live from its required status checks. Both the
+# `checks` list and the deprecated `contexts` list are read, and the app binding
+# is not consulted, so a required name blocks whichever integration reports it.
+# Exits nonzero, printing nothing, when the protection cannot be read or names no
+# check; the caller then keeps every red check blocking.
+github_required_checks() {
+  local base=$1 encoded
+  encoded=$(jq -rn --arg b "$base" '$b | @uri') || return 1
+  gh api "repos/$PR_OWNER/$PR_REPO/branches/$encoded/protection/required_status_checks" 2>/dev/null \
+    | jq -r '([.checks[]?.context] + [.contexts[]?]) | map(select(. != null and . != "")) | unique[]' 2>/dev/null \
+    | grep . || return 1
+}
+
 # Pre-merge conditions for a GitHub pull request, read from one live view.
 # Sets FM_PR_MERGE_HEAD to the verified head on success.
 github_verify_mergeable() {
-  local json fields line red name covered
+  local json fields line red name covered required gate_all conclusion
   local total=0 named=0 refusals=''
   local state='' draft='' mergeable='' merge_state='' live_head='' base=''
 
@@ -622,6 +641,13 @@ FIELDS
     echo "error: could not read the GitHub pull request state before merging" >&2
     return 1
   fi
+  # Only the protection's required checks gate the merge. An unreadable or empty
+  # protection, or an away-posture record, keeps every red check blocking.
+  required=''
+  gate_all=1
+  if [ "$FM_PR_AWAY_POSTURE" != true ] && required=$(github_required_checks "$base"); then
+    gate_all=0
+  fi
 
   case "$state" in
     [oO][pP][eE][nN]) ;;
@@ -643,6 +669,11 @@ FIELDS
   uncovered=''
   while IFS= read -r name; do
     [ -n "$name" ] || continue
+    if [ "$gate_all" -eq 0 ] && ! grep -qxF -- "$name" <<<"$required"; then
+      conclusion=$(printf '%s' "$json" | jq -r --arg n "$name" '[.statusCheckRollup[] | select((.name // .context) == $n) | (.conclusion // .state // .status // "unknown")] | unique | join("/")' 2>/dev/null) || conclusion=unknown
+      printf "warning: non-required check '%s' is %s; it does not block this merge\n" "$name" "${conclusion:-unknown}" >&2
+      continue
+    fi
     covered=0
     if [ "${#ALLOW_RED[@]}" -gt 0 ]; then
       for check in "${ALLOW_RED[@]}"; do

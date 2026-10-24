@@ -194,6 +194,13 @@ case "${1:-} ${2:-}" in
     exit 0
     ;;
   api\ *)
+    case " $* " in
+      *"/protection/required_status_checks "*)
+        [ -f "${FM_TEST_GH_PROTECTION:-}" ] || exit 1
+        cat "$FM_TEST_GH_PROTECTION"
+        exit 0
+        ;;
+    esac
     if [ -f "${FM_TEST_GH_RULES_FAIL_BODY:-}" ]; then
       cat "$FM_TEST_GH_RULES_FAIL_BODY" >&2
       exit 1
@@ -383,6 +390,7 @@ run_pr_merge() {
   FM_TEST_GH_LOG="$case_dir/gh.log" \
   FM_TEST_GH_OUTCOME="$case_dir/github-outcome" \
   FM_TEST_GH_RULES="$case_dir/github-rules" \
+  FM_TEST_GH_PROTECTION="$case_dir/github-protection" \
   FM_TEST_GH_VIEW_JSON="$case_dir/github-view.json" \
   FM_TEST_GH_HEAD="$case_dir/github-head" \
   FM_TEST_GH_MERGE_RC_FILE="$case_dir/github-merge-rc" \
@@ -2405,6 +2413,89 @@ test_github_red_checks_refuse_and_allow_red_waives_named() {
   pass "fm-pr-merge refuses red GitHub checks and waives only a named --allow-red check"
 }
 
+# The merge gates only on the checks the base branch's protection requires. A red
+# check the protection does not require warns and does not block; a red required
+# check blocks; an unreadable protection and an away posture keep every red check
+# blocking.
+test_github_merge_gates_only_on_required_checks() {
+  local case_dir head
+  head=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+  case_dir=$(make_case github-required-only)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run resultado COMPLETED SUCCESS 2026-10-24T03:00:00Z)" \
+    "$(check_run unit-gate COMPLETED FAILURE 2026-10-24T03:00:00Z)"
+  printf '%s\n' '{"checks":[{"context":"resultado","app_id":15368}],"contexts":["resultado"]}' \
+    > "$case_dir/github-protection"
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/90 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "github-required-only: a red check the protection does not require must not block"$'\n'"$(cat "$case_dir/stderr")"
+  assert_grep "warning: non-required check 'unit-gate' is FAILURE; it does not block this merge" \
+    "$case_dir/stderr" "github-required-only: the non-required red check was not reported"
+  assert_logged_gh_merge "$case_dir" 90 example/repo --squash
+  pass "fm-pr-merge warns about a red check the protection does not require and still merges"
+
+  case_dir=$(make_case github-required-red)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run resultado COMPLETED FAILURE 2026-10-24T03:00:00Z)"
+  printf '%s\n' '{"checks":[{"context":"resultado","app_id":15368}],"contexts":["resultado"]}' \
+    > "$case_dir/github-protection"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/91 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-required-red: a red required check must refuse"
+  assert_grep "check 'resultado' is not green" "$case_dir/stderr" \
+    "github-required-red: the red required check was not named"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-required-red: gh pr merge ran on a red required check"
+  pass "fm-pr-merge refuses on a red check the protection requires"
+
+  case_dir=$(make_case github-protection-unreadable)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run resultado COMPLETED SUCCESS 2026-10-24T03:00:00Z)" \
+    "$(check_run unit-gate COMPLETED FAILURE 2026-10-24T03:00:00Z)"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/92 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-protection-unreadable: every red check must block when protection is unreadable"
+  assert_grep "check 'unit-gate' is not green" "$case_dir/stderr" \
+    "github-protection-unreadable: the red check was not named"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-protection-unreadable: gh pr merge ran with a red check and no protection"
+  pass "fm-pr-merge keeps every red check blocking when the protection cannot be read"
+
+  case_dir=$(make_case github-required-only-away)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run resultado COMPLETED SUCCESS 2026-10-24T03:00:00Z)" \
+    "$(check_run unit-gate COMPLETED FAILURE 2026-10-24T03:00:00Z)"
+  printf '%s\n' '{"checks":[{"context":"resultado","app_id":15368}],"contexts":["resultado"]}' \
+    > "$case_dir/github-protection"
+  write_away_record "$case_dir" --grant task-x1
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/93 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-required-only-away: away posture must keep every red check blocking"
+  assert_grep "check 'unit-gate' is not green" "$case_dir/stderr" \
+    "github-required-only-away: the red check was not named while away"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-required-only-away: gh pr merge ran while away with a red check"
+  pass "fm-pr-merge keeps every red check blocking while the away posture is active"
+}
+
 # When the base branch advances, GitHub cancels a pull request's in-flight run
 # and re-triggers it, leaving the cancelled run in the rollup beside the passing
 # re-run while reporting the pull request itself CLEAN. The merge must follow the
@@ -3196,6 +3287,7 @@ test_untraversable_user_backend_config_directory_refuses_the_merge
 test_absent_user_backend_config_directory_and_backlog_still_merge
 test_backend_override_bypasses_unreadable_user_config
 test_github_red_checks_refuse_and_allow_red_waives_named
+test_github_merge_gates_only_on_required_checks
 test_superseded_failed_check_run_no_longer_refuses
 test_check_runs_never_supersede_status_contexts
 test_current_failed_check_run_still_refuses

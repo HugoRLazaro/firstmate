@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # fm-verify-and-mark.sh - run a pull request's own verification in a clean copy
-# and, only when it is green, publish a success status for that exact commit.
+# and record the verdict locally. Nothing is published to GitHub.
 #
 # Usage: fm-verify-and-mark.sh <task-id> <pr-url>
 #
-# This is a complement to the required `resultado` check, never a substitute for
-# it. The branch protection on main binds `resultado` to the GitHub Actions app,
-# so this script does not and cannot satisfy it, and it does not try to. Its
-# status uses its own context, `firstmate/verify-main`, which no merge rule
-# requires. Its only purpose is an independent signal that the same steps the
+# This is firstmate's own pre-check. It is not the required `resultado` check,
+# which the project's Actions workflow produces, and it never publishes a status
+# under any name. Its only purpose is to record whether the same steps the
 # `resultado` job of verify-main.yml runs also pass on this machine.
 #
 # What it runs, in order, in a fresh clone of the pull request's repository
@@ -31,23 +29,18 @@
 #
 # Outcomes:
 #   green        both steps exit 0 and the head is still the verified commit:
-#                the success status is published on that commit, exit 0.
-#   red          a verification step failed: nothing is published, exit 1.
+#                recorded as green, exit 0.
+#   red          a verification step failed: recorded as red, exit 1.
 #   unverified   the copy, the environment, or the workflow check could not be
-#                completed: nothing is published, exit 3.
-#   moved        the pull request head changed after verification: nothing is
-#                published, exit 4.
-#   post-failed  the verification passed but the status could not be published:
-#                exit 5, and the record says so.
-# Nothing is ever published as pending or as failure, so a stopped run cannot
-# leave a merge blocker behind.
+#                completed: recorded as unverified, exit 3.
+#   moved        the pull request head changed after verification: recorded as
+#                moved, exit 4.
 #
 # Durable record: state/<task-id>.verify (the latest run: outcome, head, base,
 # time, and log path) and state/verify/<task-id>/<head>.log (the full log of
-# that commit's run). The status link (target_url) is the pull request's own
-# URL, because no hosted log exists; the local log path is in the record.
+# that commit's run).
 #
-# Exit: 0 green published; 1 red; 2 usage; 3 unverified; 4 moved; 5 post failed.
+# Exit: 0 green; 1 red; 2 usage; 3 unverified; 4 moved.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,7 +48,6 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 
-CONTEXT="firstmate/verify-main"
 WORKFLOW=".github/workflows/verify-main.yml"
 PR_RE='^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)$'
 
@@ -96,7 +88,6 @@ record_outcome() {
     printf 'pr=%s\n' "$URL"
     printf 'head=%s\n' "$HEAD_SHA"
     printf 'base=%s\n' "$BASE_SHA"
-    printf 'context=%s\n' "$CONTEXT"
     printf 'at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'log=%s\n' "$LOG"
     [ -z "$detail" ] || printf 'detail=%s\n' "$detail"
@@ -225,16 +216,6 @@ if [ "$(gh_head 2>/dev/null || true)" != "$HEAD_SHA" ]; then
   exit 4
 fi
 
-description="Verificación propia en verde: puertas y humo del commit (no sustituye a resultado)"
-if gh api --method POST "repos/$OWNER/$REPO/statuses/$HEAD_SHA" \
-  -f state=success \
-  -f context="$CONTEXT" \
-  -f description="$description" \
-  -f target_url="$URL" >>"$LOG" 2>&1; then
-  note "green: published $CONTEXT success on $HEAD_SHA"
-  record_outcome green
-  exit 0
-fi
-note "post-failed: verification was green but the status could not be published"
-record_outcome post-failed "status publication failed"
-exit 5
+note "green: $HEAD_SHA passed puertas and humo; nothing is published to GitHub"
+record_outcome green
+exit 0
