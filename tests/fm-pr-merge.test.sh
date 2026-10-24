@@ -2517,6 +2517,44 @@ test_github_merge_gates_only_on_required_checks() {
     "github-required-absent: gh pr merge ran without the required check"
   pass "fm-pr-merge refuses when a required check has not reported at the head"
 
+  case_dir=$(make_case github-required-absent-away)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run unit-gate COMPLETED SUCCESS 2026-10-24T03:00:00Z)"
+  printf '%s\n' '{"checks":[{"context":"resultado","app_id":15368}],"contexts":["resultado"]}' \
+    > "$case_dir/github-protection"
+  write_away_record "$case_dir" --grant task-x1
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/96 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "github-required-absent-away: a required check that never reported must refuse while away"
+  assert_grep "required check 'resultado' has not reported at this head" "$case_dir/stderr" \
+    "github-required-absent-away: the absent required check was not named while away"
+  assert_no_grep 'verified:' "$case_dir/stderr" \
+    "github-required-absent-away: the merge was reported verified without the required check"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "github-required-absent-away: gh pr merge ran while away without the required check"
+  pass "fm-pr-merge refuses while away when a required check has not reported at the head"
+
+  case_dir=$(make_case github-non-required-in-progress)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" "$head"
+  write_github_rollup_json "$case_dir" "$head" \
+    "$(check_run resultado COMPLETED SUCCESS 2026-10-24T03:00:00Z)" \
+    '{"__typename":"CheckRun","name":"unit-gate","status":"IN_PROGRESS","conclusion":"","startedAt":"2026-10-24T03:00:00Z","completedAt":null}'
+  printf '%s\n' '{"checks":[{"context":"resultado","app_id":15368}],"contexts":["resultado"]}' \
+    > "$case_dir/github-protection"
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/97 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr" \
+    || fail "github-non-required-in-progress: a running check the protection does not require must not block"$'\n'"$(cat "$case_dir/stderr")"
+  assert_grep "warning: non-required check 'unit-gate' is IN_PROGRESS; it does not block this merge" \
+    "$case_dir/stderr" "github-non-required-in-progress: the warning did not name the running state"
+  assert_logged_gh_merge "$case_dir" 97 example/repo --squash
+  pass "fm-pr-merge names a running non-required check's state in its warning"
+
   case_dir=$(make_case github-required-only-away-after-view)
   mkdir -p "$case_dir/wt"
   add_gh_mocks "$case_dir" "$head"

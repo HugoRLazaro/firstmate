@@ -594,7 +594,7 @@ github_required_checks() {
 # FM_PR_GITHUB_VERIFIED_AWAY to the away posture that selected the gate.
 FM_PR_GITHUB_VERIFIED_AWAY=
 github_verify_mergeable() {
-  local json fields line red name covered required gate_all conclusion reported missing
+  local json fields line red name covered required gate_all conclusion reported missing claim
   local total=0 named=0 refusals=''
   local state='' draft='' mergeable='' merge_state='' live_head='' base=''
 
@@ -645,16 +645,13 @@ FIELDS
     echo "error: could not read the GitHub pull request state before merging" >&2
     return 1
   fi
-  # Only the protection's required checks gate the merge, and each one must have
-  # reported. An unreadable or empty protection, or an away-posture record, keeps
-  # every red check blocking.
-  required=''
+  # Every check the protection requires must have reported, in every posture.
+  # Only those checks gate the merge; an unreadable or empty protection, or an
+  # away-posture record, keeps every red check blocking.
   gate_all=1
-  if [ "$FM_PR_AWAY_POSTURE" != true ] && required=$(github_required_checks "$base"); then
-    gate_all=0
-  fi
   missing=''
-  if [ "$gate_all" -eq 0 ]; then
+  if required=$(github_required_checks "$base"); then
+    [ "$FM_PR_AWAY_POSTURE" = true ] || gate_all=0
     if ! reported=$(printf '%s' "$json" | jq -r '.statusCheckRollup[] | (.name // .context // empty)' 2>/dev/null); then
       echo "error: could not read the GitHub pull request state before merging" >&2
       return 1
@@ -686,7 +683,7 @@ FIELDS
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     if [ "$gate_all" -eq 0 ] && ! grep -qxF -- "$name" <<<"$required"; then
-      conclusion=$(printf '%s' "$json" | jq -r --arg n "$name" '[.statusCheckRollup[] | select((.name // .context) == $n) | (.conclusion // .state // .status // "unknown")] | unique | join("/")' 2>/dev/null) || conclusion=unknown
+      conclusion=$(printf '%s' "$json" | jq -r --arg n "$name" '[.statusCheckRollup[] | select((.name // .context) == $n) | ((.conclusion | select(. != null and . != "")) // .state // .status // "unknown")] | unique | join("/")' 2>/dev/null) || conclusion=unknown
       printf "warning: non-required check '%s' is %s; it does not block this merge\n" "$name" "${conclusion:-unknown}" >&2
       continue
     fi
@@ -717,8 +714,14 @@ EOF
     [ -z "$uncovered" ] || printf 'error: these checks are not green: %s\n' "$uncovered" >&2
     return 1
   fi
-  printf 'verified: %s is open and mergeable, with every required check green at head %s\n' \
-    "$URL" "$live_head" >&2
+  if [ -n "$required" ]; then
+    claim='every required check green'
+  else
+    claim='every check green'
+  fi
+  [ "${#ALLOW_RED[@]}" -eq 0 ] || claim="$claim except the waived '${ALLOW_RED[0]}'"
+  printf 'verified: %s is open and mergeable, with %s at head %s\n' \
+    "$URL" "$claim" "$live_head" >&2
   FM_PR_MERGE_HEAD=$live_head
   FM_PR_GITHUB_BASE=$base
   FM_PR_GITHUB_VERIFIED_AWAY=$FM_PR_AWAY_POSTURE
