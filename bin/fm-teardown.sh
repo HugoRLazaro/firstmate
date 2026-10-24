@@ -3852,6 +3852,9 @@ rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
 # retired endpoint; teardown only runs after landing is confirmed, so any
 # leftover unhandled steer here is moot rather than unlanded work.
 rm -rf "$STATE/$ID.inbox"
+# bin/fm-verify-and-mark.sh's clean copy and venv cache are disposable; its
+# record (state/<id>.verify) and run logs stay as evidence.
+rm -rf "$STATE/verify/$ID/repo" "$STATE/verify/$ID/venv-cache"
 # The record is gone, so the backlog must not still show this task in flight
 # when teardown reports success. Still under this task's meta lock, so a steer
 # racing the same id stays serialized exactly as it was before. A captain-held
