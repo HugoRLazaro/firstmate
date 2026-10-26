@@ -1,0 +1,65 @@
+=== S1: claim names holder-task; teardown of the STALE record ===
+$ fm-teardown.sh stale-task --force
+warning: task stale-task's recorded worktree /tmp/tmp.hX2wPFX5e6/new2/s1/pool/1/project was reassigned to task holder-task (home /tmp/tmp.hX2wPFX5e6/new2/s1/home), which claimed that pool slot after this record was written; that slot is no longer stale-task's, so its processes, copy, and claim are left untouched and only stale-task's own cleanup runs.
+teardown stale-task complete (window firstmate:fm-stale-task; pool slot /tmp/tmp.hX2wPFX5e6/new2/s1/worktree left to task holder-task (home /tmp/tmp.hX2wPFX5e6/new2/s1/home), which it was reassigned to)
+Backlog: stale-task just finished (this home keeps no markdown backlog at /tmp/tmp.hX2wPFX5e6/new2/s1/home/data/backlog.md). Update /tmp/tmp.hX2wPFX5e6/new2/s1/home/data/backlog.md - move stale-task to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+[exit=0]
+  state/: holder-task.meta home-summary.json terminal-outcomes 
+  slot sentinel: present
+  slot claim: task=holder-task home=/tmp/tmp.hX2wPFX5e6/new2/s1/home 
+  runtime calls: 3 
+
+=== S2: claim names holder-task; teardown of the HOLDER with --force ===
+$ fm-teardown.sh holder-task --force
+REFUSED: task holder-task's recorded worktree /tmp/tmp.hX2wPFX5e6/new2/s2/pool/1/project is also task stale-task's recorded worktree, and the slot's claim names holder-task, so stale-task's record is the wrong one.
+Nothing was changed - not even with --force - and the slot still belongs to holder-task.
+Fix: in /tmp/tmp.hX2wPFX5e6/new2/s2/home/state/stale-task.meta, replace the worktree= line with worktree_released=/tmp/tmp.hX2wPFX5e6/new2/s2/pool/1/project, then re-run teardown for holder-task.
+stale-task's own teardown then proves its branch landed before it can finish, so its unlanded work is still protected.
+[exit=1]
+  state/: holder-task.meta stale-task.meta 
+  slot sentinel: present
+  slot claim: task=holder-task home=/tmp/tmp.hX2wPFX5e6/new2/s2/home 
+  runtime calls: 0 
+
+=== S3: apply the repair the refusal names, then re-run holder teardown ===
+  stale-task.meta now: window=firstmate:fm-stale-task endpoint_task_id=stale-task worktree_released=/tmp/tmp.hX2wPFX5e6/new2/s2/pool/1/project project=/tmp/tmp.hX2wPFX5e6/new2/s2/project kind=scout 
+$ fm-teardown.sh holder-task --force
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown: pool prune ran for the worktree pool without a reported reclaimed amount
+teardown holder-task complete (window firstmate:fm-holder-task, worktree /tmp/tmp.hX2wPFX5e6/new2/s2/worktree)
+Backlog: holder-task just finished (this home keeps no markdown backlog at /tmp/tmp.hX2wPFX5e6/new2/s2/home/data/backlog.md). Update /tmp/tmp.hX2wPFX5e6/new2/s2/home/data/backlog.md - move holder-task to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+[exit=0]
+  state/: home-summary.json stale-task.meta terminal-outcomes 
+  slot sentinel: present
+  slot claim: none
+  runtime calls: 4 treehouse <return>
+
+=== S3b: stale record's own teardown after repair ===
+$ fm-teardown.sh stale-task --force
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+teardown stale-task complete (window firstmate:fm-stale-task, released worktree /tmp/tmp.hX2wPFX5e6/new2/s2/pool/1/project)
+Backlog: stale-task just finished (this home keeps no markdown backlog at /tmp/tmp.hX2wPFX5e6/new2/s2/home/data/backlog.md). Update /tmp/tmp.hX2wPFX5e6/new2/s2/home/data/backlog.md - move stale-task to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+[exit=0]
+  state/: home-summary.json terminal-outcomes 
+  slot sentinel: present
+  slot claim: none
+  runtime calls: 5 treehouse <return>
+
+=== S4: no claim on the slot; teardown of either record ===
+$ fm-teardown.sh stale-task --force
+REFUSED: task stale-task's recorded worktree /tmp/tmp.hX2wPFX5e6/new2/s4/pool/1/project is also task holder-task's recorded worktree, and the slot's claim cannot say which record is current.
+Nothing was changed - not even with --force. Compare the two records with bin/fm-crew-state.sh stale-task and bin/fm-crew-state.sh holder-task; the one whose work is in the slot keeps it, and the other needs its worktree= line replaced with worktree_released=/tmp/tmp.hX2wPFX5e6/new2/s4/pool/1/project.
+[exit=1]
+  state/: holder-task.meta stale-task.meta 
+  slot sentinel: present
+  slot claim: none
+  runtime calls: 0 
+$ fm-teardown.sh holder-task
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+REFUSED: task holder-task's recorded worktree /tmp/tmp.hX2wPFX5e6/new2/s4/pool/1/project is also task stale-task's recorded worktree, and the slot's claim cannot say which record is current.
+Nothing was changed - not even with --force. Compare the two records with bin/fm-crew-state.sh holder-task and bin/fm-crew-state.sh stale-task; the one whose work is in the slot keeps it, and the other needs its worktree= line replaced with worktree_released=/tmp/tmp.hX2wPFX5e6/new2/s4/pool/1/project.
+[exit=1]
+  state/: holder-task.meta stale-task.meta 
+  slot sentinel: present
+  slot claim: none
+  runtime calls: 0 
