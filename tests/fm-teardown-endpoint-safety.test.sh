@@ -966,6 +966,90 @@ test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
   pass "fm-teardown: a pool slot claimed by another task is left alone while the task's own cleanup finishes"
 }
 
+# Two records name one pool slot and the slot's claim decides which is current.
+# The claim names the stale record's rival in the first case, so the stale record
+# finishes its own cleanup without touching the slot. In the second the claim
+# names the rightful holder, which refuses naming the stale record and its repair
+# - not even with --force - until that record stops naming the slot, after which
+# the holder's teardown completes. With no readable claim nothing can settle it,
+# so both refuse naming each other.
+test_slot_record_collision_is_settled_by_its_claim() {
+  local dir stale=stale-task holder=holder-task rc
+
+  dir=$(make_case slot-collision-claim-elsewhere)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  fm_write_meta "$dir/home/state/$holder.meta" \
+    "window=firstmate:fm-$holder" "endpoint_task_id=$holder" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  claim_pool_slot "$dir" "$holder" "$dir/home"
+
+  run_case "$dir" "$stale" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "the stale record of a slot claimed by another task was refused: $(cat "$dir/stderr")"
+  assert_reassigned_slot_left_alone "$dir" "$stale" "$holder" "stale record beside the holder's record"
+  assert_present "$dir/home/state/$holder.meta" "the stale record's teardown removed the holder's record"
+
+  dir=$(make_case slot-collision-claim-here)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  fm_write_meta "$dir/home/state/$holder.meta" \
+    "window=firstmate:fm-$holder" "endpoint_task_id=$holder" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  claim_pool_slot "$dir" "$holder" "$dir/home"
+
+  set +e
+  run_case "$dir" "$holder" > "$dir/stdout" 2> "$dir/stderr"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "the holder's teardown returned a slot a stale record still names"
+  assert_present "$dir/worktree/sentinel" "the holder's teardown reset a slot a stale record still names"
+  assert_present "$dir/home/state/$stale.meta" "the holder's refusal removed the stale record"
+  assert_present "$dir/home/state/$holder.meta" "the holder's refusal removed its own record"
+  [ ! -s "$dir/runtime.log" ] \
+    || fail "the holder's refusal reached the runtime: $(cat "$dir/runtime.log")"
+  assert_contains "$(cat "$dir/stderr")" "$stale" "the refusal should name the stale record as the wrong one"
+  assert_contains "$(cat "$dir/stderr")" "worktree_released=" "the refusal should name the repair"
+
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree_released=$dir/pool/1/project" "project=$dir/project" "kind=scout"
+  run_case "$dir" "$holder" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "the holder's teardown still refused after the stale record was repaired: $(cat "$dir/stderr")"
+  assert_absent "$dir/home/state/$holder.meta" "the repaired holder teardown left its record"
+  grep -Fq "treehouse <return>" "$dir/runtime.log" \
+    || fail "the repaired holder teardown did not return its slot: $(cat "$dir/runtime.log")"
+  assert_present "$dir/home/state/$stale.meta" "the holder's teardown removed the stale record it did not own"
+
+  dir=$(make_case slot-collision-no-claim)
+  mark_case_as_treehouse_pool "$dir"
+  fm_write_meta "$dir/home/state/$stale.meta" \
+    "window=firstmate:fm-$stale" "endpoint_task_id=$stale" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+  fm_write_meta "$dir/home/state/$holder.meta" \
+    "window=firstmate:fm-$holder" "endpoint_task_id=$holder" \
+    "worktree=$dir/worktree" "project=$dir/project" "kind=scout"
+
+  set +e
+  run_case "$dir" "$stale" > "$dir/stdout" 2> "$dir/stderr"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "a slot two records name, with no claim, was returned"
+  assert_present "$dir/worktree/sentinel" "a slot two records name, with no claim, was reset"
+  assert_present "$dir/home/state/$stale.meta" "the refusal without a claim removed the stale record"
+  assert_present "$dir/home/state/$holder.meta" "the refusal without a claim removed the other record"
+  [ ! -s "$dir/runtime.log" ] \
+    || fail "the refusal without a claim reached the runtime: $(cat "$dir/runtime.log")"
+  assert_contains "$(cat "$dir/stderr")" "$holder" "the refusal without a claim should name the other record"
+  assert_contains "$(cat "$dir/stderr")" "cannot say which record is current" \
+    "the refusal without a claim should say why it cannot choose"
+
+  pass "fm-teardown: a slot two records name is settled by its claim, and the refusal names the wrong record and its repair"
+}
+
 # The two states that must never become a false refusal: the task's own claim,
 # and no claim at all (a slot taken before claims existed, or already returned).
 test_own_and_absent_slot_claims_still_tear_down() {
@@ -1387,6 +1471,7 @@ test_cross_home_pool_slot_collision_refuses
 test_sole_slot_record_still_tears_down
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot
 test_own_and_absent_slot_claims_still_tear_down
+test_slot_record_collision_is_settled_by_its_claim
 test_recorded_endpoint_that_changed_directory_still_tears_down
 test_project_lock_anchors_at_the_local_root_across_home_layouts
 test_remote_seeded_home_returns_its_uncontested_slot
