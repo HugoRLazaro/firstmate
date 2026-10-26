@@ -86,7 +86,11 @@
 # cleanup step, teardown verifies record exclusivity: no OTHER task record in
 # this home or any locally registered Firstmate home may name the same live path
 # in its worktree= or home=. One live path with two task records is the reuse
-# collision itself, whichever record is stale.
+# collision itself, and the slot's owner claim settles which record is stale
+# (require_exclusive_worktree_slot_record): a claim naming this task refuses and
+# names the other record as the wrong one with its repair; a claim naming another
+# task lets this record finish its own cleanup without touching the slot; no
+# readable claim refuses naming both records. Neither refusal is lifted by --force.
 # That scan alone cannot prove THIS record is the current owner, because the task
 # that took the slot next may leave no record it can reach - its own worker may
 # have exited and its record been cleaned up, or it may live in a home this
@@ -2470,6 +2474,7 @@ collect_local_firstmate_states() {
 require_exclusive_worktree_slot_record() {
   local record_meta=$1 record_id=$2 record_state=$3 worktree=$4
   local slot state_dir other other_id field other_path other_slot
+  local collider_id='' collider_field='' collider_meta=''
   slot=$(canonical_existing_dir "$worktree") || return 0
   collect_local_firstmate_states "$record_state" || return 1
   for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
@@ -2482,13 +2487,39 @@ require_exclusive_worktree_slot_record() {
         [ -n "$other_path" ] || continue
         other_slot=$(canonical_existing_dir "$other_path") || continue
         [ "$other_slot" = "$slot" ] || continue
-        echo "REFUSED: task $record_id's recorded worktree $slot is also task $other_id's recorded $field." >&2
-        echo "Returning that pool slot would kill $other_id's processes and reset its copy, so nothing was changed - not even with --force." >&2
-        echo "Reconcile whichever record is wrong (bin/fm-crew-state.sh $record_id; bin/fm-crew-state.sh $other_id), then re-run teardown." >&2
-        return 1
+        collider_id=$other_id collider_field=$field collider_meta=$other
+        break 3
       done
     done
   done
+  [ -n "$collider_id" ] || return 0
+  # The slot's claim decides which of the two records is current. A claim that
+  # names another task proves this record is the stale one, so its slot steps
+  # are skipped below (require_owned_task_worktree_slot) and nothing is
+  # returned. A claim naming this task proves the other record is stale, and
+  # refusing is the only safe answer until that record stops naming the slot.
+  fm_treehouse_slot_owner_state "$slot" "$record_id"
+  case "$FM_TREEHOUSE_SLOT_OWNER" in
+    other)
+      return 0
+      ;;
+    mine)
+      echo "REFUSED: task $record_id's recorded worktree $slot is also task $collider_id's recorded $collider_field, and the slot's claim names $record_id, so $collider_id's record is the wrong one." >&2
+      echo "Nothing was changed - not even with --force - and the slot still belongs to $record_id." >&2
+      if [ "$collider_field" = worktree ]; then
+        echo "Fix: in $collider_meta, replace the worktree= line with worktree_released=$slot, then re-run teardown for $record_id." >&2
+        echo "$collider_id's own teardown then proves its branch landed before it can finish, so its unlanded work is still protected." >&2
+      else
+        echo "Fix: correct the home= line in $collider_meta to the home that really owns it, then re-run teardown for $record_id." >&2
+      fi
+      return 1
+      ;;
+    *)
+      echo "REFUSED: task $record_id's recorded worktree $slot is also task $collider_id's recorded $collider_field, and the slot's claim cannot say which record is current." >&2
+      echo "Nothing was changed - not even with --force. Compare the two records with bin/fm-crew-state.sh $record_id and bin/fm-crew-state.sh $collider_id; the one whose work is in the slot keeps it, and the other needs its worktree= line replaced with worktree_released=$slot." >&2
+      return 1
+      ;;
+  esac
 }
 
 require_exclusive_task_worktree_slot() {
