@@ -704,6 +704,48 @@ test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop() {
   pass "native Ultra relaunch preserves its profile and rejects an unsupported model before stopping"
 }
 
+# A fake claude answering the advisor pairing probe as Claude Code 2.1.295
+# does: a weaker advisor warns "cannot advise", anything else is accepted.
+make_advisor_probe_stub() {  # <case-dir>
+  cat > "$1/fakebin/claude" <<'SH'
+#!/usr/bin/env bash
+model=claude-opus-5-5 advisor=
+while [ "$#" -gt 0 ]; do
+  case "$1" in --model) model=$2; shift ;; --advisor) advisor=$2; shift ;; esac
+  shift
+done
+[ "$model:$advisor" != claude-opus-5-5:claude-haiku-5-5 ] \
+  || echo "\"$advisor\" cannot advise \"$model\" (the advisor must be at least as capable as the main model)." >&2
+echo "Error: Input must be provided either through stdin or as a prompt argument when using --print" >&2
+exit 1
+SH
+  chmod +x "$1/fakebin/claude"
+}
+
+test_relaunch_keeps_the_advisor_and_checks_it_before_stop() {
+  local dir out rc id=rl-adv
+  dir=$(new_case advisor "$id")
+  add_ship_task "$dir" "$id" claude
+  make_advisor_probe_stub "$dir"
+  sed 's/^model=default$/model=claude-haiku-5-5/' "$dir/home/state/$id.meta" > "$dir/home/state/$id.meta.tmp"
+  printf 'advisor=claude-haiku-5-5\n' >> "$dir/home/state/$id.meta.tmp"
+  mv "$dir/home/state/$id.meta.tmp" "$dir/home/state/$id.meta"
+  out=$(run_control "$dir" "$id" relaunch --model claude-opus-5-5 --note "stronger main model"); rc=$?
+  expect_code 1 "$rc" "a relaunch whose advisor cannot advise the new main model"
+  assert_contains "$out" "cannot advise" "the refusal must quote Claude Code's reason"
+  [ "$(cat "$dir/fake/command")" = claude ] || fail "a refused advisor pairing stopped the running agent"
+  [ ! -s "$dir/fake/literal" ] || fail "a refused advisor pairing sent lifecycle input"
+  out=$(run_control "$dir" "$id" relaunch --note "same profile"); rc=$?
+  expect_code 0 "$rc" "a same-profile relaunch should keep the advisor: $out"
+  [ "$(meta_field "$dir" "$id" advisor)" = claude-haiku-5-5 ] || fail "the advisor should carry across a same-harness relaunch"
+  grep -q '"advisorModel":"claude-haiku-5-5"' "$dir/home/state/$id.claude-settings.json" \
+    || fail "the replacement's settings must carry the advisor"
+  out=$(run_control "$dir" "$id" relaunch --advisor default --note "no advisor"); rc=$?
+  expect_code 0 "$rc" "a relaunch clearing the advisor should succeed: $out"
+  [ -z "$(meta_field "$dir" "$id" advisor)" ] || fail "--advisor default should clear the recorded advisor"
+  pass "fm-control relaunch keeps a recorded advisor, checks its pairing before stopping, and clears it on request"
+}
+
 test_explicit_model_wins_over_the_recorded_one() {
   local dir out rc
   dir=$(new_case explicit rl7)
@@ -1696,6 +1738,7 @@ test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
+test_relaunch_keeps_the_advisor_and_checks_it_before_stop
 test_explicit_model_wins_over_the_recorded_one
 test_relaunch_onto_an_unverified_harness_is_refused
 test_prior_harness_turnend_registry_entry_is_cleared

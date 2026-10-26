@@ -12,6 +12,7 @@ Busy hooks verified 2026-07-28 on Claude Code 2.1.220; the firstmate-owned setti
 | Skill | `/<skill>`, for example `/no-mistakes`. |
 | Model | `--model <model>`; discover through the interactive `/model` picker, with alias or full-name shape documented by `claude --help`. |
 | Effort | `--effort <low\|medium\|high\|xhigh\|max>`, verified on 2.1.196. |
+| Advisor | Optional per task, ship or scout only, never secondmate: `--advisor <model>` on `../../../bin/fm-spawn.sh` lands as `advisorModel` in the per-task `--settings` file; verified 2026-10-09 on 2.1.295 with the free check `claude --model claude-haiku-5-5 --advisor claude-opus-5-5 -p </dev/null`, where `Input must be provided` accepts the pairing and `cannot be used as an advisor` or `cannot advise` refuses it (`../../../bin/fm-advisor-lib.sh`). |
 | Permissions | `--dangerously-skip-permissions` by default, or `--permission-mode auto` when `config/claude-permission-mode` is `auto`; the `auto` shape verified on 2.1.269, and `../../../../../docs/configuration.md` "Claude permission mode" owns the file. |
 
 ## Workspace trust
